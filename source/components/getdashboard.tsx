@@ -1,22 +1,28 @@
 import {Box, Text, useInput, Newline} from 'ink';
 import React, {useEffect, useState} from 'react';
 import TextInput from 'ink-text-input';
-import Spinner from 'ink-spinner';
 import ProgressBar from './progressbar.js';
 import {useFullscreen} from '../utils/usefullscreen.js';
-import {fetchApi} from '../utils/fetchapi.js';
+import Spinner from 'ink-spinner';
 
 type Props = {
 	data: any[];
 	loading: boolean;
+	error: Error | null;
 	method: string;
 	endpoint: string;
 };
 
-export default function GetDashboard({data, loading, method, endpoint}: Props) {
+export default function GetDashboard({
+	data,
+	loading,
+	error,
+	method,
+	endpoint,
+}: Props) {
 	const [index, setIndex] = useState(0);
 	const [search, setSearch] = useState('');
-	// const [loading, data] = fetchApi({method, endpoint, resultObject});
+	// const [loading, data] = useApi({method, endpoint, resultObject});
 	const [filteredData, setFilteredData] = useState<any[]>(data);
 
 	useEffect(() => {
@@ -48,15 +54,37 @@ export default function GetDashboard({data, loading, method, endpoint}: Props) {
 
 	useFullscreen();
 
+	if (loading) {
+		return (
+			<Box justifyContent="center" alignItems="center">
+				<Text>
+					<Spinner type="pong" />
+				</Text>
+			</Box>
+		);
+	} else if (error) {
+		return (
+			<Box
+				// borderColor="red"
+				borderStyle="bold"
+				flexDirection="row"
+				display="flex"
+				justifyContent="space-around"
+			>
+				<Text color="red">{error.message}</Text>
+			</Box>
+		);
+	}
+
 	return (
 		<Box>
-			{loading ? (
-				<Text color="yellow">
-					<Spinner type="dots" />
-				</Text>
-			) : data.length > 0 ? (
+			{data.length > 0 ? (
 				<Box flexDirection="column">
-					<Box marginBottom={1} borderColor="red" borderStyle="bold">
+					<Box
+						marginBottom={1}
+						// borderColor="red"
+						borderStyle="bold"
+					>
 						<Box marginLeft={1}>
 							<Text color="cyan">Search: </Text>
 						</Box>
@@ -69,7 +97,11 @@ export default function GetDashboard({data, loading, method, endpoint}: Props) {
 						</Text>
 					</Text>
 
-					<Box borderColor="red" borderStyle="bold" flexDirection="column">
+					<Box
+						// borderColor="red"
+						borderStyle="bold"
+						flexDirection="column"
+					>
 						<Box marginLeft={1} flexDirection="column">
 							{current ? (
 								<Box flexDirection="column">
@@ -96,7 +128,7 @@ export default function GetDashboard({data, loading, method, endpoint}: Props) {
 					</Box>
 					<Newline />
 					<Box
-						borderColor="red"
+						// borderColor="red"
 						borderStyle="bold"
 						flexDirection="row"
 						display="flex"

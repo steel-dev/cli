@@ -1,20 +1,21 @@
 import {useEffect, useState} from 'react';
-import {getApiKey} from './session.js';
-import {API_PATH} from './constants.js';
+import {getApiKey} from '../utils/session.js';
+import {API_PATH} from '../utils/constants.js';
 
 type Props = {
 	method: string;
 	endpoint: string;
-	resultObject: string;
+	resultObject?: string;
 };
 
-export function fetchApi({
+export function useApi({
 	method,
 	endpoint,
 	resultObject,
-}: Props): [boolean, any[]] {
+}: Props): [boolean, any[], Error | null] {
 	const [data, setData] = useState<any[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
+	const [error, setError] = useState<Error | null>(null);
 
 	useEffect(() => {
 		async function fetchData() {
@@ -30,15 +31,25 @@ export function fetchApi({
 						'Steel-Api-Key': apiKey?.apiKey,
 					},
 				});
-				const data = await response.json();
-				setData(data[resultObject]);
-			} catch (error) {
-				console.error('Error fetching sessions:', error);
+				const json = await response.json();
+				if (response.ok) {
+					if (resultObject) {
+						const result = json[resultObject];
+						setData(result);
+					} else {
+						setData([json]);
+					}
+				} else {
+					setError(new Error(json.message));
+				}
+			} catch (err) {
+				console.error('API Error:', error);
+				setError(err as Error);
 			}
 			setLoading(false);
 		}
 		fetchData();
 	}, []);
 
-	return [loading, data];
+	return [loading, data, error];
 }

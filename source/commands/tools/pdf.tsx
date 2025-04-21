@@ -1,9 +1,11 @@
 import React from 'react';
-import PostDashboard from '../../components/postdashboard.js';
+import ApiDashboard from '../../components/apidashboard.js';
 
 export default function PDF() {
 	return (
-		<PostDashboard
+		<ApiDashboard
+			method="POST"
+			endpoint="pdf"
 			form={{
 				form: {
 					title: 'PDF',
@@ -27,6 +29,7 @@ export default function PDF() {
 								{
 									name: 'delay',
 									type: 'number',
+									initialValue: 1,
 									label: 'Delay',
 									required: false,
 								},
