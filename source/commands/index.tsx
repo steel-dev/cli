@@ -15,7 +15,7 @@ export default function Index() {
 			<Text color="yellow">{`@@@@@@@@@@@@@@@@     @     @@@@`}</Text>
 			<Text color="yellow">{`@@@@                 @     @@@@`}</Text>
 			<Text color="yellow">{`@@@@                @@     @@@@`}</Text>
-			<Text color="yellow">{`@@@@@@@@@@@@@@@g@@@@@@@@@@@@@@`}</Text>
+			<Text color="yellow">{`@@@@@@@@@@@@@@@g@@@@@@@@@@@@@@@`}</Text>
 			<Text color="yellow">{`@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@`}</Text>
 			<Text color="yellow">{` @@@@@@@@@@@@@@@@@@@@@@@@@@@@@ `}</Text>
 			<Text color="cyan">Humans use Chrome, Agents use Steel.</Text>

@@ -1,5 +1,5 @@
 import fs from 'fs/promises';
-import {CONFIG_PATH} from './config.js';
+import {CONFIG_PATH} from './constants.js';
 
 export async function getApiKey(): Promise<{
 	apiKey: string;

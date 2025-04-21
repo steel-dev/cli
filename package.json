@@ -17,6 +17,8 @@
 	],
 	"dependencies": {
 		"ink": "^5.2.0",
+		"ink-big-text": "^2.0.0",
+		"ink-form": "^2.0.1",
 		"ink-progress-bar": "^3.0.0",
 		"ink-spinner": "^5.0.0",
 		"ink-syntax-highlight": "^2.0.2",

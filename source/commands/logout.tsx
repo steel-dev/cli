@@ -2,7 +2,7 @@
 import {Box, Text} from 'ink';
 import React, {ReactElement} from 'react';
 import fs from 'fs/promises';
-import {CONFIG_PATH} from '../utils/config.js';
+import {CONFIG_PATH} from '../utils/constants.js';
 
 type AuthState = {
 	status: 'idle' | 'pending' | 'success' | 'error';

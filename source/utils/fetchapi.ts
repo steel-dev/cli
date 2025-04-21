@@ -1,9 +1,20 @@
-import React, {useEffect, useState} from 'react';
-import ApiDashboard from '../../components/apidashboard.js';
+import {useEffect, useState} from 'react';
+import {getApiKey} from './session.js';
+import {API_PATH} from './constants.js';
 
-export default function getSessions() {
-	const [data, setData] = useState([]);
-	const [loading, setLoading] = useState(true);
+type Props = {
+	method: string;
+	endpoint: string;
+	resultObject: string;
+};
+
+export function fetchApi({
+	method,
+	endpoint,
+	resultObject,
+}: Props): [boolean, any[]] {
+	const [data, setData] = useState<any[]>([]);
+	const [loading, setLoading] = useState<boolean>(true);
 
 	useEffect(() => {
 		async function fetchData() {
@@ -27,9 +38,7 @@ export default function getSessions() {
 			setLoading(false);
 		}
 		fetchData();
-	});
+	}, []);
 
-	return (
-		<ApiDashboard method="GET" endpoint="sessions" resultObject="sessions" />
-	);
+	return [loading, data];
 }

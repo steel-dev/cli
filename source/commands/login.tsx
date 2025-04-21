@@ -8,7 +8,7 @@ import {
 	TARGET_API_PATH,
 	CONFIG_DIR,
 	CONFIG_PATH,
-} from '../utils/config.js';
+} from '../utils/constants.js';
 
 import {getApiKey} from '../utils/session.js';
 
