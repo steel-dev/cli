@@ -1,17 +1,17 @@
 import React from 'react';
 import ApiDashboard from '../../components/apidashboard.js';
 
-export default function PDF() {
+export default function Pdf() {
 	return (
 		<ApiDashboard
 			method="POST"
 			endpoint="pdf"
 			form={{
 				form: {
-					title: 'PDF',
+					title: 'Pdf',
 					sections: [
 						{
-							title: 'url',
+							title: 'Body',
 							fields: [
 								{
 									name: 'url',

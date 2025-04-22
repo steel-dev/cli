@@ -10,6 +10,7 @@ type Options = {
 
 type TriggerFn = (
 	body?: any,
+	params?: Record<string, string>,
 	callback?: (data: any[]) => void,
 ) => Promise<void>;
 
@@ -23,13 +24,21 @@ export function useLazyApi({
 	const [error, setError] = useState<Error | null>(null);
 
 	const trigger = useCallback<TriggerFn>(
-		async (body, callback) => {
+		async (body, params, callback) => {
 			setLoading(true);
 			setError(null);
 
 			try {
 				const apiKey = await getApiKey();
 				if (!apiKey?.apiKey) throw new Error('API key not found');
+				if (params) {
+					endpoint = endpoint.replace(/\{(\w+)\}/g, (_, key: string) => {
+						if (params[key]) {
+							return params[key];
+						}
+						return `{${key}}`;
+					});
+				}
 
 				const response = await fetch(`${API_PATH}/${endpoint}`, {
 					method,

@@ -9,7 +9,6 @@ type Props = {
 	form?: FormProps;
 	method: string;
 	endpoint: string;
-	path_params?: object[];
 	resultObject?: string; // Where the results of the API call are stored on the object
 };
 
@@ -17,7 +16,6 @@ export default function ApiDashboard({
 	form,
 	method,
 	endpoint,
-	path_params,
 	resultObject,
 }: Props) {
 	if (method === 'POST' && form && form.form.sections.length > 0) {
@@ -45,7 +43,7 @@ export default function ApiDashboard({
 			/>
 		);
 	} else if (
-		method === 'GET' ||
+		(method === 'GET' && !form) ||
 		(method === 'POST' && form && form.form.sections.length === 0)
 	) {
 		const [loading, data, error] = useApi({
@@ -60,6 +58,30 @@ export default function ApiDashboard({
 				error={error}
 				method={method}
 				endpoint={endpoint}
+			/>
+		);
+	} else if (method === 'GET' && form) {
+		const [loading, data, error, callback] = useLazyApi({
+			method,
+			endpoint,
+			resultObject,
+		});
+		const [sent, setSent] = useState(false);
+		return sent ? (
+			<GetDashboard
+				data={data}
+				loading={loading}
+				error={error}
+				method={method}
+				endpoint={endpoint}
+			/>
+		) : (
+			<PostDashboard
+				form={form}
+				callback={result => {
+					callback(undefined, result);
+					setSent(true);
+				}}
 			/>
 		);
 	} else return null;
