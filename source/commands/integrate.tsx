@@ -62,12 +62,9 @@ export default function integrate() {
 			packageManager === 'npm' ? 'install' : 'add',
 			'steel-sdk',
 		]);
-		for (const file of files) {
-			const found = walkDirJs(workingDir);
-			if (found) {
-			}
+		const found = walkDirJs(workingDir);
+		if (found) {
+			console.log(`Found ${found.name} as your automation!`.bold);
 		}
-		let entrypoint = '';
-		console.log(`Found ${entrypoint} as your entrypoint!`.bold);
 	}
 }
