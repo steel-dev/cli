@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'fs';
-import path from 'path';
-import {walkDirJs} from '../utils/files.js';
+import {walkDirJs, walkDirPy} from '../utils/files.js';
 import {spawn} from 'node:child_process';
 
 export default function integrate() {
@@ -64,7 +63,18 @@ export default function integrate() {
 		]);
 		const found = walkDirJs(workingDir);
 		if (found) {
-			console.log(`Found ${found.name} as your automation!`.bold);
+			console.log(`Found ${found.name}!`.bold);
+		} else {
+			console.log(`No automation found in ${workingDir}!`.bold);
+		}
+	} else if (environment === 'python') {
+		console.log('Found Python as your environment!'.bold);
+		spawn('pip', ['install', 'steel-sdk']);
+		const found = walkDirPy(workingDir);
+		if (found) {
+			console.log(`Found ${found.name}!`.bold);
+		} else {
+			console.log(`No automation found in ${workingDir}!`.bold);
 		}
 	}
 }

@@ -24,9 +24,10 @@ function searchFilePy(filePath: string) {
 			posImport.codePatterns.some(regex => regex.test(content))
 		) {
 			console.log(`✅ Match in: ${filePath}`);
-			return;
+			return {name: posImport.name, file: filePath};
 		}
 	}
+	return null;
 }
 
 export function walkDirJs(dir: string) {
@@ -45,12 +46,12 @@ export function walkDirJs(dir: string) {
 	return null;
 }
 
-function walkDirPy(dir: string) {
+export function walkDirPy(dir: string) {
 	const files = fs.readdirSync(dir);
 	for (const file of files) {
 		const fullPath = path.join(dir, file);
 		if (fullPath.endsWith('.py')) {
-			searchFilePy(fullPath);
+			return searchFilePy(fullPath);
 		}
 	}
 	return null;
@@ -103,6 +104,32 @@ export function wrapStringinFile(
 		const after = data.slice(index + stringToFind.length);
 
 		const updatedContent = before + beforeString + target + afterString + after;
+
+		// Write the updated content back to the file
+		fs.writeFileSync(file, updatedContent, 'utf8');
+		console.log(`${file}: File updated successfully!`);
+	} catch (err) {
+		console.error('Error reading or writing file:', err);
+	}
+}
+
+export function replaceString(file: string, string: string, newString: string) {
+	try {
+		// Read the existing file contents
+		const data = fs.readFileSync(file, 'utf8');
+
+		// Find the position of the search string
+		const index = data.lastIndexOf(string);
+		if (index === -1) {
+			console.log('Search string not found in the file.');
+			return;
+		}
+
+		// Insert the text before and after the search string
+		const before = data.slice(0, index);
+		const after = data.slice(index + string.length);
+
+		const updatedContent = before + newString + after;
 
 		// Write the updated content back to the file
 		fs.writeFileSync(file, updatedContent, 'utf8');
