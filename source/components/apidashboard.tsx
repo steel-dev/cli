@@ -18,7 +18,11 @@ export default function ApiDashboard({
 	endpoint,
 	resultObject,
 }: Props) {
-	if (method === 'POST' && form && form.form.sections.length > 0) {
+	if (
+		(method === 'POST' || method === 'DELETE') &&
+		form &&
+		form.form.sections.length > 0
+	) {
 		const [loading, data, error, callback] = useLazyApi({
 			method,
 			endpoint,
