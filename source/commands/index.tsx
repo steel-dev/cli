@@ -1,5 +1,6 @@
 import React from 'react';
 import {Text, Box} from 'ink';
+import Link from 'ink-link';
 
 export default function Index() {
 	return (
@@ -25,14 +26,12 @@ export default function Index() {
 			<Text>
 				Give one or 1,000 agents the ability to interact with any website.
 			</Text>
-			<Text>
-				<Text color="green">Documentation:</Text>{' '}
-				<Text color="blue">https://docs.steel.dev/</Text>
-			</Text>
-			<Text>
-				<Text color="green">GitHub:</Text>{' '}
-				<Text color="blue">https://github.com/steel-dev/steel-browser</Text>
-			</Text>
+			<Link url="https://docs.steel.dev/">
+				<Text color="green">Documentation</Text>
+			</Link>
+			<Link url="https://github.com/steel-dev/steel-browser">
+				<Text color="green">GitHub</Text>
+			</Link>
 		</Box>
 	);
 }
