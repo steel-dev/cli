@@ -1,32 +1,28 @@
-//@ts-nocheck
 import React, {useEffect} from 'react';
-import {getApiKey} from '../../utils/session.js';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import spinners from 'cli-spinners';
 
-export default function SteelApiKey({
+export default function Dependencies({
 	step,
 	setStep,
 }: {
 	step: string;
 	setStep: React.Dispatch<React.SetStateAction<string>>;
 }) {
+	//@ts-ignore
 	const [state, task, loading, error, setTask, setLoading, setError] =
 		useTask();
 	useEffect(() => {
 		let timer: NodeJS.Timeout;
-		if (step === 'apikey') {
+		if (step === 'dependencies') {
 			setLoading(true);
 			try {
+				console.log('Loading: ' + loading);
 				timer = setTimeout(() => {
-					const apiKey = getApiKey();
-					if (apiKey) {
-						setTask(apiKey);
-					} else {
-					}
 					setLoading(false);
-					setStep('dependencies');
+					setTask(true);
+					setStep('done');
 				}, 2000);
 			} catch (error) {
 				console.error('Error fetching API key:', error);
@@ -36,10 +32,9 @@ export default function SteelApiKey({
 		}
 		return () => clearTimeout(timer);
 	}, [step]);
-
 	return (
 		<Task
-			label="Grabbing Steel API Key"
+			label="Installing dependencies"
 			state={state}
 			spinner={spinners.dots}
 		/>

@@ -1,12 +1,12 @@
-import fs from 'fs/promises';
+import fs from 'node:fs';
 import {CONFIG_PATH} from './constants.js';
 
-export async function getApiKey(): Promise<{
+export function getApiKey(): {
 	apiKey: string;
 	name: string;
-} | null> {
+} | null {
 	try {
-		const config = await fs.readFile(CONFIG_PATH, 'utf-8');
+		const config = fs.readFileSync(CONFIG_PATH, 'utf-8');
 		const parsedConfig = JSON.parse(config);
 		return parsedConfig;
 	} catch (error) {

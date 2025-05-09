@@ -1,34 +1,39 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import React, {useEffect, useState} from 'react';
+// import fs from 'node:fs';
+// import path from 'node:path';
+import React, {useState} from 'react';
 import SteelApiKey from '../components/cookbook/steelapikey.js';
-import {fileURLToPath} from 'node:url';
-import SelectInput from 'ink-select-input';
-import {TaskList, Task} from 'ink-task-list';
-import {TEMPLATES} from '../utils/constants.js';
-import {Template} from '../utils/types.js';
-import {useTask} from '../hooks/usetask.js';
+import Template from '../components/cookbook/template.js';
+// import {fileURLToPath} from 'node:url';
+// import SelectInput from 'ink-select-input';
+import Directory from '../components/cookbook/directory.js';
+import {TaskList} from 'ink-task-list';
+import ProjectScaffolding from '../components/cookbook/projectscaffolding.js';
+import Dependencies from '../components/cookbook/dependencies.js';
+import zod from 'zod';
 
-export default function Cookbook() {
-	const renameFiles: Record<string, string | undefined> = {
-		_gitignore: '.gitignore',
-	};
+export const args = zod.tuple([
+	zod
+		.string()
+		.default('steel-project')
+		.describe('Directory to scaffold new Steel project'),
+]);
 
-	const targetDir = 'steel-project';
+type Props = {
+	args: zod.infer<typeof args>;
+};
+
+export default function Cookbook({args}: Props) {
+	// const renameFiles: Record<string, string | undefined> = {
+	// 	_gitignore: '.gitignore',
+	// };
+
+	// const targetDir = 'steel-project';
 	const [step, setStep] = useState<string>('template');
-	const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
-		null,
-	);
+	// const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
+	// 	null,
+	// );
 
-	const [directoryAction, setDirectoryAction] = useState<string | null>(null);
-	const {
-		task: steelAPI,
-		loading: steelAPILoading,
-		error: steelAPIError,
-		setTask: setSteelAPI,
-		setLoading: setSteelAPILoading,
-		setError: setSteelAPIError,
-	} = useTask();
+	// const [directoryAction, setDirectoryAction] = useState<string | null>(null);
 
 	function createDirectory() {
 		const root = path.join(cwd, targetDir);
@@ -131,14 +136,14 @@ export default function Cookbook() {
 	// 	templateName,
 	// );
 
-	// const write = (file: string, content?: string) => {
-	// 	const targetPath = path.join(root, renameFiles[file] ?? file);
-	// 	if (content) {
-	// 		fs.writeFileSync(targetPath, content);
-	// 	} else {
-	// 		copy(path.join(templateDir, file), targetPath);
-	// 	}
-	// };
+	const write = (file: string, content?: string) => {
+		const targetPath = path.join(root, renameFiles[file] ?? file);
+		if (content) {
+			fs.writeFileSync(targetPath, content);
+		} else {
+			copy(path.join(templateDir, file), targetPath);
+		}
+	};
 
 	// const files = fs.readdirSync(templateDir);
 	// for (const file of files.filter(f => f !== 'package.json')) {
@@ -252,60 +257,11 @@ export default function Cookbook() {
 	// prompts.outro(doneMessage);
 	return (
 		<TaskList>
-			<Task
-				label="Select template"
-				state={selectedTemplate ? 'success' : 'pending'}
-				isExpanded={step === 'template' && !selectedTemplate}
-			>
-				<SelectInput
-					items={TEMPLATES}
-					onSelect={items => {
-						setSelectedTemplate(items);
-						setStep('directory');
-					}}
-				/>
-			</Task>
-			<Task
-				label="Checking directory"
-				state={directoryAction ? 'success' : 'pending'}
-				isExpanded={step === 'directory' && !directoryAction}
-			>
-				<SelectInput
-					items={[
-						{
-							label: 'Remove existing files and continue',
-							value: 'yes',
-						},
-						{
-							label: 'Ignore files and continue',
-							value: 'ignore',
-						},
-					]}
-					onSelect={items => setDirectoryAction(items.value)}
-				/>
-			</Task>
-			<Task
-				label="Grabbing Steel API Key"
-				state={
-					steelAPI
-						? 'success'
-						: steelAPILoading
-							? 'loading'
-							: steelAPIError
-								? 'error'
-								: 'pending'
-				}
-			>
-				<SteelApiKey
-					setLoading={setSteelAPILoading}
-					setError={setSteelAPIError}
-				/>
-			</Task>
-			<Task label="Copying files">{createDirectory()}</Task>
-			<Task label="Install dependencies"></Task>
+			<Template step={step} setStep={setStep} />
+			<Directory step={step} setStep={setStep} args={args} />
+			<ProjectScaffolding step={step} setStep={setStep} />
+			<SteelApiKey step={step} setStep={setStep} />
+			<Dependencies step={step} setStep={setStep} />
 		</TaskList>
-		// <Box borderStyle="bold" flexDirection="column" flexGrow={1}>
-		// 	<SelectInput items={TEMPLATES} onSelect={items => console.log(items)} />
-		// </Box>
 	);
 }

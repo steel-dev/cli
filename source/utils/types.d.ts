@@ -11,3 +11,6 @@ export type ApiKey = {
 	apiKey: string;
 	name: string;
 };
+
+export type LoadingState = 'loading';
+export type OtherStates = 'pending' | 'success' | 'warning' | 'error';
