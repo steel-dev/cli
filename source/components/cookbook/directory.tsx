@@ -10,9 +10,7 @@ import {useStep} from '../../context/stepcontext.js';
 import spinners from 'cli-spinners';
 
 export default function Directory({args}: {args: Array<string>}) {
-	//@ts-ignore
-	const [state, task, loading, error, setTask, setLoading, setError] =
-		useTask();
+	const [state, task, , , setTask, setLoading] = useTask();
 
 	const {step, setStep, setDirectory, template} = useStep();
 
@@ -36,7 +34,7 @@ export default function Directory({args}: {args: Array<string>}) {
 
 			const templateDir = path.resolve(
 				fileURLToPath(import.meta.url),
-				'../../examples',
+				'../../../../examples',
 				template?.value,
 			);
 
@@ -67,10 +65,10 @@ export default function Directory({args}: {args: Array<string>}) {
 		}
 	}, [step, task]);
 
-	function isEmpty(path: string) {
-		const files = fs.readdirSync(path);
-		return files.length === 0 || (files.length === 1 && files[0] === '.git');
-	}
+	// function isEmpty(path: string) {
+	// 	const files = fs.readdirSync(path);
+	// 	return files.length === 0 || (files.length === 1 && files[0] === '.git');
+	// }
 
 	return (
 		<Task
@@ -78,10 +76,10 @@ export default function Directory({args}: {args: Array<string>}) {
 			state={state}
 			spinner={spinners.dots}
 			isExpanded={
-				step === 'directory' &&
-				!task &&
-				fs.existsSync(targetDir) &&
-				!isEmpty(targetDir)
+				step === 'directory' && !task
+				// &&
+				// fs.existsSync(targetDir) &&
+				// !isEmpty(targetDir)
 			}
 		>
 			<SelectInput

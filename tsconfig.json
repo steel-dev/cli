@@ -6,5 +6,5 @@
 		"outDir": "dist"
 	},
 	"include": ["source"],
-	"exclude": ["node_modules", "source/examples"]
+	"exclude": ["node_modules"]
 }
