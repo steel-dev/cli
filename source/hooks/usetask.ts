@@ -5,14 +5,14 @@ export function useTask(): [
 	LoadingState | OtherStates | undefined,
 	any,
 	boolean,
-	string | null,
+	string | undefined,
 	React.Dispatch<React.SetStateAction<any>>,
 	React.Dispatch<React.SetStateAction<boolean>>,
-	React.Dispatch<React.SetStateAction<string | null>>,
+	React.Dispatch<React.SetStateAction<string | undefined>>,
 ] {
 	const [task, setTask] = useState();
 	const [loading, setLoading] = useState<boolean>(false);
-	const [error, setError] = useState<string | null>(null);
+	const [error, setError] = useState<string | undefined>();
 	const [state, setState] = useState<LoadingState | OtherStates | undefined>(
 		'pending',
 	);

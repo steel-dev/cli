@@ -10,7 +10,7 @@ import {useStep} from '../../context/stepcontext.js';
 import spinners from 'cli-spinners';
 
 export default function Directory({args}: {args: Array<string>}) {
-	const [state, task, , , setTask, setLoading] = useTask();
+	const [state, task, , , setTask, setLoading, setError] = useTask();
 
 	const {step, setStep, setDirectory, template} = useStep();
 
@@ -39,6 +39,7 @@ export default function Directory({args}: {args: Array<string>}) {
 			);
 
 			const files = fs.readdirSync(templateDir);
+			fs.mkdir(targetDir, err => setError(err?.message));
 			for (const file of files.filter(f => f !== 'package.json')) {
 				write(file, targetDir, templateDir, cwd);
 			}
@@ -60,6 +61,7 @@ export default function Directory({args}: {args: Array<string>}) {
 						JSON.stringify(pkg, null, 2) + '\n',
 					);
 				}
+				setLoading(false);
 				setStep('apikey');
 			}
 		}
@@ -72,7 +74,7 @@ export default function Directory({args}: {args: Array<string>}) {
 
 	return (
 		<Task
-			label="Checking direcory"
+			label="Writing directory"
 			state={state}
 			spinner={spinners.dots}
 			isExpanded={
