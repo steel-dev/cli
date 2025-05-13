@@ -80,4 +80,4 @@ export const TEMPLATES: Template[] = [
 	},
 ];
 
-// const TEMPLATE_valueS = TEMPLATES.map(t => t.value);
+// const TEMPLATE_values = TEMPLATES.map(t => t.value);

@@ -3,17 +3,16 @@ import React, {useEffect} from 'react';
 import {getApiKey} from '../../utils/session.js';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
+import {useStep} from '../../context/stepcontext.js';
 import spinners from 'cli-spinners';
 
-export default function SteelApiKey({
-	step,
-	setStep,
-}: {
-	step: string;
-	setStep: React.Dispatch<React.SetStateAction<string>>;
-}) {
+export default function SteelApiKey() {
+	const {step, setStep, directory, setDirectory, template, setTemplate} =
+		useStep();
+
 	const [state, task, loading, error, setTask, setLoading, setError] =
 		useTask();
+
 	useEffect(() => {
 		let timer: NodeJS.Timeout;
 		if (step === 'apikey') {

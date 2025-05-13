@@ -1,15 +1,13 @@
 import React, {useEffect} from 'react';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
+import {useStep} from '../../context/stepcontext.js';
 import spinners from 'cli-spinners';
 
-export default function ProjectScaffolding({
-	step,
-	setStep,
-}: {
-	step: string;
-	setStep: React.Dispatch<React.SetStateAction<string>>;
-}) {
+export default function ProjectScaffolding() {
+	//@ts-ignore
+	const {step, setStep, directory, setDirectory, template, setTemplate} =
+		useStep();
 	//@ts-ignore
 	const [state, task, loading, error, setTask, setLoading, setError] =
 		useTask();

@@ -4,37 +4,17 @@ import {fileURLToPath} from 'url';
 import React, {useEffect} from 'react';
 import SelectInput from 'ink-select-input';
 import {Task} from 'ink-task-list';
+import {write, isValidProjectName} from '../../utils/cookbook.js';
 import {useTask} from '../../hooks/usetask.js';
+import {useStep} from '../../context/stepcontext.js';
 import spinners from 'cli-spinners';
 
-export default function Directory({
-	step,
-	setStep,
-	args,
-}: {
-	step: string;
-	setStep: React.Dispatch<React.SetStateAction<string>>;
-	args: Array<string>;
-}) {
+export default function Directory({args}: {args: Array<string>}) {
 	//@ts-ignore
 	const [state, task, loading, error, setTask, setLoading, setError] =
 		useTask();
 
-	useEffect(() => {
-		let timer: NodeJS.Timeout;
-		if (step === 'directory' && task) {
-			setLoading(true);
-			timer = setTimeout(() => {
-				setLoading(false);
-				setStep('scaffold');
-			}, 3500);
-		}
-		return () => clearTimeout(timer);
-	}, [step, task]);
-
-	const renameFiles: Record<string, string | undefined> = {
-		_gitignore: '.gitignore',
-	};
+	const {step, setStep, setDirectory, template} = useStep();
 
 	let targetDir = args[0];
 
@@ -42,25 +22,50 @@ export default function Directory({
 		targetDir = 'steel-project';
 	}
 
-	const templateDir = path.resolve(
-		fileURLToPath(import.meta.url),
-		'../../examples',
-		selectedTemplate?.value,
-	);
+	setDirectory(targetDir);
 
-	const write = (file: string, content?: string) => {
-		const targetPath = path.join(root, renameFiles[file] ?? file);
-		if (content) {
-			fs.writeFileSync(targetPath, content);
-		} else {
-			copy(path.join(templateDir, file), targetPath);
+	useEffect(() => {
+		if (step === 'directory' && task) {
+			setLoading(true);
+
+			const cwd = process.cwd();
+
+			if (!template) {
+				return;
+			}
+
+			const templateDir = path.resolve(
+				fileURLToPath(import.meta.url),
+				'../../examples',
+				template?.value,
+			);
+
+			const files = fs.readdirSync(templateDir);
+			for (const file of files.filter(f => f !== 'package.json')) {
+				write(file, targetDir, templateDir, cwd);
+			}
+
+			let projectName = path.basename(path.resolve(targetDir));
+			if (!isValidProjectName(projectName)) {
+				setLoading(false);
+				setStep('projectname');
+			} else {
+				const packageJsonPath = path.join(templateDir, `package.json`);
+				if (fs.existsSync(packageJsonPath)) {
+					const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+					pkg.name = projectName;
+					write(
+						'package.json',
+						targetDir,
+						templateDir,
+						cwd,
+						JSON.stringify(pkg, null, 2) + '\n',
+					);
+				}
+				setStep('scaffold');
+			}
 		}
-	};
-
-	const files = fs.readdirSync(templateDir);
-	for (const file of files.filter(f => f !== 'package.json')) {
-		write(file);
-	}
+	}, [step, task]);
 
 	function isEmpty(path: string) {
 		const files = fs.readdirSync(path);
