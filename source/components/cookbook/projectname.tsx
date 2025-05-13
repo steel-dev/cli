@@ -55,7 +55,7 @@ export default function ProjectName({args}: {args: Array<string>}) {
 							);
 						}
 						setLoading(false);
-						setStep('scaffold');
+						setStep('apikey');
 					}
 				}}
 			/>

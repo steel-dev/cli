@@ -62,7 +62,7 @@ export default function Directory({args}: {args: Array<string>}) {
 						JSON.stringify(pkg, null, 2) + '\n',
 					);
 				}
-				setStep('scaffold');
+				setStep('apikey');
 			}
 		}
 	}, [step, task]);

@@ -39,7 +39,7 @@ export default function PackageManager() {
 				onSelect={items => {
 					setPackageManager(items.value);
 					setTask(items.value);
-					setStep('dependencies');
+					setStep('directory');
 				}}
 			/>
 		</Task>

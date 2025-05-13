@@ -22,7 +22,7 @@ export default function Template() {
 				onSelect={items => {
 					setTask(items);
 					setTemplate(items);
-					setStep('directory');
+					setStep('packagemanager');
 				}}
 			/>
 		</Task>

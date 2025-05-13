@@ -3,8 +3,8 @@ import SteelApiKey from '../components/cookbook/steelapikey.js';
 import Template from '../components/cookbook/template.js';
 import Directory from '../components/cookbook/directory.js';
 import {TaskList} from 'ink-task-list';
-import ProjectScaffolding from '../components/cookbook/projectscaffolding.js';
 import Dependencies from '../components/cookbook/dependencies.js';
+import ProjectName from '../components/cookbook/projectname.js';
 import {StepProvider} from '../context/stepcontext.js';
 import zod from 'zod';
 import PackageManager from '../components/cookbook/packagemanager.js';
@@ -27,7 +27,7 @@ export default function Cookbook({args}: Props) {
 				<Template />
 				<PackageManager />
 				<Directory args={args} />
-				<ProjectScaffolding />
+				<ProjectName args={args} />
 				<SteelApiKey />
 				<Dependencies />
 			</TaskList>
