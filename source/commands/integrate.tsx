@@ -2,7 +2,7 @@
 
 import fs from 'fs';
 import {walkDirJs, walkDirPy} from '../utils/files.js';
-import {spawn} from 'node:child_process';
+// import {spawn} from 'node:child_process';
 
 export default function integrate() {
 	// I need to first determine if I am in a python/javscript/typescript environment
@@ -56,25 +56,25 @@ export default function integrate() {
 					break;
 			}
 		}
-		console.log(`Found ${packageManager} as your package manager!`.bold);
-		spawn(packageManager, [
-			packageManager === 'npm' ? 'install' : 'add',
-			'steel-sdk',
-		]);
+		console.log(`Found ${packageManager} as your package manager!`);
+		// spawn(packageManager, [
+		// 	packageManager === 'npm' ? 'install' : 'add',
+		// 	'steel-sdk',
+		// ]);
 		const found = walkDirJs(workingDir);
 		if (found) {
-			console.log(`Found ${found.name}!`.bold);
+			console.log(`Found ${found.name}!`);
 		} else {
-			console.log(`No automation found in ${workingDir}!`.bold);
+			console.log(`No automation found in ${workingDir}!`);
 		}
 	} else if (environment === 'python') {
-		console.log('Found Python as your environment!'.bold);
-		spawn('pip', ['install', 'steel-sdk']);
+		console.log('Found Python as your environment!');
+		// spawn('pip', ['install', 'steel-sdk']);
 		const found = walkDirPy(workingDir);
 		if (found) {
-			console.log(`Found ${found.name}!`.bold);
+			console.log(`Found ${found.name}!`);
 		} else {
-			console.log(`No automation found in ${workingDir}!`.bold);
+			console.log(`No automation found in ${workingDir}!`);
 		}
 	}
 }

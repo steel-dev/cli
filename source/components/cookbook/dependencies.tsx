@@ -18,7 +18,7 @@ export default function Dependencies() {
 					if (packageManager === 'poetry') {
 						spawnSync(packageManager, ['init'], {cwd: directory});
 						spawnSync(packageManager, ['env', 'activate'], {cwd: directory});
-						spawnSync(packageManager, ['install', '-r', 'requirements.txt'], {
+						spawnSync(packageManager, ['install'], {
 							cwd: directory,
 						});
 					} else if (packageManager === 'pip') {

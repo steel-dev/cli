@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import {CodeSections} from './types.js';
 import {possibleJsImports, possiblePyImports} from './packageConfig.js';
 
 function searchFileJs(filePath: string) {
@@ -24,6 +25,7 @@ function searchFilePy(filePath: string) {
 			posImport.codePatterns.some(regex => regex.test(content))
 		) {
 			console.log(`✅ Match in: ${filePath}`);
+			posImport.config(filePath);
 			return {name: posImport.name, file: filePath};
 		}
 	}
@@ -46,7 +48,10 @@ export function walkDirJs(dir: string) {
 	return null;
 }
 
-export function walkDirPy(dir: string) {
+export function walkDirPy(dir: string): {
+	name: string;
+	file: string;
+} | null {
 	const files = fs.readdirSync(dir);
 	for (const file of files) {
 		const fullPath = path.join(dir, file);
@@ -79,6 +84,82 @@ export function appendToTopofFile(file: string, string: string) {
 			console.log(`${file}: File updated successfully!`);
 		});
 	});
+}
+
+export function fileParse(filePath: string): CodeSections {
+	// I want to grab imports and exports and then anything in between is the body.
+	if (!fs.existsSync(filePath)) {
+		throw new Error(`File not found: ${filePath}`);
+	}
+
+	const ext = path.extname(filePath);
+	const isTS = ext === '.ts';
+	const isJS = ext === '.js';
+	const isPy = ext === '.py';
+
+	if (!isTS && !isPy && !isJS) {
+		throw new Error(`Unsupported file type: ${ext}`);
+	}
+
+	const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+
+	const imports: string[] = [];
+	const exports: string[] = [];
+	const body: string[] = [];
+
+	for (const line of lines) {
+		const trimmed = line.trim();
+
+		if (isTS) {
+			if (trimmed.startsWith('import ')) {
+				imports.push(line);
+			} else if (trimmed.startsWith('export ')) {
+				exports.push(line);
+			} else {
+				body.push(line);
+			}
+		} else if (isPy) {
+			if (trimmed.startsWith('import ') || trimmed.startsWith('from ')) {
+				imports.push(line);
+			} else {
+				body.push(line); // No concept of 'export' in Python
+			}
+		}
+	}
+
+	return {imports, exports, body};
+}
+
+export function readIndentation(line: string | undefined): number | undefined {
+	let indentation = 0;
+	if (!line) return;
+	for (const char of line) {
+		if (char === ' ' || char === '\t') {
+			indentation++;
+		} else {
+			break;
+		}
+	}
+	return indentation;
+}
+
+export function indentation(
+	line: string | undefined,
+	index: number,
+	arr: Array<string>,
+): number {
+	let indentation: number = 0;
+	let curIndentation = readIndentation(line);
+	if (curIndentation) {
+		indentation = curIndentation;
+	}
+	if (index + 1 < arr.length) {
+		let nextIndentation = readIndentation(arr[index + 1]);
+		if (nextIndentation && nextIndentation >= indentation) {
+			indentation = nextIndentation;
+		}
+	}
+	return indentation;
 }
 
 export function wrapStringinFile(

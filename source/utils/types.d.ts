@@ -14,3 +14,9 @@ export type ApiKey = {
 
 export type LoadingState = 'loading';
 export type OtherStates = 'pending' | 'success' | 'warning' | 'error';
+
+export type CodeSections = {
+	imports: string[];
+	exports: string[];
+	body: string[];
+};
