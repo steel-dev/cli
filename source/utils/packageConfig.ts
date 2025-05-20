@@ -5,7 +5,7 @@ import {
 	wrapStringinFile,
 	fileParse,
 	indentation,
-	readIndentation,
+	insertCode,
 } from './files.js';
 
 const requiredImportsPuppeteerJs = [
@@ -158,77 +158,26 @@ const configPlaywrightPy = (file: string) => {
 
 	body.unshift(...addedTopOfBody);
 
-	let indentation: number | undefined;
-	let prevIndentation: number | undefined;
-	let found: boolean = false;
+	insertCode(
+		'playwright = ',
+		[
+			'# Connect Puppeteer to the Steel session',
+			'browser = playwright.chromium.connect_over_cdp(f"wss://connect.steel.dev?apiKey={STEEL_API_KEY}&sessionId={session.id}")',
+			'print("Connected to browser via Playwright")',
+		],
+		body,
+	);
 
-	body.forEach((item, index) => {
-		let commentIndex: number = Math.min(item.indexOf('#'));
-		if (commentIndex === -1) {
-			commentIndex = item.length;
-		}
-		let substring: string = item.substring(0, commentIndex);
-		if (substring.includes('playwright = ')) {
-			found = true;
-		}
-		if (found) {
-			let curIndentation = readIndentation(item);
-			console.log(curIndentation);
-			if (curIndentation) {
-				indentation = curIndentation;
-			}
-		}
-		if (prevIndentation && indentation) {
-			if (indentation < prevIndentation) {
-				const addUnderPlaywright = [
-					'# Connect Puppeteer to the Steel session',
-					'browser = playwright.chromium.connect_over_cdp(f"wss://connect.steel.dev?apiKey={STEEL_API_KEY}&sessionId={session.id}")',
-					'print("Connected to browser via Playwright")',
-				];
-				body.splice(index + 1, 0, ...addUnderPlaywright);
-			}
-		}
-		if (indentation) {
-			prevIndentation = indentation;
-		}
-	});
-
-	indentation = undefined;
-	prevIndentation = undefined;
-	found = false;
-
-	body.forEach((item, index) => {
-		// Find browser close, get current indentation, wait until it changes and then add in the stuff for steel
-		let commentIndex: number = Math.min(item.indexOf('#'));
-		if (commentIndex === -1) {
-			commentIndex = item.length;
-		}
-		let substring: string = item.substring(0, commentIndex);
-		if (substring.includes('browser.close()')) {
-			found = true;
-		}
-		if (found) {
-			let curIndentation = readIndentation(item);
-			console.log(curIndentation);
-			if (curIndentation) {
-				indentation = curIndentation;
-			}
-		}
-		if (prevIndentation && indentation) {
-			if (indentation < prevIndentation) {
-				const closeSession = [
-					' '.repeat(indentation) + 'if session:',
-					' '.repeat(indentation + 4) + 'print("Releasing session...")',
-					' '.repeat(indentation + 4) + 'client.sessions.release(session.id)',
-					' '.repeat(indentation + 4) + 'print("Session released")',
-				];
-				body.splice(index + 1, 0, ...closeSession);
-			}
-		}
-		if (indentation) {
-			prevIndentation = indentation;
-		}
-	});
+	insertCode(
+		'browser.close()',
+		[
+			'if session:',
+			'print("Releasing session...")',
+			'client.sessions.release(session.id)',
+			'print("Session released")',
+		],
+		body,
+	);
 
 	// Write the changes to the file
 	fs.writeFile(

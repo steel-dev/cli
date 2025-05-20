@@ -162,6 +162,47 @@ export function indentation(
 	return indentation;
 }
 
+export function insertCode(
+	search: string,
+	addedCode: Array<string>,
+	body: Array<string>,
+	comment: '#' | '//' = '#',
+) {
+	let indentation: number | undefined;
+	let prevIndentation: number | undefined;
+	let found: boolean = false;
+
+	for (let index = 0; index < body.length; index++) {
+		let item = body[index];
+		if (item === undefined) continue;
+
+		let commentIndex: number = Math.min(item.indexOf(comment));
+		if (commentIndex === -1) {
+			commentIndex = item.length;
+		}
+		let substring: string = item.substring(0, commentIndex);
+		if (substring.includes(search)) {
+			found = true;
+		}
+		if (found) {
+			let curIndentation = readIndentation(item);
+			console.log(curIndentation);
+			if (curIndentation) {
+				indentation = curIndentation;
+			}
+		}
+		if (prevIndentation && indentation) {
+			if (indentation < prevIndentation) {
+				body.splice(index + 1, 0, ...addedCode);
+				break;
+			}
+		}
+		if (indentation) {
+			prevIndentation = indentation;
+		}
+	}
+}
+
 export function wrapStringinFile(
 	file: string,
 	beforeString: string,
