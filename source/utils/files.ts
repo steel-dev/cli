@@ -161,6 +161,29 @@ export function indentation(
 	}
 	return indentation;
 }
+//@ts-ignore
+function isPythonIndentationStart(item: string) {
+	const controlKeywords = [
+		'def',
+		'if',
+		'for',
+		'while',
+		'with',
+		'try',
+		'class',
+		'elif',
+		'else',
+		'except',
+		'finally',
+	];
+	const commentIndex = item.indexOf('#');
+	const codePart = commentIndex >= 0 ? item.slice(0, commentIndex) : item;
+	const trimmed = codePart.trim();
+	return controlKeywords.some(
+		keyword =>
+			trimmed.startsWith(keyword + ' ') || trimmed.startsWith(keyword + ':'),
+	);
+}
 
 export function insertCode(
 	search: string,
@@ -183,21 +206,40 @@ export function insertCode(
 		let substring: string = item.substring(0, commentIndex);
 		if (substring.includes(search)) {
 			found = true;
+			console.log(substring);
 		}
-		if (found) {
-			let curIndentation = readIndentation(item);
-			console.log(curIndentation);
-			if (curIndentation) {
-				indentation = curIndentation;
+		// if (found) {
+		let curIndentation = readIndentation(item);
+		indentation = curIndentation;
+		// }
+		console.log('PREV:', prevIndentation);
+		console.log('CUR:', indentation);
+		if (
+			found &&
+			((indentation === undefined && prevIndentation) ||
+				(indentation && prevIndentation))
+		) {
+			let indentedCode: Array<string> = [];
+			if (indentation === undefined && prevIndentation) {
+				indentedCode = addedCode.map(
+					code => ' '.repeat(prevIndentation!) + code,
+				);
+			} else if (indentation && prevIndentation < indentation) {
+				indentedCode = addedCode.map(
+					code => ' '.repeat(prevIndentation!) + code,
+				);
+			} else if (indentation) {
+				indentedCode = addedCode.map(code => ' '.repeat(indentation!) + code);
 			}
+
+			body.splice(index + 1, 0, ...indentedCode);
+			break;
 		}
-		if (prevIndentation && indentation) {
-			if (indentation < prevIndentation) {
-				body.splice(index + 1, 0, ...addedCode);
-				break;
-			}
-		}
-		if (indentation) {
+		// if (indentation) {
+		// 	prevIndentation = indentation;
+		// }
+		if (isPythonIndentationStart(item) && indentation) {
+			console.log('UPDATING: ', item);
 			prevIndentation = indentation;
 		}
 	}

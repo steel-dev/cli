@@ -161,7 +161,7 @@ const configPlaywrightPy = (file: string) => {
 	insertCode(
 		'playwright = ',
 		[
-			'# Connect Puppeteer to the Steel session',
+			'# Connect Playwright to the Steel session',
 			'browser = playwright.chromium.connect_over_cdp(f"wss://connect.steel.dev?apiKey={STEEL_API_KEY}&sessionId={session.id}")',
 			'print("Connected to browser via Playwright")',
 		],
@@ -172,9 +172,9 @@ const configPlaywrightPy = (file: string) => {
 		'browser.close()',
 		[
 			'if session:',
-			'print("Releasing session...")',
-			'client.sessions.release(session.id)',
-			'print("Session released")',
+			'    print("Releasing session...")',
+			'    client.sessions.release(session.id)',
+			'    print("Session released")',
 		],
 		body,
 	);
@@ -192,6 +192,7 @@ const configPlaywrightPy = (file: string) => {
 			console.log(`${file}: File updated successfully!`);
 		},
 	);
+	// console.log(body);
 };
 
 const requiredImportsBrowserUsePy = [/from browser_use import Agent/];
