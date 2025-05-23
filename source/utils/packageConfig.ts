@@ -23,30 +23,32 @@ const configPuppeteerJs = (file: string) => {
 	const content = fs.readFileSync(file, 'utf8');
 
 	// Helper: create `await client.sessions.create({})`
-
 	function createSessionExpr() {
 		return b.awaitExpression(
 			b.callExpression(
 				b.memberExpression(
 					b.memberExpression(b.identifier('client'), b.identifier('sessions')),
-					b.identifier('create')
+					b.identifier('create'),
 				),
-				[b.objectExpression([])]
-			)
+				[b.objectExpression([])],
+			),
 		);
 	}
 
-// Helper: insert let session; at top of function
-function insertSessionDeclaration(path: types.NodePath<n.FunctionDeclaration>) {
-  if (sessionDeclared) return;
+	// Helper: insert let session; at top of function
+	//@ts-ignore
+	function insertSessionDeclaration(
+		path: types.NodePath<types.namedTypes.Declaration, any>,
+	) {
+		if (sessionDeclared) return;
 
-  const body = path.node.body.body;
-  const sessionDecl = b.variableDeclaration('let', [
-    b.variableDeclarator(b.identifier('session'), null),
-  ]);
-  body.unshift(sessionDecl);
-  sessionDeclared = true;
-}
+		const body = path?.node?.body?.body;
+		const sessionDecl = b.variableDeclaration('let', [
+			b.variableDeclarator(b.identifier('session'), null),
+		]);
+		body.unshift(sessionDecl);
+		sessionDeclared = true;
+	}
 
 	const ast = parse(content, {
 		parser: tsParser,
@@ -95,105 +97,115 @@ function insertSessionDeclaration(path: types.NodePath<n.FunctionDeclaration>) {
 			body.splice(lastImportIndex, 0, dotenvImport as any);
 			body.splice(lastImportIndex + 1, 0, steelDevImport as any);
 
-// Step 1: Detect existing session declaration
-types.visit(ast, {
-  visitVariableDeclarator(path) {
-    if (n.Identifier.check(path.node.id) && path.node.id.name === 'session') {
-      sessionDeclared = true;
-    }
-    this.traverse(path);
-  }
-});
+			// Step 1: Detect existing session declaration
+			types.visit(ast, {
+				visitVariableDeclarator(path) {
+					if (
+						n.Identifier.check(path.node.id) &&
+						path.node.id.name === 'session'
+					) {
+						sessionDeclared = true;
+					}
+					this.traverse(path);
+				},
+			});
 
-// Step 2: Detect `let browser;`
-types.visit(ast, {
-  visitVariableDeclaration(path) {
-    const decl: any = path.node.declarations[0];
-    if (
-      n.Identifier.check(decl?.id) &&
-      decl.init === null &&
-      path.node.kind === 'let'
-    ) {
-      browserName = decl.id.name;
-    }
-    this.traverse(path);
-  }
-});
+			// Step 2: Detect `let browser;`
+			types.visit(ast, {
+				visitVariableDeclaration(path) {
+					const decl: any = path.node.declarations[0];
+					if (
+						n.Identifier.check(decl?.id) &&
+						decl.init === null &&
+						path.node.kind === 'let'
+					) {
+						browserName = decl.id.name;
+					}
+					this.traverse(path);
+				},
+			});
 
-// Step 3: Handle both inline and separate assignment
-types.visit(ast, {
-  visitVariableDeclaration(path) {
-    const decl:any = path.node.declarations[0];
+			// Step 3: Handle both inline and separate assignment
+			types.visit(ast, {
+				visitVariableDeclaration(path) {
+					const decl: any = path.node.declarations[0];
 
-    if (
-      n.Identifier.check(decl.id) &&
-      n.AwaitExpression.check(decl.init) &&
-      n.CallExpression.check(decl.init.argument)
-    ) {
-      const call = decl.init.argument;
-      if (
-        n.MemberExpression.check(call.callee) &&
-        call.callee.object.name === puppeteerImportName &&
-        ['launch', 'connect'].includes(call.callee.property.name)
-      ) {
-        browserName = decl.id.name;
-        const parent = path.parentPath;
+					if (
+						n.Identifier.check(decl.id) &&
+						n.AwaitExpression.check(decl.init) &&
+						n.CallExpression.check(decl.init.argument)
+					) {
+						const call = decl.init.argument;
+						if (
+							n.MemberExpression.check(call.callee) &&
+							call.callee.object.name === puppeteerImportName &&
+							['launch', 'connect'].includes(call.callee.property.name)
+						) {
+							browserName = decl.id.name;
+							const parent = path.parentPath;
 
-        if (n.BlockStatement.check(parent.node)) {
-          const i = parent.node.body.indexOf(path.node);
-          parent.node.body.splice(i + 1, 0, b.variableDeclaration('const', [
-            b.variableDeclarator(b.identifier('session'), createSessionExpr())
-          ]));
-        }
-      }
-    }
-    this.traverse(path);
-  },
+							if (n.BlockStatement.check(parent.node)) {
+								const i = parent.node.body.indexOf(path.node);
+								parent.node.body.splice(
+									i + 1,
+									0,
+									b.variableDeclaration('const', [
+										b.variableDeclarator(
+											b.identifier('session'),
+											createSessionExpr(),
+										),
+									]),
+								);
+							}
+						}
+					}
+					this.traverse(path);
+				},
 
-  visitAssignmentExpression(path) {
-    if (
-      browserName &&
-      n.Identifier.check(path.node.left) &&
-      path.node.left.name === browserName &&
-      n.AwaitExpression.check(path.node.right) &&
-      n.CallExpression.check(path.node.right.argument)
-    ) {
-      const call = path.node.right.argument;
-      if (
-        n.MemberExpression.check(call.callee) &&
-        call?.callee?.object?.name === puppeteerImportName &&
-        ['launch', 'connect'].includes(call.callee.property.name)
-      ) {
-        // Add `let session;` at top of function if needed
-        const fn = path.getFunctionParent();
-        if (fn && n.FunctionDeclaration.check(fn.node)) {
-          insertSessionDeclaration(fn);
-        }
+				visitAssignmentExpression(path) {
+					if (
+						browserName &&
+						n.Identifier.check(path.node.left) &&
+						path.node.left.name === browserName &&
+						n.AwaitExpression.check(path.node.right) &&
+						n.CallExpression.check(path.node.right.argument)
+					) {
+						const call = path.node.right.argument;
+						if (
+							n.MemberExpression.check(call.callee) &&
+							call?.callee?.object?.name === puppeteerImportName &&
+							['launch', 'connect'].includes(call.callee.property.name)
+						) {
+							// Add `let session;` at top of function if needed
+							const fn = path.getFunctionParent();
+							if (fn && n.FunctionDeclaration.check(fn.node)) {
+								insertSessionDeclaration(fn);
+							}
 
-        // Insert `session = await client.sessions.create({})`
-        const parent = path.parentPath.parentPath;
-        if (n.BlockStatement.check(parent.node)) {
-          const i = parent.node.body.indexOf(path.parentPath.node);
-          parent.node.body.splice(i + 1, 0, b.expressionStatement(
-            b.assignmentExpression(
-              '=',
-              b.identifier('session'),
-              createSessionExpr()
-            )
-          ));
-        }
-      }
-    }
+							// Insert `session = await client.sessions.create({})`
+							const parent = path.parentPath.parentPath;
+							if (n.BlockStatement.check(parent.node)) {
+								const i = parent.node.body.indexOf(path.parentPath.node);
+								parent.node.body.splice(
+									i + 1,
+									0,
+									b.expressionStatement(
+										b.assignmentExpression(
+											'=',
+											b.identifier('session'),
+											createSessionExpr(),
+										),
+									),
+								);
+							}
+						}
+					}
 
-    this.traverse(path);
-  }
+					this.traverse(path);
+				},
+			});
+		},
 	});
-
-	// Print the modified code
-	console.log('\nModified code:\n');
-	console.log(print(ast).code);
-	console.log('\nDetected Puppeteer import name:', puppeteerImportName);
-
 	// 	appendToTopofFile(
 	// 		file,
 	// 		`import Steel from "steel-sdk";
@@ -245,6 +257,10 @@ types.visit(ast, {
 	//       console.log("Session released");
 	//     }`,
 	// 	);
+	// Print the modified code
+	console.log('\nModified code:\n');
+	console.log(print(ast).code);
+	console.log('\nDetected Puppeteer import name:', puppeteerImportName);
 };
 
 const requiredImportsPlaywrightJs = [/from ['"]playwright['"]/];

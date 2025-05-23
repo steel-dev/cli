@@ -7,8 +7,8 @@ function searchFileJs(filePath: string) {
 	const content = fs.readFileSync(filePath, 'utf8');
 	for (const posImport of possibleJsImports) {
 		if (
-			posImport.imports.some(regex => regex.test(content)) &&
-			posImport.codePatterns.some(regex => regex.test(content))
+			posImport.imports.some((regex: RegExp) => regex.test(content)) &&
+			posImport.codePatterns.some((regex: RegExp) => regex.test(content))
 		) {
 			console.log(`✅ Match in: ${filePath}`);
 			posImport.config(filePath);
@@ -22,8 +22,8 @@ function searchFilePy(filePath: string) {
 	const content = fs.readFileSync(filePath, 'utf8');
 	for (const posImport of possiblePyImports) {
 		if (
-			posImport.imports.some(regex => regex.test(content)) &&
-			posImport.codePatterns.some(regex => regex.test(content))
+			posImport.imports.some((regex: RegExp) => regex.test(content)) &&
+			posImport.codePatterns.some((regex: RegExp) => regex.test(content))
 		) {
 			console.log(`✅ Match in: ${filePath}`);
 			posImport.config(filePath);
