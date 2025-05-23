@@ -11,6 +11,7 @@ function searchFileJs(filePath: string) {
 			posImport.codePatterns.some(regex => regex.test(content))
 		) {
 			console.log(`✅ Match in: ${filePath}`);
+			posImport.config(filePath);
 			return {name: posImport.name, file: filePath};
 		}
 	}

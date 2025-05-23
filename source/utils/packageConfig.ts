@@ -8,6 +8,11 @@ import {
 	insertCode,
 } from './files.js';
 
+import {parse, print, types} from 'recast';
+import tsParser from 'recast/parsers/typescript.js';
+//@ts-ignore
+import {namedTypes as n, builders as b} from 'ast-types';
+
 const requiredImportsPuppeteerJs = [
 	/from ['"]puppeteer-core['"]/,
 	/from ['"]puppeteer['"]/,
@@ -15,57 +20,231 @@ const requiredImportsPuppeteerJs = [
 const codePatternsPuppeteerJs = [/puppeteer.launch()/];
 
 const configPuppeteerJs = (file: string) => {
-	appendToTopofFile(
-		file,
-		`import Steel from "steel-sdk";
-import dotenv from "dotenv";
+	const content = fs.readFileSync(file, 'utf8');
 
-dotenv.config();
+	// Helper: create `await client.sessions.create({})`
 
-const STEEL_API_KEY = process.env.STEEL_API_KEY;
-// Initialize Steel client with the API key from environment variables
-const client = new Steel({
-  steelAPIKey: STEEL_API_KEY,
-});`,
-	);
-	replaceString(
-		file,
-		'await puppeteer.launch()',
-		` console.log("Creating Steel session...");
+	function createSessionExpr() {
+		return b.awaitExpression(
+			b.callExpression(
+				b.memberExpression(
+					b.memberExpression(b.identifier('client'), b.identifier('sessions')),
+					b.identifier('create')
+				),
+				[b.objectExpression([])]
+			)
+		);
+	}
 
-    // Create a new Steel session with all available options
-    session = await client.sessions.create({
-      // === Basic Options ===
-      // useProxy: true, // Use Steel's proxy network (residential IPs)
-      // proxyUrl: 'http://...',         // Use your own proxy (format: protocol://username:password@host:port)
-      // solveCaptcha: true,             // Enable automatic CAPTCHA solving
-      // sessionTimeout: 1800000,        // Session timeout in ms (default: 5 mins)
-      // === Browser Configuration ===
-      // userAgent: 'custom-ua-string',  // Set a custom User-Agent
-    });
+// Helper: insert let session; at top of function
+function insertSessionDeclaration(path: types.NodePath<n.FunctionDeclaration>) {
+  if (sessionDeclared) return;
 
-    console.log(
-      \`\x1b[1;93mSteel Session created!\x1b[0m\n` +
-			`View session at \x1b[1;37m\${session.sessionViewerUrl}\x1b[0m\`
-    );
+  const body = path.node.body.body;
+  const sessionDecl = b.variableDeclaration('let', [
+    b.variableDeclarator(b.identifier('session'), null),
+  ]);
+  body.unshift(sessionDecl);
+  sessionDeclared = true;
+}
 
-    // Connect Puppeteer to the Steel session
-    browser = await puppeteer.connect({
-      browserWSEndpoint: \`wss://connect.steel.dev?apiKey=\${STEEL_API_KEY}&sessionId=\${session.id}\`,
-    });
+	const ast = parse(content, {
+		parser: tsParser,
+	});
 
-    console.log("Connected to browser via Puppeteer");`,
-	);
-	wrapStringinFile(
-		file,
-		'',
-		'await browser.close()',
-		` if (session) {
-      console.log("Releasing session...");
-      await client.sessions.release(session.id);
-      console.log("Session released");
-    }`,
-	);
+	let puppeteerImportName: any;
+	let browserName: string | null = null;
+	let sessionDeclared = false;
+
+	// Traverse to extract puppeteer import name and add new import
+	types.visit(ast, {
+		visitImportDeclaration(path) {
+			const node = path.node;
+
+			// Find Puppeteer import
+			if (
+				(node?.source?.value === 'puppeteer' ||
+					node?.source?.value === 'puppeteer-core') &&
+				node?.specifiers?.length === 1 &&
+				node?.specifiers[0]?.type === 'ImportDefaultSpecifier'
+			) {
+				puppeteerImportName = node?.specifiers[0]?.local?.name;
+			}
+
+			this.traverse(path);
+		},
+		visitProgram(path) {
+			const body = path.node.body;
+
+			// Add: import { load_dotenv } from 'dotenv';
+			const dotenvImport = b.importDeclaration(
+				[b.importSpecifier(b.identifier('load_dotenv'))],
+				b.literal('dotenv'),
+			);
+
+			// add import Steel from 'steel-dev';
+			const steelDevImport = b.importDeclaration(
+				[b.importSpecifier(b.identifier('Steel'))],
+				b.literal('steel-dev'),
+			);
+
+			// Insert after the last import
+			const lastImportIndex = body.findIndex(
+				node => node.type !== 'ImportDeclaration',
+			);
+			body.splice(lastImportIndex, 0, dotenvImport as any);
+			body.splice(lastImportIndex + 1, 0, steelDevImport as any);
+
+// Step 1: Detect existing session declaration
+types.visit(ast, {
+  visitVariableDeclarator(path) {
+    if (n.Identifier.check(path.node.id) && path.node.id.name === 'session') {
+      sessionDeclared = true;
+    }
+    this.traverse(path);
+  }
+});
+
+// Step 2: Detect `let browser;`
+types.visit(ast, {
+  visitVariableDeclaration(path) {
+    const decl: any = path.node.declarations[0];
+    if (
+      n.Identifier.check(decl?.id) &&
+      decl.init === null &&
+      path.node.kind === 'let'
+    ) {
+      browserName = decl.id.name;
+    }
+    this.traverse(path);
+  }
+});
+
+// Step 3: Handle both inline and separate assignment
+types.visit(ast, {
+  visitVariableDeclaration(path) {
+    const decl:any = path.node.declarations[0];
+
+    if (
+      n.Identifier.check(decl.id) &&
+      n.AwaitExpression.check(decl.init) &&
+      n.CallExpression.check(decl.init.argument)
+    ) {
+      const call = decl.init.argument;
+      if (
+        n.MemberExpression.check(call.callee) &&
+        call.callee.object.name === puppeteerImportName &&
+        ['launch', 'connect'].includes(call.callee.property.name)
+      ) {
+        browserName = decl.id.name;
+        const parent = path.parentPath;
+
+        if (n.BlockStatement.check(parent.node)) {
+          const i = parent.node.body.indexOf(path.node);
+          parent.node.body.splice(i + 1, 0, b.variableDeclaration('const', [
+            b.variableDeclarator(b.identifier('session'), createSessionExpr())
+          ]));
+        }
+      }
+    }
+    this.traverse(path);
+  },
+
+  visitAssignmentExpression(path) {
+    if (
+      browserName &&
+      n.Identifier.check(path.node.left) &&
+      path.node.left.name === browserName &&
+      n.AwaitExpression.check(path.node.right) &&
+      n.CallExpression.check(path.node.right.argument)
+    ) {
+      const call = path.node.right.argument;
+      if (
+        n.MemberExpression.check(call.callee) &&
+        call?.callee?.object?.name === puppeteerImportName &&
+        ['launch', 'connect'].includes(call.callee.property.name)
+      ) {
+        // Add `let session;` at top of function if needed
+        const fn = path.getFunctionParent();
+        if (fn && n.FunctionDeclaration.check(fn.node)) {
+          insertSessionDeclaration(fn);
+        }
+
+        // Insert `session = await client.sessions.create({})`
+        const parent = path.parentPath.parentPath;
+        if (n.BlockStatement.check(parent.node)) {
+          const i = parent.node.body.indexOf(path.parentPath.node);
+          parent.node.body.splice(i + 1, 0, b.expressionStatement(
+            b.assignmentExpression(
+              '=',
+              b.identifier('session'),
+              createSessionExpr()
+            )
+          ));
+        }
+      }
+    }
+
+    this.traverse(path);
+  }
+	});
+
+	// Print the modified code
+	console.log('\nModified code:\n');
+	console.log(print(ast).code);
+	console.log('\nDetected Puppeteer import name:', puppeteerImportName);
+
+	// 	appendToTopofFile(
+	// 		file,
+	// 		`import Steel from "steel-sdk";
+	// import dotenv from "dotenv";
+
+	// dotenv.config();
+
+	// const STEEL_API_KEY = process.env.STEEL_API_KEY;
+	// // Initialize Steel client with the API key from environment variables
+	// const client = new Steel({
+	//   steelAPIKey: STEEL_API_KEY,
+	// });`,
+	// 	);
+	// 	replaceString(
+	// 		file,
+	// 		'await puppeteer.launch()',
+	// 		` console.log("Creating Steel session...");
+
+	//     // Create a new Steel session with all available options
+	//     session = await client.sessions.create({
+	//       // === Basic Options ===
+	//       // useProxy: true, // Use Steel's proxy network (residential IPs)
+	//       // proxyUrl: 'http://...',         // Use your own proxy (format: protocol://username:password@host:port)
+	//       // solveCaptcha: true,             // Enable automatic CAPTCHA solving
+	//       // sessionTimeout: 1800000,        // Session timeout in ms (default: 5 mins)
+	//       // === Browser Configuration ===
+	//       // userAgent: 'custom-ua-string',  // Set a custom User-Agent
+	//     });
+
+	//     console.log(
+	//       \`\x1b[1;93mSteel Session created!\x1b[0m\n` +
+	// 			`View session at \x1b[1;37m\${session.sessionViewerUrl}\x1b[0m\`
+	//     );
+
+	//     // Connect Puppeteer to the Steel session
+	//     browser = await puppeteer.connect({
+	//       browserWSEndpoint: \`wss://connect.steel.dev?apiKey=\${STEEL_API_KEY}&sessionId=\${session.id}\`,
+	//     });
+
+	//     console.log("Connected to browser via Puppeteer");`,
+	// 	);
+	// 	wrapStringinFile(
+	// 		file,
+	// 		'',
+	// 		'await browser.close()',
+	// 		` if (session) {
+	//       console.log("Releasing session...");
+	//       await client.sessions.release(session.id);
+	//       console.log("Session released");
+	//     }`,
+	// 	);
 };
 
 const requiredImportsPlaywrightJs = [/from ['"]playwright['"]/];

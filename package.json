@@ -16,6 +16,8 @@
 		"dist"
 	],
 	"dependencies": {
+		"@babel/parser": "^7.27.2",
+		"ast-types": "^0.14.2",
 		"ink": "^5.2.0",
 		"ink-big-text": "^2.0.0",
 		"ink-form": "^2.0.1",
