@@ -24,10 +24,10 @@ export default function Cookbook({args}: Props) {
 	return (
 		<StepProvider>
 			<TaskList>
+				<ProjectName args={args} />
 				<Template />
 				<PackageManager />
-				<Directory args={args} />
-				<ProjectName args={args} />
+				<Directory />
 				<SteelApiKey />
 				<Dependencies />
 			</TaskList>

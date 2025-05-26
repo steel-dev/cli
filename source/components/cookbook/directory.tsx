@@ -9,18 +9,10 @@ import {useTask} from '../../hooks/usetask.js';
 import {useStep} from '../../context/stepcontext.js';
 import spinners from 'cli-spinners';
 
-export default function Directory({args}: {args: Array<string>}) {
+export default function Directory() {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
 
-	const {step, setStep, setDirectory, template} = useStep();
-
-	let targetDir = args[0];
-
-	if (!targetDir) {
-		targetDir = 'steel-project';
-	}
-
-	setDirectory(targetDir);
+	const {step, setStep, directory, template} = useStep();
 
 	useEffect(() => {
 		if (step === 'directory' && task) {
@@ -39,12 +31,12 @@ export default function Directory({args}: {args: Array<string>}) {
 			);
 
 			const files = fs.readdirSync(templateDir);
-			fs.mkdir(targetDir, err => setError(err?.message));
+			fs.mkdir(directory, err => setError(err?.message));
 			for (const file of files.filter(f => f !== 'package.json')) {
-				write(file, targetDir, templateDir, cwd);
+				write(file, directory, templateDir, cwd);
 			}
 
-			let projectName = path.basename(path.resolve(targetDir));
+			let projectName = path.basename(path.resolve(directory));
 			if (!isValidProjectName(projectName)) {
 				setLoading(false);
 				setStep('projectname');
@@ -55,7 +47,7 @@ export default function Directory({args}: {args: Array<string>}) {
 					pkg.name = projectName;
 					write(
 						'package.json',
-						targetDir,
+						directory,
 						templateDir,
 						cwd,
 						JSON.stringify(pkg, null, 2) + '\n',
