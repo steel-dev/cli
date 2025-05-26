@@ -8,7 +8,10 @@ export function getApiKey(): {
 	try {
 		const config = fs.readFileSync(CONFIG_PATH, 'utf-8');
 		const parsedConfig = JSON.parse(config);
-		return parsedConfig;
+		if (parsedConfig && parsedConfig.apiKey && parsedConfig.name) {
+			return parsedConfig;
+		}
+		return null;
 	} catch (error) {
 		return null;
 	}

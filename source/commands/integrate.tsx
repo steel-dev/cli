@@ -4,6 +4,9 @@ import fs from 'fs';
 import {walkDirJs, walkDirPy} from '../utils/files.js';
 // import {spawn} from 'node:child_process';
 
+export const description =
+	'BETA (DO NOT USE IF YOU CARE ABOUT YOUR PROJECT): Integrates the Steel CLI into your project';
+
 export default function integrate() {
 	// I need to first determine if I am in a python/javscript/typescript environment
 	// Next I need to figure out what type of tool I am using to connecty with the steel browser

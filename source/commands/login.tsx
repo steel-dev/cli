@@ -18,6 +18,8 @@ type AuthState = {
 	apiKey?: string;
 };
 
+export const description = 'Login to Steel CLI';
+
 export default function Login(): ReactElement {
 	const [state, setState] = React.useState<AuthState>({
 		status: 'idle',
@@ -26,7 +28,7 @@ export default function Login(): ReactElement {
 
 	React.useEffect(() => {
 		const login = async () => {
-			const config = await getApiKey();
+			const config = getApiKey();
 			if (config) {
 				setState({
 					status: 'success',
@@ -90,6 +92,7 @@ async function loginFlow(): Promise<{
 	try {
 		const browser = await puppeteer.launch({
 			headless: false,
+			defaultViewport: null,
 			args: ['--no-sandbox'],
 		});
 
@@ -108,9 +111,7 @@ async function loginFlow(): Promise<{
 				if (url.includes(TARGET_API_PATH) && response.status() === 200) {
 					try {
 						const responseBody = await response.json();
-
 						// The structure of the response will depend on the API
-						// This is just an example - adjust according to the actual response
 						if (responseBody.key && responseBody.name) {
 							apiKey = responseBody.key;
 							name = responseBody.name;

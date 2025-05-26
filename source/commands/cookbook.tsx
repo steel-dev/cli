@@ -9,6 +9,8 @@ import {StepProvider} from '../context/stepcontext.js';
 import zod from 'zod';
 import PackageManager from '../components/cookbook/packagemanager.js';
 
+export const description = 'Start a new project using the Steel CLI';
+
 export const args = zod.tuple([
 	zod
 		.string()

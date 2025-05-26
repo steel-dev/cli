@@ -10,6 +10,8 @@ type AuthState = {
 	apiKey?: string;
 };
 
+export const description = 'Logout from Steel CLI';
+
 export default function Logout(): ReactElement {
 	const [state, setState] = React.useState<AuthState>({
 		status: 'idle',

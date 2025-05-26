@@ -15,6 +15,8 @@ function isDockerRunning() {
 	}
 }
 
+export const description = 'Starts the development environment';
+
 export default function Start() {
 	const [loading, setLoading] = useState(false);
 	useEffect(() => {
