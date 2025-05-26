@@ -15,7 +15,7 @@ type StepContextType = {
 const StepContext = createContext<StepContextType | undefined>(undefined);
 
 export const StepProvider = ({children}: {children: ReactNode}) => {
-	const [step, setStep] = useState<string>('template');
+	const [step, setStep] = useState<string>('projectname');
 	const [template, setTemplate] = useState<Template | null>(null);
 	const [directory, setDirectory] = useState<string>('steel-project');
 	const [packageManager, setPackageManager] = useState<string>('npm');

@@ -4,7 +4,7 @@ import {fileURLToPath} from 'url';
 import React, {useEffect} from 'react';
 import SelectInput from 'ink-select-input';
 import {Task} from 'ink-task-list';
-import {write, isValidProjectName} from '../../utils/cookbook.js';
+import {write} from '../../utils/cookbook.js';
 import {useTask} from '../../hooks/usetask.js';
 import {useStep} from '../../context/stepcontext.js';
 import spinners from 'cli-spinners';
@@ -15,6 +15,7 @@ export default function Directory() {
 	const {step, setStep, directory, template} = useStep();
 
 	useEffect(() => {
+		let timer: NodeJS.Timeout;
 		if (step === 'directory' && task) {
 			setLoading(true);
 
@@ -37,44 +38,32 @@ export default function Directory() {
 			}
 
 			let projectName = path.basename(path.resolve(directory));
-			if (!isValidProjectName(projectName)) {
-				setLoading(false);
-				setStep('projectname');
-			} else {
-				const packageJsonPath = path.join(templateDir, `package.json`);
-				if (fs.existsSync(packageJsonPath)) {
-					const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-					pkg.name = projectName;
-					write(
-						'package.json',
-						directory,
-						templateDir,
-						cwd,
-						JSON.stringify(pkg, null, 2) + '\n',
-					);
-				}
+			const packageJsonPath = path.join(templateDir, `package.json`);
+			if (fs.existsSync(packageJsonPath)) {
+				const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+				pkg.name = projectName;
+				write(
+					'package.json',
+					directory,
+					templateDir,
+					cwd,
+					JSON.stringify(pkg, null, 2) + '\n',
+				);
+			}
+			timer = setTimeout(() => {
 				setLoading(false);
 				setStep('apikey');
-			}
+			}, 4000);
 		}
+		return () => clearTimeout(timer);
 	}, [step, task]);
-
-	// function isEmpty(path: string) {
-	// 	const files = fs.readdirSync(path);
-	// 	return files.length === 0 || (files.length === 1 && files[0] === '.git');
-	// }
 
 	return (
 		<Task
 			label="Writing directory"
 			state={state}
 			spinner={spinners.dots}
-			isExpanded={
-				step === 'directory' && !task
-				// &&
-				// fs.existsSync(targetDir) &&
-				// !isEmpty(targetDir)
-			}
+			isExpanded={step === 'directory' && !task}
 		>
 			<SelectInput
 				items={[

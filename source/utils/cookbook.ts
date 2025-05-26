@@ -50,3 +50,34 @@ export function toValidProjectName(projectName: string) {
 		.replace(/^[._]/, '')
 		.replace(/[^a-z\d\-~]+/g, '-');
 }
+
+export function updateEnvVariable(
+	directory: string,
+	key: string,
+	newValue: string,
+) {
+	const envPath = path.resolve(directory, '.env');
+
+	let envContent = fs.readFileSync(envPath, 'utf8');
+	const lines = envContent.split('\n');
+
+	let keyFound = false;
+	const updatedLines = lines.map(line => {
+		if (!line.trim() || line.trim().startsWith('#')) {
+			return line;
+		}
+
+		const [currentKey] = line.split('=');
+		if (currentKey === key) {
+			keyFound = true;
+			return `${key}=${newValue}`;
+		}
+		return line;
+	});
+
+	if (!keyFound) {
+		updatedLines.push(`${key}=${newValue}`);
+	}
+
+	fs.writeFileSync(envPath, updatedLines.join('\n'));
+}
