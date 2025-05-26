@@ -12,6 +12,7 @@ $ npm install --global steel-cli
 
 ```
 $ steel-cli --help
+
 Usage: steel-cli [options] [command]
 
 Options:
