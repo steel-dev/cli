@@ -22,7 +22,7 @@ Options:
 Commands:
   cookbook [directory to scaffold new steel project]  Start a new project using the Steel CLI
   files                                               Files Endpoint
-  integrate                                           BETA (DO NOT USE IF YOU CARE ABOUT YOUR PROJECT): Integrates the Steel CLI into your project
+  integrate                                           Integrates the Steel CLI into your project
   login                                               Login to Steel CLI
   logout                                              Logout from Steel CLI
   sessions                                            Sessions Endpoint
