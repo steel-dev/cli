@@ -1,25 +1,18 @@
 import React, {useEffect, useState} from 'react';
-import {writeFile} from 'fs/promises';
-import {exec} from 'child_process';
-import {CONFIG_DIR} from '../utils/constants.js';
+import {spawn} from 'child_process';
+import open from 'open';
+import {CONFIG_DIR, REPO_URL} from '../utils/constants.js';
 import path from 'path';
-import fs from 'fs';
 import Spinner from 'ink-spinner';
 import {Text} from 'ink';
 
-const composeFileUrl =
-	'https://raw.githubusercontent.com/steel-dev/steel-browser/main/docker-compose.yml';
-
-async function downloadFile(url: string, dest: string) {
-	console.log(`⬇️ Downloading ${url}`);
-	const res = await fetch(url);
-	if (!res.ok) {
-		throw new Error(`Failed to download file: ${res.status} ${res.statusText}`);
+function isDockerRunning() {
+	try {
+		spawn('docker', ['info']);
+		return true;
+	} catch (error) {
+		return false;
 	}
-
-	const content = await res.text();
-	await writeFile(dest, content);
-	console.log(`✅ Saved to ${dest}`);
 }
 
 export default function Start() {
@@ -27,17 +20,29 @@ export default function Start() {
 	useEffect(() => {
 		async function start() {
 			setLoading(true);
-			if (!fs.existsSync(path.join(CONFIG_DIR, 'docker-compose.yml'))) {
-				console.log('⬇️ Downloading docker-compose.yml...');
-				await downloadFile(
-					composeFileUrl,
-					path.join(CONFIG_DIR, 'docker-compose.yml'),
-				);
+
+			spawn('git', ['clone', REPO_URL], {
+				cwd: CONFIG_DIR,
+			});
+
+			if (!isDockerRunning()) {
+				console.log('⚠️ Docker is not running. Please start it and try again.');
+				return;
 			}
 
 			setLoading(false);
+
 			console.log('🚀 Starting Docker Compose...');
-			exec('docker-compose up');
+
+			const folderName = path.basename(REPO_URL, '.git');
+
+			spawn('docker-compose', ['-f', 'docker-compose.dev.yml', 'up', '-d'], {
+				cwd: path.join(CONFIG_DIR, folderName),
+				stdio: 'inherit',
+			});
+
+			console.log('🖥️  Opening Browser...');
+			await open('http://localhost:5173');
 		}
 		start();
 	}, []);

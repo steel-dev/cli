@@ -7,6 +7,7 @@ export const TARGET_API_PATH = 'https://api.steel.dev/v1/api-keys/';
 export const API_PATH = 'https://api.steel.dev/v1';
 export const CONFIG_DIR = path.join(os.homedir(), '.steel-cli');
 export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
+export const REPO_URL = 'https://github.com/steel-dev/steel-browser.git';
 export const TEMPLATES: Template[] = [
 	{
 		value: 'steel-playwright-starter-js',
