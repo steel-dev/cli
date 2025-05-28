@@ -1,7 +1,9 @@
 import React from 'react';
 import ApiDashboard from '../../components/apidashboard.js';
 
-export default function getSessionContextById() {
+export const description = 'Get Session Context By Id';
+
+export default function SessionContextById() {
 	return (
 		<ApiDashboard
 			method="GET"

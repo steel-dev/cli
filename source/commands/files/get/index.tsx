@@ -1,7 +1,9 @@
 import React from 'react';
 import ApiDashboard from '../../../components/apidashboard.js';
 
-export default function getFiles() {
+export const description = 'Get File By ID';
+
+export default function FileById() {
 	return (
 		<ApiDashboard
 			method="GET"

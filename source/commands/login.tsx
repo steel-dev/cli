@@ -93,7 +93,7 @@ async function loginFlow(): Promise<{
 		const browser = await puppeteer.launch({
 			headless: false,
 			defaultViewport: null,
-			args: ['--no-sandbox'],
+			args: ['--no-sandbox', '--window-size=800,800'],
 		});
 
 		const page = (await browser.pages())[0];
@@ -107,8 +107,13 @@ async function loginFlow(): Promise<{
 			page.on('response', async response => {
 				const url = response.url();
 
-				// Check if this is the API key endpoint we're looking for
+				// If they get put on the playground site, redirect them to the quickstart page
+				if (url.includes('/playground')) {
+					await page.goto('https://app.steel.dev/quickstart');
+				}
+
 				if (url.includes(TARGET_API_PATH) && response.status() === 200) {
+					// Check if this is the API key endpoint we're looking for
 					try {
 						const responseBody = await response.json();
 						// The structure of the response will depend on the API

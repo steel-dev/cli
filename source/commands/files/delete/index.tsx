@@ -1,7 +1,9 @@
 import React from 'react';
 import ApiDashboard from '../../../components/apidashboard.js';
 
-export default function deleteFiles() {
+export const description = 'Delete Files By Session';
+
+export default function DeleteFiles() {
 	return (
 		<ApiDashboard
 			method="DELETE"

@@ -1,9 +1,9 @@
 import React from 'react';
 import ApiDashboard from '../../components/apidashboard.js';
 
-export const description = 'Files Endpoint';
+export const description = 'Get Files By Session';
 
-export default function getFiles() {
+export default function Files() {
 	return (
 		<ApiDashboard
 			method="GET"

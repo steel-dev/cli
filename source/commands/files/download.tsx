@@ -1,7 +1,9 @@
 import React from 'react';
 import ApiDashboard from '../../components/apidashboard.js';
 
-export default function downloadFile() {
+export const description = 'Download File';
+
+export default function DownloadFile() {
 	return (
 		<ApiDashboard
 			method="GET"

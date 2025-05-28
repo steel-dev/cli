@@ -1,7 +1,9 @@
 import React from 'react';
 import ApiDashboard from '../../../components/apidashboard.js';
 
-export default function PDF() {
+export const description = 'Release All Sessions';
+
+export default function ReleaseAllSessions() {
 	return (
 		<ApiDashboard
 			method="POST"
