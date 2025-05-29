@@ -1,9 +1,28 @@
 import React from 'react';
+import zod from 'zod';
+import {option} from 'pastel';
 import ApiDashboard from '../../../components/apidashboard.js';
 
 export const description = 'Get Session Live Details By Id';
+export const options = zod.object({
+	id: zod
+		.string()
+		.uuid()
+		.min(1)
+		.max(36)
+		.optional()
+		.describe(
+			option({
+				description: 'The ID of the session to get live details',
+			}),
+		),
+});
 
-export default function SessionLiveDetailsById() {
+type Props = {
+	options: zod.infer<typeof options>;
+};
+
+export default function SessionLiveDetailsById({options}: Props) {
 	return (
 		<ApiDashboard
 			method="GET"
@@ -20,6 +39,7 @@ export default function SessionLiveDetailsById() {
 									type: 'string',
 									label: 'Session ID',
 									required: true,
+									initialValue: options.id,
 								},
 							],
 						},

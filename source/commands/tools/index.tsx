@@ -1,1 +1,1 @@
-export const description = 'Tools Endpoint';
+export const description = 'Browser Tools Endpoint';
