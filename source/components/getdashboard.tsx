@@ -2,7 +2,7 @@ import {Box, Text, useInput, Newline} from 'ink';
 import React, {useEffect, useState} from 'react';
 import TextInput from 'ink-text-input';
 import ProgressBar from './progressbar.js';
-import {useFullscreen} from '../hooks/usefullscreen.js';
+// import {useFullscreen} from '../hooks/usefullscreen.js';
 import Spinner from 'ink-spinner';
 
 type Props = {
@@ -52,7 +52,7 @@ export default function GetDashboard({
 	const current = filteredData[index];
 	const keys = current ? Object.keys(current) : [];
 
-	useFullscreen();
+	// useFullscreen();
 
 	if (loading) {
 		return (

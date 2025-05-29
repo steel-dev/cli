@@ -53,13 +53,13 @@ export default function CreateSession() {
 								},
 								{
 									name: 'timeout',
-									type: 'number',
+									type: 'integer',
 									label: 'Timeout',
 									required: false,
 								},
 								{
 									name: 'concurrency',
-									type: 'number',
+									type: 'integer',
 									label: 'Concurrency',
 									required: false,
 								},

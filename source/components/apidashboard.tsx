@@ -1,3 +1,4 @@
+//@ts-nocheck
 import React, {useState} from 'react';
 import PostDashboard from './postdashboard.js';
 import GetDashboard from './getdashboard.js';
@@ -10,6 +11,7 @@ type Props = {
 	method: string;
 	endpoint: string;
 	resultObject?: string; // Where the results of the API call are stored on the object
+	contentType?: string;
 };
 
 export default function ApiDashboard({
@@ -17,6 +19,7 @@ export default function ApiDashboard({
 	method,
 	endpoint,
 	resultObject,
+	contentType,
 }: Props) {
 	if (
 		(method === 'POST' || method === 'DELETE') &&
@@ -27,6 +30,7 @@ export default function ApiDashboard({
 			method,
 			endpoint,
 			resultObject,
+			contentType,
 		});
 		const [sent, setSent] = useState(false);
 		return sent ? (
@@ -54,6 +58,7 @@ export default function ApiDashboard({
 			method,
 			endpoint,
 			resultObject,
+			contentType,
 		});
 		return (
 			<GetDashboard
@@ -69,6 +74,7 @@ export default function ApiDashboard({
 			method,
 			endpoint,
 			resultObject,
+			contentType,
 		});
 		const [sent, setSent] = useState(false);
 		return sent ? (
@@ -83,7 +89,7 @@ export default function ApiDashboard({
 			<PostDashboard
 				form={form}
 				callback={result => {
-					callback(undefined, result);
+					callback(result);
 					setSent(true);
 				}}
 			/>

@@ -2,6 +2,8 @@ import React from 'react';
 import {Box, Text} from 'ink';
 import {getApiKey} from '../utils/session.js';
 
+export const description = 'Display information about the current session';
+
 export default function Info() {
 	const apiKey = getApiKey();
 	return (
@@ -30,7 +32,7 @@ export default function Info() {
 						<Text>{`}`}</Text>
 					</Box>
 				) : (
-					<Text color="red">You are not logged in :(</Text>
+					<Text color="red">You are not logged in 🫠</Text>
 				)}
 			</Box>
 		</Box>

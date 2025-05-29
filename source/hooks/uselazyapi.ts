@@ -5,12 +5,12 @@ import {API_PATH} from '../utils/constants.js';
 type Options = {
 	method: string;
 	endpoint: string;
+	contentType?: string;
 	resultObject?: string;
 };
 
 type TriggerFn = (
-	body?: any,
-	params?: Record<string, string>,
+	data?: Record<string, string>,
 	callback?: (data: any[]) => void,
 ) => Promise<void>;
 
@@ -18,23 +18,28 @@ export function useLazyApi({
 	method,
 	endpoint,
 	resultObject,
+	contentType = 'application/json',
 }: Options): [boolean, any[], Error | null, TriggerFn] {
 	const [data, setData] = useState<any[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<Error | null>(null);
 
 	const trigger = useCallback<TriggerFn>(
-		async (body, params, callback) => {
+		// what if I set it up so it first uses params and then adds the rest to body?
+		// I think I can do a data param, first get params then the rest in body
+		async (data, callback) => {
 			setLoading(true);
 			setError(null);
 
 			try {
-				const apiKey = await getApiKey();
+				const apiKey = getApiKey();
 				if (!apiKey?.apiKey) throw new Error('API key not found');
-				if (params) {
+				if (data) {
 					endpoint = endpoint.replace(/\{(\w+)\}/g, (_, key: string) => {
-						if (params[key]) {
-							return params[key];
+						if (data[key]) {
+							let value = data[key];
+							delete data[key];
+							return value;
 						}
 						return `{${key}}`;
 					});
@@ -43,10 +48,13 @@ export function useLazyApi({
 				const response = await fetch(`${API_PATH}/${endpoint}`, {
 					method,
 					headers: {
-						'Content-Type': 'application/json',
+						'Content-Type': contentType,
 						'Steel-Api-Key': apiKey.apiKey,
 					},
-					body: body ? JSON.stringify(body) : undefined,
+					body:
+						data && Object.keys(data).length > 0
+							? JSON.stringify(data)
+							: undefined,
 				});
 
 				const json = await response.json();
