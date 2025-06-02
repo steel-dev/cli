@@ -1,6 +1,6 @@
 import {useState, useCallback} from 'react';
-import {getApiKey} from '../utils/session.js';
-import {API_PATH} from '../utils/constants.js';
+import {getApiKey, getSettings} from '../utils/session.js';
+import {API_PATH, LOCAL_API_PATH} from '../utils/constants.js';
 
 type Options = {
 	method: string;
@@ -33,7 +33,11 @@ export function useLazyApi({
 
 			try {
 				const apiKey = getApiKey();
-				if (!apiKey?.apiKey) throw new Error('API key not found');
+				if (!apiKey || !apiKey.apiKey || !apiKey.name) {
+					throw new Error('API key not found');
+				}
+				const settings = getSettings();
+				const url = settings?.instance === 'cloud' ? API_PATH : LOCAL_API_PATH;
 				if (data) {
 					endpoint = endpoint.replace(/\{(\w+)\}/g, (_, key: string) => {
 						if (data[key]) {
@@ -45,7 +49,7 @@ export function useLazyApi({
 					});
 				}
 
-				const response = await fetch(`${API_PATH}/${endpoint}`, {
+				const response = await fetch(`${url}/${endpoint}`, {
 					method,
 					headers: {
 						'Content-Type': contentType,

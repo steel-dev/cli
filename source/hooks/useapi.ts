@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
-import {getApiKey} from '../utils/session.js';
-import {API_PATH} from '../utils/constants.js';
+import {getApiKey, getSettings} from '../utils/session.js';
+import {API_PATH, LOCAL_API_PATH} from '../utils/constants.js';
 
 type Props = {
 	method: string;
@@ -20,11 +20,17 @@ export function useApi({
 	useEffect(() => {
 		async function fetchData() {
 			try {
-				const apiKey = await getApiKey();
+				const apiKey = getApiKey();
+
 				if (!apiKey || !apiKey.apiKey || !apiKey.name) {
 					throw new Error('API key not found');
 				}
-				const response = await fetch(`${API_PATH}/${endpoint}`, {
+
+				const settings = getSettings();
+
+				const url = settings?.instance === 'cloud' ? API_PATH : LOCAL_API_PATH;
+
+				const response = await fetch(`${url}/${endpoint}`, {
 					method: method,
 					headers: {
 						'Content-Type': 'application/json',
@@ -37,7 +43,8 @@ export function useApi({
 						const result = json[resultObject];
 						setData(result);
 					} else {
-						setData([json]);
+						// setData([json]);
+						setData(json);
 					}
 				} else {
 					setError(new Error(json.message));

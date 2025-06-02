@@ -66,7 +66,16 @@ export default function Logout(): ReactElement {
 
 async function logoutFlow(): Promise<boolean> {
 	try {
-		await fs.writeFile(CONFIG_PATH, JSON.stringify({}, null, 2));
+		// Read the existing configuration
+		const configData = await fs.readFile(CONFIG_PATH, 'utf-8');
+		const config = JSON.parse(configData);
+
+		// Remove the keys 'apiKey' and 'name'
+		delete config.apiKey;
+		delete config.name;
+
+		// Write the updated configuration back to the file
+		await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
 		return true;
 	} catch (error) {
 		return false;
