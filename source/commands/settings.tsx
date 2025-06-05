@@ -1,12 +1,18 @@
-import React, {ReactElement} from 'react';
+import React, {ReactElement, useState} from 'react';
 import {Form} from 'ink-form';
+import {Box, Text} from 'ink';
 import {getSettings, setSettings} from '../utils/session.js';
 
 export const description = 'Display current settings';
 
 export default function Settings(): ReactElement {
 	const settings = getSettings();
-	return (
+	const [sent, setSent] = useState(false);
+	return sent ? (
+		<Box>
+			<Text color="green">Settings saved!</Text>
+		</Box>
+	) : (
 		<Form
 			form={{
 				title: 'Settings',
@@ -15,7 +21,8 @@ export default function Settings(): ReactElement {
 						title: 'API Usage',
 						fields: [
 							{
-								name: 'Instance Type',
+								name: 'instance',
+								label: 'Instance Type',
 								type: 'select',
 								required: true,
 								initialValue: settings?.instance || 'cloud',
@@ -28,7 +35,10 @@ export default function Settings(): ReactElement {
 					},
 				],
 			}}
-			onSubmit={value => setSettings(value)}
+			onSubmit={value => {
+				setSettings(value);
+				setSent(true);
+			}}
 		/>
 	);
 }
