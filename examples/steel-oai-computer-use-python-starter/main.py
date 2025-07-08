@@ -11,6 +11,13 @@ from const import MODIFIERS, PLAYWRIGHT_KEYS
 load_dotenv()
 
 
+# Get API keys
+STEEL_API_KEY = os.getenv("STEEL_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+STEEL_API_URL = os.getenv("STEEL_BASE_URL") or "https://api.steel.dev"
+CONNECT_URL = os.getenv("STEEL_CONNECT_URL") or "wss://connect.steel.dev"
+
 def create_response(**kwargs):
     """Send a request to OpenAI API to get a response."""
     url = "https://api.openai.com/v1/responses"
@@ -54,8 +61,8 @@ class SteelBrowser:
 
     def __init__(self):
         self.client = Steel(
-            steel_api_key=os.getenv("STEEL_API_KEY"),
-            base_url=os.getenv("STEEL_API_URL"),
+            steel_api_key=STEEL_API_KEY,
+            base_url=STE,
         )
         self.session = None
         self._playwright = None
@@ -73,8 +80,8 @@ class SteelBrowser:
 
         # Connect to the session
         self._playwright = sync_playwright().start()
-        connect_url = os.getenv("STEEL_CONNECT_URL", "wss://connect.steel.dev")
-        cdp_url = f"{connect_url}?apiKey={os.getenv('STEEL_API_KEY')}&sessionId={self.session.id}"
+
+        cdp_url = f"{CONNECT_URL}?apiKey={STEEL_API_KEY}&sessionId={self.session.id}"
         self._browser = self._playwright.chromium.connect_over_cdp(cdp_url)
         self._page = self._browser.contexts[0].pages[0]
         self._page.goto("https://google.com")
@@ -88,7 +95,7 @@ class SteelBrowser:
             window.addEventListener('load', () => {
                 // Initial cleanup
                 document.querySelectorAll('a[target="_blank"]').forEach(a => a.target = '_self');
-                
+
                 // Watch for dynamic changes
                 const observer = new MutationObserver((mutations) => {
                     mutations.forEach((mutation) => {
@@ -106,7 +113,7 @@ class SteelBrowser:
                         }
                     });
                 });
-                
+
                 observer.observe(document.body, {
                     childList: true,
                     subtree: true

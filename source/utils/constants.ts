@@ -11,73 +11,140 @@ export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 export const REPO_URL = 'https://github.com/steel-dev/steel-browser.git';
 export const TEMPLATES: Template[] = [
 	{
-		value: 'steel-playwright-starter-js',
+		value: 'playwright-js',
 		label: 'Playwright',
+		dir: 'steel-playwright-starter-js',
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
+		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'steel-playwright-starter',
+		value: 'playwright',
 		label: 'Playwright + TypeScript',
+		dir: 'steel-playwright-starter',
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
+		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'steel-puppeteer-starter-js',
+		value: 'puppeteer-js',
 		label: 'Puppeteer',
+		dir: 'steel-puppeteer-starter-js',
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
+		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'steel-puppeteer-starter',
+		value: 'puppeteer',
+		dir: 'steel-puppeteer-starter',
 		label: 'Puppeteer + TypeScript',
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
+		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'steel-files-api-starter',
+		value: 'files',
+		dir: 'steel-files-api-starter',
 		label: 'Playwright + Files API Starter in TypeScript',
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
+		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'steel-oai-computer-use-node-starter',
+		value: 'oai-cua',
+		dir: 'steel-oai-computer-use-starter',
 		label: 'Steel + OpenAI Computer Use + TypeScript',
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'OPENAI_API_KEY', label: 'OpenAI API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
+		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'steel-browser-use-starter',
+		value: 'browser-use',
+		dir: 'steel-browser-use-starter',
 		label: '(Python) Steel + Browser Use',
 
-		customCommands: [
+		commands: [
 			'python -m venv .venv',
 			'source .venv/bin/activate',
 			'pip install .',
 			'python main.py',
 		],
-		extraEnvVarsRequired: [{value: 'OPENAI_API_KEY', label: 'OpenAI API key'}],
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'OPENAI_API_KEY', label: 'OpenAI API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
 	},
 	{
-		value: 'steel-oai-computer-use-python-starter',
+		value: 'oai-cua-py',
+		dir: 'steel-oai-computer-use-python-starter',
 		label: '(Python) Steel + OpenAI Computer Use',
 
-		customCommands: [
+		commands: [
 			'python -m venv .venv',
 			'source .venv/bin/activate',
 			'pip install .',
 			'python main.py',
 		],
-		extraEnvVarsRequired: [{value: 'OPENAI_API_KEY', label: 'OpenAI API key'}],
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'OPENAI_API_KEY', label: 'OpenAI API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
 	},
 	{
-		value: 'steel-playwright-python-starter',
+		value: 'playwright-py',
+		dir: 'steel-playwright-python-starter',
 		label: '(Python) Steel + Playwright',
 
-		customCommands: [
+		commands: [
 			'python -m venv .venv',
 			'source .venv/bin/activate',
 			'pip install -r requirements.txt',
 			'python main.py',
 		],
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
 	},
 	{
-		value: 'steel-selenium-starter',
+		value: 'selenium',
+		dir: 'steel-selenium-starter',
 		label: '(Python) Steel + Selenium',
 
-		customCommands: [
+		commands: [
 			'python -m venv .venv',
 			'source .venv/bin/activate',
 			'pip install -r requirements.txt',
 			'python main.py',
+		],
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
 	},
 ];

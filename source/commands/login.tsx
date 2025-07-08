@@ -20,6 +20,8 @@ type AuthState = {
 
 export const description = 'Login to Steel CLI';
 
+export const alias = 'auth';
+
 export default function Login(): ReactElement {
 	const [state, setState] = React.useState<AuthState>({
 		status: 'idle',

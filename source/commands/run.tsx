@@ -7,22 +7,36 @@ import Dependencies from '../components/cookbook/dependencies.js';
 import ProjectName from '../components/cookbook/projectname.js';
 import {StepProvider} from '../context/stepcontext.js';
 import zod from 'zod';
+import {option} from 'pastel';
 import PackageManager from '../components/cookbook/packagemanager.js';
 
 export const description = 'Start a new project using the Steel CLI';
 
 export const args = zod.tuple([
-	zod
-		.string()
-		.default('steel-project')
-		.describe('Directory to scaffold new Steel project'),
+	zod.string().describe('Example Project to run'),
 ]);
+
+export const options = zod.object({
+	'base-url': zod.string().describe(
+		option({
+			description: 'Base URL for Steel API',
+			alias: 'b',
+		}),
+	),
+	view: zod.string().describe(
+		option({
+			description: 'Auto open live session viewer',
+			alias: 'v',
+		}),
+	),
+});
 
 type Props = {
 	args: zod.infer<typeof args>;
+	options: zod.infer<typeof options>;
 };
 
-export default function Cookbook({args}: Props) {
+export default function Cookbook({args, options}: Props) {
 	return (
 		<StepProvider>
 			<TaskList>
@@ -36,3 +50,12 @@ export default function Cookbook({args}: Props) {
 		</StepProvider>
 	);
 }
+
+// SCRATCHPAD
+// Template template args defined in constants
+// PackageManager
+// SteelApiKey depending on base url
+// Dependencies
+
+// For --task and --base-url, these are often inside of the starter projects and aren't env variables.
+// It might just be easiest to have these all be env variables and then update them in the starter projects.
