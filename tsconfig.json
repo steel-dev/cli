@@ -1,0 +1,12 @@
+{
+	"extends": "@sindresorhus/tsconfig",
+	"compilerOptions": {
+		"jsx": "react-jsx",
+		"jsxImportSource": "react",
+		"moduleResolution": "node16",
+		"module": "Node16",
+		"outDir": "dist"
+	},
+	"include": ["source"],
+	"exclude": ["node_modules"]
+}
