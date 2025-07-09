@@ -1,3 +1,4 @@
+import { useEffect } from 'react';}
 import {Task} from 'ink-task-list';
 import {TEMPLATES} from '../../utils/constants.js';
 import {Template} from '../../utils/types.js';
@@ -8,10 +9,31 @@ import spinners from 'cli-spinners';
 
 export default function Template({args}: {args?: Array<string>}) {
 	const [state, task, , , setTask, ,] = useTask();
-	const {step, setStep, setTemplate} = useStep();
+	const {step, setStep, template, setTemplate} = useStep();
+
+	useEffect(() => {
+		if (!args?.length) return;
+
+		const [templateArg] = args;
+
+		const found = TEMPLATES.find(
+			t => t.value === templateArg || t.label === templateArg,
+		);
+
+		if (found) {
+			const template = found as Template;
+			setTask(template);
+			setTemplate(template);
+			setStep('packagemanager');
+		} else {
+			console.warn(
+				`Template "${templateArg}" not found. Falling back to manual selection.`,
+			);
+		}
+	}, [args, setTask, setTemplate, setStep]);
 
 	// Skip UI if task is already set (from args)
-	if (task || args?.length) return null;
+	if (task || template) return null;
 	return (
 		<Task
 			label="Select template"
