@@ -5,13 +5,16 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const STEEL_API_KEY = process.env.STEEL_API_KEY;
-const STEEL_BASE_URL = process.env.STEEL_BASE_URL || 'https://api.steel.dev';
+const STEEL_API_URL = process.env.STEEL_API_URL || 'https://api.steel.dev';
 
-const CONNECT_URL = process.env.STEEL_CONNECT_URL || 'wss://connect.steel.dev';
+const STEEL_CONNECT_URL =
+	process.env.STEEL_CONNECT_URL || 'wss://connect.steel.dev';
+
+const STEEL_SESSION_ID = process.env.STEEL_SESSION_ID || '';
 
 const client = new Steel({
 	steelAPIKey: STEEL_API_KEY,
-	baseURL: STEEL_BASE_URL,
+	baseURL: STEEL_API_URL,
 });
 
 // Helper function to perform login
@@ -36,13 +39,15 @@ async function main() {
 	try {
 		// Step 1: Create and authenticate initial session
 		console.log('Creating initial Steel session...');
-		session = await client.sessions.create();
+		session = await client.sessions.create({
+			sessionId: STEEL_SESSION_ID, // Session ID for the initial session
+		});
 		console.log(
 			`\x1b[1;93mSteel Session #1 created!\x1b[0m\n` +
 				`View session at \x1b[1;37m${session.sessionViewerUrl}\x1b[0m`,
 		);
 
-		const cdpUrl = `${CONNECT_URL}?apiKey=${process.env.STEEL_API_KEY}&sessionId=${session.id}`;
+		const cdpUrl = `${STEEL_CONNECT_URL}?apiKey=${process.env.STEEL_API_KEY}&sessionId=${session.id}`;
 		// Connect Playwright to the session
 		browser = await chromium.connectOverCDP(cdpUrl);
 

@@ -9,9 +9,15 @@ load_dotenv()
 
 STEEL_API_KEY = os.getenv('STEEL_API_KEY')
 
+STEEL_API_URL = os.getenv('STEEL_API_URL', 'https://api.steel.dev')
+STEEL_CONNECT_URL = os.getenv('STEEL_CONNECT_URL', 'wss://connect.steel.dev')
+
+STEEL_SESSION_ID = os.getenv('STEEL_SESSION_ID', "")
+
 # Initialize Steel client with the API key from environment variables
 client = Steel(
     steel_api_key=STEEL_API_KEY,
+    base_url=STEEL_API_URL,
 )
 
 def main():
@@ -24,6 +30,7 @@ def main():
         # Create a new Steel session with all available options
         session = client.sessions.create(
             # === Basic Options ===
+            session_id=STEEL_SESSION_ID,   # Session ID
             # use_proxy=True,              # Use Steel's proxy network (residential IPs)
             # proxy_url='http://...',      # Use your own proxy (format: protocol://username:password@host:port)
             # solve_captcha=True,          # Enable automatic CAPTCHA solving
@@ -38,9 +45,10 @@ You can view the session live at \033[1;37m{session.session_viewer_url}\033[0m
 
         # Connect Playwright to the Steel session
         playwright = sync_playwright().start()
-        browser = playwright.chromium.connect_over_cdp(
-            f"wss://connect.steel.dev?apiKey={STEEL_API_KEY}&sessionId={session.id}"
-        )
+
+        cdp_url = f"{STEEL_CONNECT_URL}?apiKey={STEEL_API_KEY}&sessionId={session.id}"
+
+        browser = playwright.chromium.connect_over_cdp(cdp_url)
 
         print("Connected to browser via Playwright")
 
@@ -66,7 +74,7 @@ You can view the session live at \033[1;37m{session.session_viewer_url}\033[0m
             title_element = row.locator(".titleline > a")
             title = title_element.text_content()
             link = title_element.get_attribute("href")
-            
+
             # Get points from the following row
             points_element = row.locator("xpath=following-sibling::tr[1]").locator(".score")
             points = points_element.text_content().split()[0] if points_element.count() > 0 else "0"

@@ -7,8 +7,9 @@ import {useTask} from '../../hooks/usetask.js';
 import {useStep} from '../../context/stepcontext.js';
 import spinners from 'cli-spinners';
 import fs from 'fs';
+import {v4 as uuidv4} from 'uuid';
 
-export default function SteelApiKey() {
+export default function EnvVar({options}: {options: any}) {
 	const {step, setStep, directory} = useStep();
 
 	const [state, , , , setTask, setLoading, setError] = useTask();
@@ -28,11 +29,15 @@ export default function SteelApiKey() {
 				const envPath = path.join(directory, '.env.example');
 				if (fs.existsSync(envPath)) {
 					fs.copyFileSync(envPath, path.join(directory, '.env'));
-					updateEnvVariable(
-						directory,
-						'STEEL_API_KEY',
-						apiKey?.apiKey || 'your-api-key-here',
-					);
+					Object.entries(options).forEach(([key, value]) => {
+						updateEnvVariable(directory, key, value);
+					});
+					updateEnvVariable(directory, 'STEEL_SESSION_ID', uuidv4());
+					// updateEnvVariable(
+					// 	directory,
+					// 	'STEEL_API_KEY',
+					// 	apiKey?.apiKey || 'your-api-key-here',
+					// );
 					fs.unlinkSync(envPath);
 				}
 				setLoading(false);

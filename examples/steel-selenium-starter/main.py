@@ -13,11 +13,17 @@ load_dotenv()
 
 # Check if the Steel API key is set in the environment variables, and raise an error if not
 STEEL_API_KEY = os.getenv('STEEL_API_KEY')
+
+STEEL_API_URL = os.getenv('STEEL_API_URL', 'https://api.steel.dev')
+STEEL_CONNECT_URL = os.getenv('STEEL_CONNECT_URL', 'http://connect.steelbrowser.com/selenium')
+
+STEEL_SESSION_ID = os.getenv("STEEL_SESSION_ID", "")
+
 if not STEEL_API_KEY:
     raise EnvironmentError("STEEL_API_KEY environment variable not set.")
 
 # Initialize Steel client with the API key from environment variables
-client = Steel(steel_api_key=STEEL_API_KEY)
+client = Steel(steel_api_key=STEEL_API_KEY, base_url=STEEL_API_URL)
 
 # Helper Class: Custom Remote Connection class to include Steel-specific headers
 
@@ -31,7 +37,7 @@ class CustomRemoteConnection(RemoteConnection):
 
     def get_remote_connection_headers(self, parsed_url, keep_alive=False):
         headers = super().get_remote_connection_headers(parsed_url, keep_alive)
-        headers.update({'steel-api-key': os.environ.get("STEEL_API_KEY")})
+        headers.update({'steel-api-key': STEEL_API_KEY})
         headers.update({'session-id': self._session_id})
         return headers
 
@@ -45,6 +51,7 @@ def main():
 
         # Create a new Steel session with is_selenium=True
         session = client.sessions.create(
+        	session_id=STEEL_SESSION_ID,   # Session ID
             is_selenium=True,              # Enable Selenium mode (required)
             # session_timeout=1800000,     # Session timeout in ms (default: 5 mins)
         )
@@ -56,7 +63,7 @@ You can view the session live at {session.session_viewer_url}
         # Connect to the session via Selenium's WebDriver using the CustomRemoteConnection class
         driver = webdriver.Remote(
             command_executor=CustomRemoteConnection(
-                remote_server_addr='http://connect.steelbrowser.com/selenium',
+                remote_server_addr=STEEL_CONNECT_URL,
                 session_id=session.id
             ),
             options=webdriver.ChromeOptions()

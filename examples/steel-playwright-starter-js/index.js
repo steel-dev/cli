@@ -1,110 +1,118 @@
-const { chromium } = require("playwright");
-const Steel = require("steel-sdk");
-const dotenv = require("dotenv");
+const {chromium} = require('playwright');
+const Steel = require('steel-sdk');
+const dotenv = require('dotenv');
 
 dotenv.config();
 
 const STEEL_API_KEY = process.env.STEEL_API_KEY;
 
+const STEEL_API_URL = process.env.STEEL_API_URL || 'https://api.steel.dev';
+const STEEL_CONNECT_URL =
+	process.env.STEEL_CONNECT_URL || 'wss://connect.steel.dev';
+
+const STEEL_SESSION_ID = process.env.STEEL_SESSION_ID || '';
+
 // Initialize Steel client with the API key from environment variables
 const client = new Steel({
-  steelAPIKey: STEEL_API_KEY,
+	steelAPIKey: STEEL_API_KEY,
+	baseURL: STEEL_API_URL,
 });
 
 async function main() {
-  let session;
-  let browser;
+	let session;
+	let browser;
 
-  try {
-    console.log("Creating Steel session...");
+	try {
+		console.log('Creating Steel session...');
 
-    // Create a new Steel session with all available options
-    session = await client.sessions.create({
-      // === Basic Options ===
-      // useProxy: true, // Use Steel's proxy network (residential IPs)
-      // proxyUrl: 'http://...',         // Use your own proxy (format: protocol://username:password@host:port)
-      // solveCaptcha: true,             // Enable automatic CAPTCHA solving
-      // sessionTimeout: 1800000,        // Session timeout in ms (default: 5 mins)
-      // === Browser Configuration ===
-      // userAgent: 'custom-ua-string',  // Set a custom User-Agent
-    });
+		// Create a new Steel session with all available options
+		session = await client.sessions.create({
+			// === Basic Options ===
+			sessionId: STEEL_SESSION_ID, // Optional session ID
+			// useProxy: true, // Use Steel's proxy network (residential IPs)
+			// proxyUrl: 'http://...',         // Use your own proxy (format: protocol://username:password@host:port)
+			// solveCaptcha: true,             // Enable automatic CAPTCHA solving
+			// sessionTimeout: 1800000,        // Session timeout in ms (default: 5 mins)
+			// === Browser Configuration ===
+			// userAgent: 'custom-ua-string',  // Set a custom User-Agent
+		});
 
-    console.log(
-      `\x1b[1;93mSteel Session created!\x1b[0m\n` +
-        `View session at \x1b[1;37m${session.sessionViewerUrl}\x1b[0m`
-    );
+		console.log(
+			`\x1b[1;93mSteel Session created!\x1b[0m\n` +
+				`View session at \x1b[1;37m${session.sessionViewerUrl}\x1b[0m`,
+		);
 
-    // Connect Playwright to the Steel session
-    browser = await chromium.connectOverCDP(
-      `wss://connect.steel.dev?apiKey=${STEEL_API_KEY}&sessionId=${session.id}`
-    );
+		const cdpUrl = `${STEEL_CONNECT_URL}?apiKey=${STEEL_API_KEY}&sessionId=${session.id}`;
 
-    console.log("Connected to browser via Playwright");
+		// Connect Playwright to the Steel session
+		browser = await chromium.connectOverCDP(cdpUrl);
 
-    // Create page at existing context to ensure session is recorded.
-    const currentContext = browser.contexts()[0];
-    const page = await currentContext.pages()[0];
+		console.log('Connected to browser via Playwright');
 
-    // ============================================================
-    // Your Automations Go Here!
-    // ============================================================
+		// Create page at existing context to ensure session is recorded.
+		const currentContext = browser.contexts()[0];
+		const page = await currentContext.pages()[0];
 
-    // Example script - Navigate to Hacker News and extract the top 5 stories
-    console.log("Navigating to Hacker News...");
-    await page.goto("https://news.ycombinator.com", {
-      waitUntil: "networkidle",
-    });
+		// ============================================================
+		// Your Automations Go Here!
+		// ============================================================
 
-    // Extract the top 5 stories
-    const stories = await page.evaluate(() => {
-      const items = [];
-      // Get all story items
-      const storyRows = document.querySelectorAll("tr.athing");
+		// Example script - Navigate to Hacker News and extract the top 5 stories
+		console.log('Navigating to Hacker News...');
+		await page.goto('https://news.ycombinator.com', {
+			waitUntil: 'networkidle',
+		});
 
-      // Loop through first 5 stories
-      for (let i = 0; i < 5; i++) {
-        const row = storyRows[i];
-        const titleElement = row.querySelector(".titleline > a");
-        const subtext = row.nextElementSibling;
-        const score = subtext?.querySelector(".score");
+		// Extract the top 5 stories
+		const stories = await page.evaluate(() => {
+			const items = [];
+			// Get all story items
+			const storyRows = document.querySelectorAll('tr.athing');
 
-        items.push({
-          title: titleElement?.textContent || "",
-          link: titleElement?.getAttribute("href") || "",
-          points: score?.textContent?.split(" ")[0] || "0",
-        });
-      }
-      return items;
-    });
+			// Loop through first 5 stories
+			for (let i = 0; i < 5; i++) {
+				const row = storyRows[i];
+				const titleElement = row.querySelector('.titleline > a');
+				const subtext = row.nextElementSibling;
+				const score = subtext?.querySelector('.score');
 
-    // Print the results
-    console.log("\nTop 5 Hacker News Stories:");
-    stories.forEach((story, index) => {
-      console.log(`\n${index + 1}. ${story.title}`);
-      console.log(`   Link: ${story.link}`);
-      console.log(`   Points: ${story.points}`);
-    });
+				items.push({
+					title: titleElement?.textContent || '',
+					link: titleElement?.getAttribute('href') || '',
+					points: score?.textContent?.split(' ')[0] || '0',
+				});
+			}
+			return items;
+		});
 
-    // ============================================================
-    // End of Automations
-    // ============================================================
-  } catch (error) {
-    console.error("An error occurred:", error);
-  } finally {
-    // Cleanup: Gracefully close browser and release session when done
-    if (browser) {
-      await browser.close();
-      console.log("Browser closed");
-    }
+		// Print the results
+		console.log('\nTop 5 Hacker News Stories:');
+		stories.forEach((story, index) => {
+			console.log(`\n${index + 1}. ${story.title}`);
+			console.log(`   Link: ${story.link}`);
+			console.log(`   Points: ${story.points}`);
+		});
 
-    if (session) {
-      console.log("Releasing session...");
-      await client.sessions.release(session.id);
-      console.log("Session released");
-    }
+		// ============================================================
+		// End of Automations
+		// ============================================================
+	} catch (error) {
+		console.error('An error occurred:', error);
+	} finally {
+		// Cleanup: Gracefully close browser and release session when done
+		if (browser) {
+			await browser.close();
+			console.log('Browser closed');
+		}
 
-    console.log("Done!");
-  }
+		if (session) {
+			console.log('Releasing session...');
+			await client.sessions.release(session.id);
+			console.log('Session released');
+		}
+
+		console.log('Done!');
+	}
 }
 
 // Run the script

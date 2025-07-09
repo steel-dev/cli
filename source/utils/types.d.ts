@@ -3,9 +3,9 @@ type ColorFunc = (str: string | number) => string;
 export type Template = {
 	value: string;
 	label: string;
-	dir: string;
+	alias: string;
 	commands?: string[];
-	env?: {value: string; label: string}[];
+	env?: {value: string; label: string; required?: boolean}[];
 };
 
 export type ApiKey = {

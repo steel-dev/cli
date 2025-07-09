@@ -15,8 +15,10 @@ load_dotenv()
 STEEL_API_KEY = os.getenv("STEEL_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-STEEL_API_URL = os.getenv("STEEL_BASE_URL") or "https://api.steel.dev"
-CONNECT_URL = os.getenv("STEEL_CONNECT_URL") or "wss://connect.steel.dev"
+STEEL_API_URL = os.getenv("STEEL_API_URL", "https://api.steel.dev")
+STEEL_CONNECT_URL = os.getenv("STEEL_CONNECT_URL", "wss://connect.steel.dev")
+
+STEEL_SESSION_ID = os.getenv("STEEL_SESSION_ID", "")
 
 def create_response(**kwargs):
     """Send a request to OpenAI API to get a response."""
@@ -62,7 +64,7 @@ class SteelBrowser:
     def __init__(self):
         self.client = Steel(
             steel_api_key=STEEL_API_KEY,
-            base_url=STE,
+            base_url=STEEL_API_URL,
         )
         self.session = None
         self._playwright = None
@@ -71,6 +73,7 @@ class SteelBrowser:
 
     def __enter__(self):
         self.session = self.client.sessions.create(
+        	session_id=STEEL_SESSION_ID,
             use_proxy=False,
             solve_captcha=False,
             block_ads=True,
@@ -81,7 +84,7 @@ class SteelBrowser:
         # Connect to the session
         self._playwright = sync_playwright().start()
 
-        cdp_url = f"{CONNECT_URL}?apiKey={STEEL_API_KEY}&sessionId={self.session.id}"
+        cdp_url = f"{STEEL_CONNECT_URL}?apiKey={STEEL_API_KEY}&sessionId={self.session.id}"
         self._browser = self._playwright.chromium.connect_over_cdp(cdp_url)
         self._page = self._browser.contexts[0].pages[0]
         self._page.goto("https://google.com")
@@ -271,7 +274,8 @@ def main():
 
         items = []
         while True:
-            user_input = input("> ")
+        	# The agent's main instructions
+            user_input = os.getenv("TASK", input("> "))
             items.append({"role": "user", "content": user_input})
 
             while True:

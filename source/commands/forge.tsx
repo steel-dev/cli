@@ -1,22 +1,18 @@
-import React from 'react';
-import SteelApiKey from '../components/cookbook/steelapikey.js';
-import Template from '../components/cookbook/template.js';
-import Directory from '../components/cookbook/directory.js';
+import EnvVar from '../components/forge/envvar.js';
+import Template from '../components/forge/template.js';
+import Directory from '../components/forge/directory.js';
 import {TaskList} from 'ink-task-list';
-import Dependencies from '../components/cookbook/dependencies.js';
-import ProjectName from '../components/cookbook/projectname.js';
+import Dependencies from '../components/forge/dependencies.js';
+import ProjectName from '../components/forge/projectname.js';
 import {StepProvider} from '../context/stepcontext.js';
 import zod from 'zod';
 import {option} from 'pastel';
-import PackageManager from '../components/cookbook/packagemanager.js';
+import PackageManager from '../components/forge/packagemanager.js';
+import BrowserOpener from '../components/run/browseropener.js';
 
 export const description = 'Start a new project using the Steel CLI';
 
 export const args = zod.tuple([
-	// zod
-	// 	.string()
-	// 	.default('steel-project')
-	// 	.describe('Directory to scaffold new Steel project'),
 	zod.string().describe('Example Project to start'),
 ]);
 
@@ -28,22 +24,24 @@ export const options = zod.object({
 		}),
 	),
 	'api-key': zod.string().describe('API Key for Steel API'),
+	'openai-key': zod.string().describe('API Key for OpenAI'),
 	'skip-auth': zod.boolean().describe('Skip authentication'),
 });
 
 type Props = {
 	args: zod.infer<typeof args>;
+	options: zod.infer<typeof options>;
 };
 
-export default function Cookbook({args}: Props) {
+export default function Forge({args, options}: Props) {
 	return (
 		<StepProvider>
 			<TaskList>
 				<ProjectName args={args} />
-				<Template />
+				<Template args={args} />
 				<PackageManager />
-				<Directory />
-				<SteelApiKey />
+				<Directory options={options} />
+				<EnvVar options={options} />
 				<Dependencies />
 			</TaskList>
 		</StepProvider>

@@ -11,9 +11,9 @@ export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 export const REPO_URL = 'https://github.com/steel-dev/steel-browser.git';
 export const TEMPLATES: Template[] = [
 	{
-		value: 'playwright-js',
+		alias: 'playwright-js',
 		label: 'Playwright',
-		dir: 'steel-playwright-starter-js',
+		value: 'steel-playwright-starter-js',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -22,9 +22,9 @@ export const TEMPLATES: Template[] = [
 		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'playwright',
+		alias: 'playwright',
 		label: 'Playwright + TypeScript',
-		dir: 'steel-playwright-starter',
+		value: 'steel-playwright-starter',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -33,9 +33,9 @@ export const TEMPLATES: Template[] = [
 		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'puppeteer-js',
+		alias: 'puppeteer-js',
 		label: 'Puppeteer',
-		dir: 'steel-puppeteer-starter-js',
+		value: 'steel-puppeteer-starter-js',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -44,8 +44,8 @@ export const TEMPLATES: Template[] = [
 		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'puppeteer',
-		dir: 'steel-puppeteer-starter',
+		alias: 'puppeteer',
+		value: 'steel-puppeteer-starter',
 		label: 'Puppeteer + TypeScript',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
@@ -55,8 +55,19 @@ export const TEMPLATES: Template[] = [
 		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'files',
-		dir: 'steel-files-api-starter',
+		alias: 'puppeteer',
+		value: 'steel-puppeteer-starter',
+		label: 'Puppeteer + TypeScript',
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
+		commands: ['npm install', 'npm run dev'],
+	},
+	{
+		alias: 'files',
+		value: 'steel-files-api-starter',
 		label: 'Playwright + Files API Starter in TypeScript',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
@@ -66,20 +77,21 @@ export const TEMPLATES: Template[] = [
 		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'oai-cua',
-		dir: 'steel-oai-computer-use-starter',
+		alias: 'oai-cua',
+		value: 'steel-oai-computer-use-starter',
 		label: 'Steel + OpenAI Computer Use + TypeScript',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
-			{value: 'OPENAI_API_KEY', label: 'OpenAI API key'},
+			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+			{value: 'TASK', label: 'Task for the agent'},
 		],
 		commands: ['npm install', 'npm run dev'],
 	},
 	{
-		value: 'browser-use',
-		dir: 'steel-browser-use-starter',
+		alias: 'browser-use',
+		value: 'steel-browser-use-starter',
 		label: '(Python) Steel + Browser Use',
 
 		commands: [
@@ -90,14 +102,15 @@ export const TEMPLATES: Template[] = [
 		],
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
-			{value: 'OPENAI_API_KEY', label: 'OpenAI API key'},
+			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+			{value: 'TASK', label: 'Task for the agent'},
 		],
 	},
 	{
-		value: 'oai-cua-py',
-		dir: 'steel-oai-computer-use-python-starter',
+		alias: 'oai-cua-py',
+		value: 'steel-oai-computer-use-python-starter',
 		label: '(Python) Steel + OpenAI Computer Use',
 
 		commands: [
@@ -108,14 +121,15 @@ export const TEMPLATES: Template[] = [
 		],
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
-			{value: 'OPENAI_API_KEY', label: 'OpenAI API key'},
+			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+			{value: 'TASK', label: 'Task for the agent'},
 		],
 	},
 	{
-		value: 'playwright-py',
-		dir: 'steel-playwright-python-starter',
+		alias: 'playwright-py',
+		value: 'steel-playwright-python-starter',
 		label: '(Python) Steel + Playwright',
 
 		commands: [
@@ -131,8 +145,8 @@ export const TEMPLATES: Template[] = [
 		],
 	},
 	{
-		value: 'selenium',
-		dir: 'steel-selenium-starter',
+		alias: 'selenium',
+		value: 'steel-selenium-starter',
 		label: '(Python) Steel + Selenium',
 
 		commands: [

@@ -1,14 +1,12 @@
-import React from 'react';
-import SteelApiKey from '../components/cookbook/steelapikey.js';
-import Template from '../components/cookbook/template.js';
-import Directory from '../components/cookbook/directory.js';
+import EnvVar from '../components/forge/envvar.js';
+import Template from '../components/run/template.js';
 import {TaskList} from 'ink-task-list';
-import Dependencies from '../components/cookbook/dependencies.js';
-import ProjectName from '../components/cookbook/projectname.js';
+import Dependencies from '../components/forge/dependencies.js';
 import {StepProvider} from '../context/stepcontext.js';
 import zod from 'zod';
 import {option} from 'pastel';
-import PackageManager from '../components/cookbook/packagemanager.js';
+// import PackageManager from '../components/forge/packagemanager.js';
+import BrowserOpener from '../components/run/browseropener.js';
 
 export const description = 'Start a new project using the Steel CLI';
 
@@ -17,10 +15,10 @@ export const args = zod.tuple([
 ]);
 
 export const options = zod.object({
-	'base-url': zod.string().describe(
+	'api-url': zod.string().describe(
 		option({
-			description: 'Base URL for Steel API',
-			alias: 'b',
+			description: 'API URL for Steel API',
+			alias: 'a',
 		}),
 	),
 	view: zod.string().describe(
@@ -29,6 +27,15 @@ export const options = zod.object({
 			alias: 'v',
 		}),
 	),
+	task: zod.string().describe(
+		option({
+			description: 'Task to run',
+			alias: 't',
+		}),
+	),
+	'api-key': zod.string().describe('API Key for Steel API'),
+	'openai-key': zod.string().describe('API Key for OpenAI'),
+	'skip-auth': zod.boolean().describe('Skip authentication'),
 });
 
 type Props = {
@@ -40,12 +47,11 @@ export default function Cookbook({args, options}: Props) {
 	return (
 		<StepProvider>
 			<TaskList>
-				<ProjectName args={args} />
-				<Template />
-				<PackageManager />
-				<Directory />
-				<SteelApiKey />
+				<Template args={args} />
+				{/* <PackageManager /> */}
+				<EnvVar options={options} />
 				<Dependencies />
+				<BrowserOpener options={options} />
 			</TaskList>
 		</StepProvider>
 	);
@@ -53,9 +59,10 @@ export default function Cookbook({args, options}: Props) {
 
 // SCRATCHPAD
 // Template template args defined in constants
-// PackageManager
-// SteelApiKey depending on base url
-// Dependencies
+// PackageManager (don't know if this is needed), but i'm debating how to handle installing packages
+// I don't think this is needed, but then how do we handle installing stuff? just use the default commands or whatever.
+// EnvVar to update the Env Variables
+// Dependencies (Ask to install these)
 
 // For --task and --base-url, these are often inside of the starter projects and aren't env variables.
 // It might just be easiest to have these all be env variables and then update them in the starter projects.

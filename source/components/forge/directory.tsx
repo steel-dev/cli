@@ -9,7 +9,7 @@ import {useTask} from '../../hooks/usetask.js';
 import {useStep} from '../../context/stepcontext.js';
 import spinners from 'cli-spinners';
 
-export default function Directory() {
+export default function Directory({options}: {options: any}) {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
 
 	const {step, setStep, directory, template} = useStep();

@@ -1,10 +1,36 @@
 import React, {useEffect, useState} from 'react';
 import {spawn} from 'child_process';
 import open from 'open';
-import {CONFIG_DIR, REPO_URL} from '../utils/constants.js';
+import {CONFIG_DIR, REPO_URL} from '../../utils/constants.js';
 import path from 'path';
+import zod from 'zod';
+import {option} from 'pastel';
 import Spinner from 'ink-spinner';
 import {Text} from 'ink';
+
+export const description = 'Starts the development environment';
+
+export const options = zod.object({
+	port: zod.string().describe(
+		option({
+			description: 'Port number',
+			alias: 'p',
+		}),
+	),
+	verbose: zod.string().describe(
+		option({
+			description: 'Enable verbose logging',
+			alias: 'v',
+		}),
+	),
+	'docker-check': zod
+		.string()
+		.describe(option({description: 'Verify Docker is running', alias: 'dc'})),
+});
+
+type Props = {
+	options: zod.infer<typeof options>;
+};
 
 function isDockerRunning() {
 	try {
@@ -14,8 +40,6 @@ function isDockerRunning() {
 		return false;
 	}
 }
-
-export const description = 'Starts the development environment';
 
 export default function Start() {
 	const [loading, setLoading] = useState(false);

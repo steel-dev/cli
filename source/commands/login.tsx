@@ -2,7 +2,10 @@
 import React, {ReactElement} from 'react';
 import {Box, Text} from 'ink';
 import fs from 'fs/promises';
-import puppeteer from 'puppeteer';
+import * as http from 'http';
+import * as url from 'url';
+import * as crypto from 'crypto';
+import type {AddressInfo} from 'net';
 import {
 	TARGET_SITE,
 	TARGET_API_PATH,
@@ -87,76 +90,71 @@ export default function Login(): ReactElement {
 	);
 }
 
-async function loginFlow(): Promise<{
-	apiKey: string | null;
-	name: string | null;
-} | null> {
-	try {
-		const browser = await puppeteer.launch({
-			headless: false,
-			defaultViewport: null,
-			args: ['--no-sandbox', '--window-size=800,800'],
+export function loginFlow() {
+	return new Promise<string>((resolve, reject) => {
+		const state = crypto.randomBytes(16).toString('hex');
+		let server: http.Server;
+
+		const timeout = setTimeout(() => {
+			server?.close();
+			reject(new Error('Login timed out. Please try again.'));
+		}, LOGIN_TIMEOUT);
+
+		server = http.createServer((req, res) => {
+			const {query} = url.parse(req.url ?? '', true);
+
+			if (query.state !== state) {
+				res.writeHead(400, {'Content-Type': 'text/plain'});
+				res.end('Error: Invalid state parameter. Authentication failed.');
+				reject(new Error('Invalid state parameter. Possible CSRF attack.'));
+				return;
+			}
+
+			const jwt = query.jwt as string;
+			if (!jwt) {
+				res.writeHead(400, {'Content-Type': 'text/plain'});
+				res.end('Error: JWT not found in callback.');
+				reject(new Error('Callback did not include a JWT.'));
+				return;
+			}
+
+			res.writeHead(200, {'Content-Type': 'text/html'});
+			res.end(successHtml);
+
+			clearTimeout(timeout);
+			server.close(() => {
+				console.log('Local callback server shut down.');
+			});
+			resolve(jwt);
 		});
 
-		const page = (await browser.pages())[0];
+		server.listen(0, '127.0.0.1', async () => {
+			const {port} = server.address() as AddressInfo;
+			console.log(`Local callback server listening on port ${port}...`);
 
-		// Set up request interception
-		let apiKey: string | null = null;
-		let name: string | null = null;
+			const authUrl = new URL(LOGIN_URL);
+			authUrl.searchParams.set('cli_redirect', 'true');
+			authUrl.searchParams.set('port', port.toString());
+			authUrl.searchParams.set('state', state);
 
-		if (page) {
-			// Listen for responses
-			page.on('response', async response => {
-				const url = response.url();
+			console.log('Opening your browser for authentication...');
+			console.log('If it does not open automatically, please click:');
+			console.log(authUrl.toString());
 
-				// If they get put on the playground site, redirect them to the quickstart page
-				if (url.includes('/playground')) {
-					await page.goto('https://app.steel.dev/quickstart');
-				}
-
-				if (url.includes(TARGET_API_PATH) && response.status() === 200) {
-					// Check if this is the API key endpoint we're looking for
-					try {
-						const responseBody = await response.json();
-						// The structure of the response will depend on the API
-						if (responseBody.key && responseBody.name) {
-							apiKey = responseBody.key;
-							name = responseBody.name;
-						}
-
-						// If we got the API key, close the browser
-						if (apiKey && name) {
-							await browser.close();
-						}
-					} catch (e) {
-						// Response might not be JSON or might have another format
-						console.error('Error parsing response:', e);
-					}
-				}
-			});
-
-			// Navigate to the login page
-			await page.goto(TARGET_SITE);
-
-			// Wait for up to 5 minutes for the user to log in and for us to capture the API key
-			const timeout = 5 * 60 * 1000; // 5 minutes in milliseconds
-			const startTime = Date.now();
-
-			while (!apiKey && Date.now() - startTime < timeout) {
-				await new Promise(resolve => setTimeout(resolve, 1000)); // Check every second
+			try {
+				await open(authUrl.toString());
+			} catch (error) {
+				server.close();
+				clearTimeout(timeout);
+				reject(new Error('Failed to open browser'));
 			}
+		});
 
-			// Close the browser if it's still open
-			if (browser.connected) {
-				await browser.close();
-			}
-		}
-
-		return {apiKey, name};
-	} catch (error) {
-		console.error('Error during Puppeteer session:', error);
-		return null;
-	}
+		server.on('error', err => {
+			clearTimeout(timeout);
+			reject(err);
+		});
+	});
 }
 
 async function saveApiKey(apiKey: string, name: string): Promise<void> {
