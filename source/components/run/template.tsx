@@ -1,21 +1,15 @@
-import React, {useEffect} from 'react';
+import {useEffect} from 'react';
 import {Task} from 'ink-task-list';
 import {TEMPLATES} from '../../utils/constants.js';
 import {Template} from '../../utils/types.js';
 import SelectInput from 'ink-select-input';
 import {useTask} from '../../hooks/usetask.js';
-import {useStep} from '../../context/stepcontext.js';
+import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
 
-export default function Template({
-	args,
-	options,
-}: {
-	args?: Array<string>;
-	options?: Array<string>;
-}) {
+export default function Template({args}: {args?: any}) {
 	const [state, task, , , setTask, ,] = useTask();
-	const {step, setStep, template, setTemplate} = useStep();
+	const {step, setStep, template, setTemplate, setDirectory} = useRunStep();
 	// Bypass selection if args are provided
 	useEffect(() => {
 		if (args?.length) {
@@ -33,8 +27,9 @@ export default function Template({
 				const template = found as Template;
 				setTask(template);
 				setTemplate(template);
-				setStep('packagemanager');
-			} else {
+				setDirectory(template.value);
+				setStep('directory');
+			} else if (templateArg) {
 				console.log(`Template "${templateArg}" not found.`);
 				// Optionally: fall back to selection or exit
 			}
@@ -42,6 +37,7 @@ export default function Template({
 	}, [args, setTask, setTemplate, setStep]);
 
 	// Skip UI if task is already set (from args)
+	// Return complete task for viewer
 	if (task || template) return null;
 	return (
 		<Task
@@ -56,7 +52,8 @@ export default function Template({
 					const template = item as Template;
 					setTask(template);
 					setTemplate(template);
-					setStep('packagemanager');
+					setDirectory(template.value);
+					setStep('directory');
 				}}
 			/>
 		</Task>

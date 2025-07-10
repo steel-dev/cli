@@ -1,13 +1,13 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
-import {useStep} from '../../context/stepcontext.js';
+import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
 import {toValidProjectName} from '../../utils/cookbook.js';
 import TextInput from 'ink-text-input';
 
-export default function ProjectName({args}: {args: Array<string>}) {
-	const {step, setStep, setDirectory} = useStep();
+export default function ProjectName({args}: {args: any}) {
+	const {step, setStep, setDirectory} = useForgeStep();
 	const [state, task, , , setTask] = useTask();
 	const [query, setQuery] = useState('');
 

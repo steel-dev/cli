@@ -9,6 +9,14 @@ export const LOCAL_API_PATH = 'http://localhost:3000/v1';
 export const CONFIG_DIR = path.join(os.homedir(), '.steel-cli');
 export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 export const REPO_URL = 'https://github.com/steel-dev/steel-browser.git';
+export const LOGIN_URL = 'https://app.steel.dev/sign-in';
+export const LOGIN_TIMEOUT = 5 * 60 * 1000; // 5 mins
+export const ENV_VAR_MAP = {
+	'api-key': 'STEEL_API_KEY',
+	'openai-key': 'OPENAI_API_KEY',
+	'api-url': 'STEEL_API_URL',
+	task: 'TASK',
+};
 export const TEMPLATES: Template[] = [
 	{
 		alias: 'playwright-js',
@@ -19,7 +27,8 @@ export const TEMPLATES: Template[] = [
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
-		commands: ['npm install', 'npm run dev'],
+		depCommands: ['npm install'],
+		runCommand: 'npm run dev',
 	},
 	{
 		alias: 'playwright',
@@ -30,7 +39,8 @@ export const TEMPLATES: Template[] = [
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
-		commands: ['npm install', 'npm run dev'],
+		depCommands: ['npm install'],
+		runCommand: 'npm run dev',
 	},
 	{
 		alias: 'puppeteer-js',
@@ -41,7 +51,8 @@ export const TEMPLATES: Template[] = [
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
-		commands: ['npm install', 'npm run dev'],
+		depCommands: ['npm install'],
+		runCommand: 'npm run dev',
 	},
 	{
 		alias: 'puppeteer',
@@ -52,18 +63,8 @@ export const TEMPLATES: Template[] = [
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
-		commands: ['npm install', 'npm run dev'],
-	},
-	{
-		alias: 'puppeteer',
-		value: 'steel-puppeteer-starter',
-		label: 'Puppeteer + TypeScript',
-		env: [
-			{value: 'STEEL_API_KEY', label: 'Steel API key'},
-			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
-			{value: 'STEEL_API_URL', label: 'Steel API URL'},
-		],
-		commands: ['npm install', 'npm run dev'],
+		depCommands: ['npm install'],
+		runCommand: 'npm run dev',
 	},
 	{
 		alias: 'files',
@@ -74,7 +75,8 @@ export const TEMPLATES: Template[] = [
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
-		commands: ['npm install', 'npm run dev'],
+		depCommands: ['npm install'],
+		runCommand: 'npm run dev',
 	},
 	{
 		alias: 'oai-cua',
@@ -87,19 +89,20 @@ export const TEMPLATES: Template[] = [
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 			{value: 'TASK', label: 'Task for the agent'},
 		],
-		commands: ['npm install', 'npm run dev'],
+		depCommands: ['npm install'],
+		runCommand: 'npm run dev',
 	},
 	{
 		alias: 'browser-use',
 		value: 'steel-browser-use-starter',
 		label: '(Python) Steel + Browser Use',
 
-		commands: [
-			'python -m venv .venv',
+		depCommands: [
+			'python3 -m venv .venv',
 			'source .venv/bin/activate',
 			'pip install .',
-			'python main.py',
 		],
+		runCommand: 'python3 main.py',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
@@ -113,12 +116,12 @@ export const TEMPLATES: Template[] = [
 		value: 'steel-oai-computer-use-python-starter',
 		label: '(Python) Steel + OpenAI Computer Use',
 
-		commands: [
-			'python -m venv .venv',
+		depCommands: [
+			'python3 -m venv .venv',
 			'source .venv/bin/activate',
 			'pip install .',
-			'python main.py',
 		],
+		runCommand: 'python3 main.py',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
@@ -132,12 +135,12 @@ export const TEMPLATES: Template[] = [
 		value: 'steel-playwright-python-starter',
 		label: '(Python) Steel + Playwright',
 
-		commands: [
-			'python -m venv .venv',
+		depCommands: [
+			'python3 -m venv .venv',
 			'source .venv/bin/activate',
 			'pip install -r requirements.txt',
-			'python main.py',
 		],
+		runCommand: 'python3 main.py',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -149,12 +152,12 @@ export const TEMPLATES: Template[] = [
 		value: 'steel-selenium-starter',
 		label: '(Python) Steel + Selenium',
 
-		commands: [
-			'python -m venv .venv',
+		depCommands: [
+			'python3 -m venv .venv',
 			'source .venv/bin/activate',
 			'pip install -r requirements.txt',
-			'python main.py',
 		],
+		runCommand: 'python3 main.py',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},

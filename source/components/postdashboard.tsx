@@ -1,4 +1,4 @@
-import React, {ReactElement} from 'react';
+import {ReactElement} from 'react';
 import {Form, FormProps} from 'ink-form';
 // import {useFullscreen} from '../hooks/usefullscreen.js';
 

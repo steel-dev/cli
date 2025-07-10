@@ -1,0 +1,238 @@
+import {useState, useEffect} from 'react';
+import {Box, Text, useApp, useInput} from 'ink';
+import {Octokit} from 'octokit';
+import Image from 'ink-image';
+import Spinner from 'ink-spinner';
+
+// Define types
+interface Contributor {
+	login: string;
+	id: number;
+	avatar_url: string;
+	contributions: number;
+	name: string | null;
+	bio: string | null;
+	additions?: number;
+	deletions?: number;
+	commits?: number;
+}
+
+export const description = 'Show project contributors from GitHub';
+
+export default function Contributors() {
+	const [contributors, setContributors] = useState<Contributor[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const [currentIndex, setCurrentIndex] = useState(0);
+	const {exit} = useApp();
+
+	// Handle keyboard input for carousel navigation
+	useInput((input, key) => {
+		if (input === 'q' || key.escape) {
+			exit();
+		} else if (key.rightArrow) {
+			setCurrentIndex(prev => (prev + 1) % contributors.length);
+		} else if (key.leftArrow) {
+			setCurrentIndex(
+				prev => (prev - 1 + contributors.length) % contributors.length,
+			);
+		}
+	});
+
+	// Auto rotate carousel every 5 seconds
+	//@ts-ignore
+	useEffect(() => {
+		if (!loading && contributors.length > 0) {
+			const timer = setInterval(() => {
+				setCurrentIndex(prev => (prev + 1) % contributors.length);
+			}, 5000);
+
+			return () => clearInterval(timer);
+		}
+	}, [loading, contributors.length]);
+
+	// Fetch contributors data
+	useEffect(() => {
+		const fetchContributors = async (): Promise<void> => {
+			try {
+				const octokit = new Octokit();
+
+				// Get basic contributor information
+				const {data: contribData} = await octokit.request(
+					'GET /repos/{owner}/{repo}/contributors',
+					{
+						owner: 'steel-dev',
+						repo: 'steel-browser',
+						per_page: 10,
+					},
+				);
+
+				// Get commit stats for each contributor
+				const contributorsWithDetails = await Promise.all(
+					contribData.map(async (contributor: any) => {
+						// Get additional user details
+						const {data: userData} = await octokit.request(
+							'GET /users/{username}',
+							{
+								username: contributor.login,
+							},
+						);
+
+						// Get commit stats
+						const {data: commitStats} = await octokit.request(
+							'GET /repos/{owner}/{repo}/stats/contributors',
+							{
+								owner: 'steel-dev',
+								repo: 'steel-browser',
+							},
+						);
+
+						const stats = commitStats.find(
+							(stat: any) => stat.author.login === contributor.login,
+						);
+						let additions = 0;
+						let deletions = 0;
+						let commits = 0;
+
+						if (stats) {
+							stats.weeks.forEach((week: any) => {
+								additions += week.a;
+								deletions += week.d;
+								commits += week.c;
+							});
+						}
+
+						return {
+							...contributor,
+							name: userData.name,
+							bio: userData.bio,
+							additions,
+							deletions,
+							commits,
+						};
+					}),
+				);
+
+				setContributors(contributorsWithDetails);
+				setLoading(false);
+			} catch (err) {
+				setError(`Failed to fetch contributors: ${(err as Error).message}`);
+				setLoading(false);
+			}
+		};
+
+		fetchContributors();
+	}, []);
+
+	// Display loading spinner while fetching data
+	if (loading) {
+		return (
+			<Box padding={1}>
+				<Text>
+					<Text color="green">
+						<Spinner type="dots" />
+					</Text>{' '}
+					Loading contributors...
+				</Text>
+			</Box>
+		);
+	}
+
+	// Display error if any
+	if (error) {
+		return (
+			<Box padding={1}>
+				<Text color="red">Error: {error}</Text>
+			</Box>
+		);
+	}
+
+	// Display empty message if no contributors found
+	if (contributors.length === 0) {
+		return (
+			<Box padding={1}>
+				<Text>No contributors found.</Text>
+			</Box>
+		);
+	}
+
+	// Get current contributor to display
+	const currentContributor = contributors[currentIndex];
+
+	return (
+		<Box flexDirection="column" padding={1}>
+			<Box marginBottom={1}>
+				<Text bold>
+					Steel Browser Contributors ({currentIndex + 1}/{contributors.length})
+				</Text>
+				<Text> (Use ← → arrows to navigate, q to quit)</Text>
+			</Box>
+
+			<Box flexDirection="row" marginBottom={1}>
+				<Box marginRight={2} width={20} height={20}>
+					{currentContributor && <Image src={currentContributor.avatar_url} />}
+				</Box>
+
+				<Box flexDirection="column">
+					{currentContributor && (
+						<>
+							<Text bold color="green">
+								{currentContributor.name || currentContributor.login}
+							</Text>
+							<Text>@{currentContributor.login}</Text>
+							{currentContributor.bio && (
+								<Text italic>{currentContributor.bio}</Text>
+							)}
+
+							<Box marginTop={1}>
+								<Text bold>Contributions: </Text>
+								<Text color="cyan">{currentContributor.contributions}</Text>
+							</Box>
+
+							<Box>
+								<Text bold>Commits: </Text>
+								<Text color="yellow">{currentContributor.commits}</Text>
+							</Box>
+
+							<Box>
+								<Text bold>Lines added: </Text>
+								<Text color="green">+{currentContributor.additions}</Text>
+							</Box>
+
+							<Box>
+								<Text bold>Lines removed: </Text>
+								<Text color="red">-{currentContributor.deletions}</Text>
+							</Box>
+						</>
+					)}
+				</Box>
+			</Box>
+
+			<Box marginTop={1}>
+				<Text color="gray">
+					◀{' '}
+					{currentIndex > 0 && contributors[currentIndex - 1]
+						? contributors[currentIndex - 1].login
+						: contributors.length > 0 && contributors[contributors.length - 1]
+							? contributors[contributors.length - 1].login
+							: ''}{' '}
+					|{' '}
+				</Text>
+				<Text bold color="white">
+					{currentContributor?.login || ''}
+				</Text>
+				<Text color="gray">
+					{' '}
+					|{' '}
+					{currentIndex < contributors.length - 1 &&
+					contributors[currentIndex + 1]
+						? contributors[currentIndex + 1].login
+						: contributors.length > 0 && contributors[0]
+							? contributors[0].login
+							: ''}{' '}
+					▶
+				</Text>
+			</Box>
+		</Box>
+	);
+}

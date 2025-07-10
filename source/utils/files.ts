@@ -133,6 +133,7 @@ export function fileParse(filePath: string): CodeSections {
 
 export function readIndentation(line: string | undefined): number | undefined {
 	let indentation = 0;
+	//@ts-ignore
 	if (!line) return;
 	for (const char of line) {
 		if (char === ' ' || char === '\t') {

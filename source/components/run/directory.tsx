@@ -6,13 +6,13 @@ import SelectInput from 'ink-select-input';
 import {Task} from 'ink-task-list';
 import {write} from '../../utils/cookbook.js';
 import {useTask} from '../../hooks/usetask.js';
-import {useForgeStep} from '../../context/forgestepcontext.js';
+import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
 
 export default function Directory() {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
 
-	const {step, setStep, directory, template} = useForgeStep();
+	const {step, setStep, directory, template} = useRunStep();
 
 	useEffect(() => {
 		let timer: NodeJS.Timeout;

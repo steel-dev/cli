@@ -1,14 +1,14 @@
-import React, {useEffect} from 'react';
+import {useEffect} from 'react';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
-import {useStep} from '../../context/stepcontext.js';
+import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
 import {spawnSync} from 'node:child_process';
 
 export default function Dependencies() {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
 
-	const {step, setStep, packageManager, directory, template} = useStep();
+	const {step, setStep, packageManager, directory, template} = useForgeStep();
 
 	useEffect(() => {
 		if (step === 'dependencies' && !task) {
@@ -40,12 +40,12 @@ export default function Dependencies() {
 					}
 					setLoading(false);
 					setTask(true);
-					setStep('done');
+					setStep('runner');
 				} else {
 					spawnSync(packageManager, ['install'], {cwd: directory});
 					setLoading(false);
 					setTask(true);
-					setStep('done');
+					setStep('runner');
 				}
 			} catch (error) {
 				console.error('Error installing dependencies:', error);

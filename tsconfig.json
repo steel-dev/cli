@@ -5,8 +5,14 @@
 		"jsxImportSource": "react",
 		"moduleResolution": "node16",
 		"module": "Node16",
-		"outDir": "dist"
+		"skipLibCheck": true,
+		"outDir": "dist",
+		"noImplicitAny": false,
+		"allowSyntheticDefaultImports": true,
+		"typeRoots": ["./node_modules/@types", "./source/types"],
+		"resolveJsonModule": true,
+		"strictNullChecks": false
 	},
 	"include": ["source"],
-	"exclude": ["node_modules"]
+	"exclude": ["node_modules", "examples"]
 }

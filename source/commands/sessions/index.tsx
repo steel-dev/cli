@@ -1,4 +1,3 @@
-import React from 'react';
 import ApiDashboard from '../../components/apidashboard.js';
 import {getSettings} from '../../utils/session.js';
 

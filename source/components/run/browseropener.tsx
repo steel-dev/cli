@@ -1,18 +1,12 @@
-import React, {useEffect} from 'react';
+import {useEffect} from 'react';
 import open from 'open';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
-import {useStep} from '../../context/stepcontext.js';
+import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
 
-export default function BrowserOpener({
-	options,
-	sessionId,
-}: {
-	options: any;
-	sessionId?: string;
-}) {
-	const {step, setStep} = useStep();
+export default function BrowserOpener({options}: {options: any}) {
+	const {step, setStep, sessionId} = useRunStep();
 	const [state, , , , setTask, setLoading, setError] = useTask();
 
 	useEffect(() => {
@@ -24,7 +18,7 @@ export default function BrowserOpener({
 					// Determine URL based on sessionId - use local default if no sessionId provided
 					const url = sessionId
 						? `https://app.steel.dev/sessions/${sessionId}`
-						: 'http://localhost:5167';
+						: 'http://localhost:5173';
 
 					// Open the browser
 					open(url);

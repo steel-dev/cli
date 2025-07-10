@@ -4,7 +4,8 @@ export type Template = {
 	value: string;
 	label: string;
 	alias: string;
-	commands?: string[];
+	depCommands?: string[];
+	runCommand?: string;
 	env?: {value: string; label: string; required?: boolean}[];
 };
 

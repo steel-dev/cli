@@ -1,15 +1,15 @@
-import { useEffect } from 'react';}
+import {useEffect} from 'react';
 import {Task} from 'ink-task-list';
 import {TEMPLATES} from '../../utils/constants.js';
 import {Template} from '../../utils/types.js';
 import SelectInput from 'ink-select-input';
 import {useTask} from '../../hooks/usetask.js';
-import {useStep} from '../../context/stepcontext.js';
+import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
 
-export default function Template({args}: {args?: Array<string>}) {
+export default function Template({args}: {args?: any}) {
 	const [state, task, , , setTask, ,] = useTask();
-	const {step, setStep, template, setTemplate} = useStep();
+	const {step, setStep, template, setTemplate} = useForgeStep();
 
 	useEffect(() => {
 		if (!args?.length) return;

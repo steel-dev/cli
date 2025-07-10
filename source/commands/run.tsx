@@ -1,41 +1,51 @@
-import EnvVar from '../components/forge/envvar.js';
 import Template from '../components/run/template.js';
+import Runner from '../components/run/runner.js';
+import EnvVar from '../components/run/envvar.js';
 import {TaskList} from 'ink-task-list';
-import Dependencies from '../components/forge/dependencies.js';
-import {StepProvider} from '../context/stepcontext.js';
+import Dependencies from '../components/run/dependencies.js';
+import {RunStepProvider} from '../context/runstepcontext.js';
 import zod from 'zod';
 import {option} from 'pastel';
-// import PackageManager from '../components/forge/packagemanager.js';
 import BrowserOpener from '../components/run/browseropener.js';
+import Directory from '../components/run/directory.js';
 
 export const description = 'Start a new project using the Steel CLI';
 
 export const args = zod.tuple([
-	zod.string().describe('Example Project to run'),
+	zod.string().describe('Example Project to run').optional(),
 ]);
 
 export const options = zod.object({
-	'api-url': zod.string().describe(
-		option({
-			description: 'API URL for Steel API',
-			alias: 'a',
-		}),
-	),
-	view: zod.string().describe(
-		option({
-			description: 'Auto open live session viewer',
-			alias: 'v',
-		}),
-	),
-	task: zod.string().describe(
-		option({
-			description: 'Task to run',
-			alias: 't',
-		}),
-	),
-	'api-key': zod.string().describe('API Key for Steel API'),
-	'openai-key': zod.string().describe('API Key for OpenAI'),
-	'skip-auth': zod.boolean().describe('Skip authentication'),
+	'api-url': zod
+		.string()
+		.describe(
+			option({
+				description: 'API URL for Steel API',
+				alias: 'a',
+			}),
+		)
+		.optional(),
+	view: zod
+		.string()
+		.describe(
+			option({
+				description: 'Auto open live session viewer',
+				alias: 'v',
+			}),
+		)
+		.optional(),
+	task: zod
+		.string()
+		.describe(
+			option({
+				description: 'Task to run',
+				alias: 't',
+			}),
+		)
+		.optional(),
+	'api-key': zod.string().describe('API Key for Steel API').optional(),
+	'openai-key': zod.string().describe('API Key for OpenAI').optional(),
+	'skip-auth': zod.boolean().describe('Skip authentication').optional(),
 });
 
 type Props = {
@@ -45,15 +55,16 @@ type Props = {
 
 export default function Cookbook({args, options}: Props) {
 	return (
-		<StepProvider>
+		<RunStepProvider>
 			<TaskList>
 				<Template args={args} />
-				{/* <PackageManager /> */}
+				<Directory />
 				<EnvVar options={options} />
 				<Dependencies />
-				<BrowserOpener options={options} />
+				<Runner />
+				{options['view'] && <BrowserOpener options={options} />}
 			</TaskList>
-		</StepProvider>
+		</RunStepProvider>
 	);
 }
 

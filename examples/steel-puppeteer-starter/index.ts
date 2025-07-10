@@ -1,5 +1,3 @@
-// run `npm start` in the terminal
-
 import puppeteer from 'puppeteer-core';
 import Steel from 'steel-sdk';
 import dotenv from 'dotenv';

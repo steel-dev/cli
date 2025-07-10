@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import {useEffect, useState} from 'react';
 import {spawn} from 'child_process';
 import open from 'open';
 import {CONFIG_DIR, REPO_URL} from '../../utils/constants.js';
@@ -41,37 +41,41 @@ function isDockerRunning() {
 	}
 }
 
-export default function Start() {
+export default function Start({options}: Props) {
 	const [loading, setLoading] = useState(false);
-	useEffect(() => {
-		async function start() {
-			setLoading(true);
+	console.log(
+		useEffect(() => {
+			async function start() {
+				setLoading(true);
 
-			spawn('git', ['clone', REPO_URL], {
-				cwd: CONFIG_DIR,
-			});
+				spawn('git', ['clone', REPO_URL], {
+					cwd: CONFIG_DIR,
+				});
 
-			if (!isDockerRunning()) {
-				console.log('⚠️ Docker is not running. Please start it and try again.');
-				return;
+				if (!isDockerRunning()) {
+					console.log(
+						'⚠️ Docker is not running. Please start it and try again.',
+					);
+					return;
+				}
+
+				setLoading(false);
+
+				console.log('🚀 Starting Docker Compose...');
+
+				const folderName = path.basename(REPO_URL, '.git');
+
+				spawn('docker-compose', ['-f', 'docker-compose.dev.yml', 'up', '-d'], {
+					cwd: path.join(CONFIG_DIR, folderName),
+					stdio: 'inherit',
+				});
+
+				console.log('🖥️  Opening Browser...');
+				await open('http://localhost:' + options.port);
 			}
-
-			setLoading(false);
-
-			console.log('🚀 Starting Docker Compose...');
-
-			const folderName = path.basename(REPO_URL, '.git');
-
-			spawn('docker-compose', ['-f', 'docker-compose.dev.yml', 'up', '-d'], {
-				cwd: path.join(CONFIG_DIR, folderName),
-				stdio: 'inherit',
-			});
-
-			console.log('🖥️  Opening Browser...');
-			await open('http://localhost:5173');
-		}
-		start();
-	}, []);
+			start();
+		}, []),
+	);
 
 	return <Text>{loading ? <Spinner type="dots" /> : null}</Text>;
 }

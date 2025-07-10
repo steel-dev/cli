@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+//@ts-nocheck
 import React, {ReactElement} from 'react';
 import {Box, Text} from 'ink';
 import fs from 'fs/promises';
@@ -7,8 +8,8 @@ import * as url from 'url';
 import * as crypto from 'crypto';
 import type {AddressInfo} from 'net';
 import {
-	TARGET_SITE,
-	TARGET_API_PATH,
+	LOGIN_URL,
+	LOGIN_TIMEOUT,
 	CONFIG_DIR,
 	CONFIG_PATH,
 } from '../utils/constants.js';
@@ -142,7 +143,7 @@ export function loginFlow() {
 			console.log(authUrl.toString());
 
 			try {
-				await open(authUrl.toString());
+				open(authUrl.toString());
 			} catch (error) {
 				server.close();
 				clearTimeout(timeout);

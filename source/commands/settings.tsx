@@ -1,4 +1,4 @@
-import React, {ReactElement, useState} from 'react';
+import {ReactElement, useState} from 'react';
 import {Form} from 'ink-form';
 import {Box, Text} from 'ink';
 import {getSettings, setSettings} from '../utils/session.js';
