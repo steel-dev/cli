@@ -6,6 +6,8 @@ type RunStepContextType = {
 	setStep: (step: string) => void;
 	template: Template | null;
 	setTemplate: (template: Template) => void;
+	envVars: Record<string, string> | null;
+	setEnvVars: (envVars: Record<string, string> | null) => void;
 	directory: string | null;
 	setDirectory: (directory: string | null) => void;
 	sessionId: string | null;
@@ -18,6 +20,7 @@ export const RunStepProvider = ({children}: {children: ReactNode}) => {
 	// For run command, start at template step instead of projectname
 	const [step, setStep] = useState<string>('template');
 	const [template, setTemplate] = useState<Template | null>(null);
+	const [envVars, setEnvVars] = useState<Record<string, string>>({});
 	const [directory, setDirectory] = useState<string | null>(null);
 	const [sessionId, setSessionId] = useState<string | null>(null);
 
@@ -28,6 +31,8 @@ export const RunStepProvider = ({children}: {children: ReactNode}) => {
 				setStep,
 				template,
 				setTemplate,
+				envVars,
+				setEnvVars,
 				directory,
 				setDirectory,
 				sessionId,

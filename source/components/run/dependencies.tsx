@@ -21,13 +21,11 @@ export default function Dependencies() {
 						const command = parts[0] || '';
 						const args = parts.slice(1);
 
-						console.log(`Running: ${commandStr}`);
-
 						// Execute the command
 						const result = spawnSync(command, args, {
 							cwd: directory,
 							shell: true,
-							stdio: 'inherit',
+							stdio: 'ignore',
 						});
 
 						if (result.status !== 0) {
