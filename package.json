@@ -2,7 +2,7 @@
 	"name": "steel-cli",
 	"version": "0.0.0",
 	"license": "MIT",
-	"bin": "dist/cli.js",
+	"bin": "dist/steel.js",
 	"type": "module",
 	"engines": {
 		"node": ">=16"

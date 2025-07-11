@@ -4,7 +4,7 @@ import {fileURLToPath} from 'url';
 import {useEffect} from 'react';
 import SelectInput from 'ink-select-input';
 import {Task} from 'ink-task-list';
-import {write} from '../../utils/cookbook.js';
+import {write} from '../../utils/forge.js';
 import {useTask} from '../../hooks/usetask.js';
 import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';

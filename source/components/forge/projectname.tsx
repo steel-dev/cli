@@ -3,7 +3,7 @@ import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
-import {toValidProjectName} from '../../utils/cookbook.js';
+import {toValidProjectName} from '../../utils/forge.js';
 import TextInput from 'ink-text-input';
 
 export default function ProjectName({args}: {args: any}) {

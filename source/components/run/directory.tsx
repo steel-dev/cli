@@ -4,7 +4,7 @@ import {fileURLToPath} from 'url';
 import {useEffect} from 'react';
 import SelectInput from 'ink-select-input';
 import {Task} from 'ink-task-list';
-import {write} from '../../utils/cookbook.js';
+import {write} from '../../utils/forge.js';
 import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
@@ -54,7 +54,7 @@ export default function Directory() {
 			timer = setTimeout(() => {
 				setLoading(false);
 				setStep('envvar');
-			}, 4000);
+			}, 6000);
 		}
 		return () => clearTimeout(timer);
 	}, [step, task]);

@@ -63,13 +63,22 @@ export function updateEnvVariable(
 
 	let keyFound = false;
 	const updatedLines = lines.map(line => {
+		// if line is empty or starts with a comment or new value is empty, don't update it
 		if (!line.trim() || line.trim().startsWith('#')) {
 			return line;
 		}
-
 		const [currentKey] = line.split('=');
 		if (currentKey === key) {
 			keyFound = true;
+			if (newValue.trim() === '') return line;
+			// if new value has spaces, wrap it in quotes
+			if (newValue.includes(' ')) {
+				newValue = `"${newValue}"`;
+			}
+			// if new value has special characters, escape them
+			if (newValue.includes('\\')) {
+				newValue = newValue.replace(/\\/g, '\\\\');
+			}
 			return `${key}=${newValue}`;
 		}
 		return line;

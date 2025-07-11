@@ -4,30 +4,29 @@ import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
+// import {Text} from 'ink';
 
 export default function BrowserOpener({options}: {options: any}) {
-	const {step, setStep, sessionId} = useRunStep();
-	const [state, , , , setTask, setLoading, setError] = useTask();
+	const {step, sessionId} = useRunStep();
+	const [state, task, , , setTask, setLoading, setError] = useTask();
 
 	useEffect(() => {
-		if (step === 'browser') {
+		if (step === 'browser' && !task) {
 			setLoading(true);
 			try {
-				// Determine if browser should be opened
-				if (options.view || options.open) {
-					// Determine URL based on sessionId - use local default if no sessionId provided
-					const url = sessionId
-						? `https://app.steel.dev/sessions/${sessionId}`
-						: 'http://localhost:5173';
-
+				// Determine URL based on sessionId - use local default if no sessionId provided
+				const url = sessionId
+					? `https://app.steel.dev/sessions/${sessionId}`
+					: 'http://localhost:5173';
+				if (options.view) {
 					// Open the browser
 					open(url);
 					setTask(`Opened ${url}`);
 				} else {
-					setTask('Skipped browser opening');
+					setTask('skipped');
 				}
 				setLoading(false);
-				setStep('complete'); // Move to next step, whatever that might be
+				// setStep('done');
 			} catch (error) {
 				console.error('Error opening browser:', error);
 				setError('Error opening browser');
@@ -36,5 +35,12 @@ export default function BrowserOpener({options}: {options: any}) {
 		}
 	}, [step, sessionId, options]);
 
-	return <Task label="Opening browser" state={state} spinner={spinners.dots} />;
+	return (
+		<Task
+			label="Opening browser"
+			state={state}
+			spinner={spinners.dots}
+			isExpanded={task === 'browser'}
+		/>
+	);
 }

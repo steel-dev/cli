@@ -25,9 +25,19 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
-	'api-key': zod.string().describe('API Key for Steel API').optional(),
-	'openai-key': zod.string().describe('API Key for OpenAI').optional(),
-	'skip-auth': zod.boolean().describe('Skip authentication').optional(),
+	api_key: zod
+		.string()
+		.describe(
+			option({
+				description: 'API Key for Steel API',
+			}),
+		)
+		.optional(),
+	openai_key: zod
+		.string()
+		.describe(option({description: 'API Key for OpenAI'}))
+		.optional(),
+	skip_auth: zod.boolean().describe('Skip authentication').optional(),
 });
 
 type Props = {

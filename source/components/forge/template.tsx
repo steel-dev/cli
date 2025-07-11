@@ -25,10 +25,6 @@ export default function Template({args}: {args?: any}) {
 			setTask(template);
 			setTemplate(template);
 			setStep('packagemanager');
-		} else {
-			console.warn(
-				`Template "${templateArg}" not found. Falling back to manual selection.`,
-			);
 		}
 	}, [args, setTask, setTemplate, setStep]);
 

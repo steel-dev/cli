@@ -12,9 +12,9 @@ export const REPO_URL = 'https://github.com/steel-dev/steel-browser.git';
 export const LOGIN_URL = 'https://app.steel.dev/sign-in';
 export const LOGIN_TIMEOUT = 5 * 60 * 1000; // 5 mins
 export const ENV_VAR_MAP = {
-	'api-key': 'STEEL_API_KEY',
-	'openai-key': 'OPENAI_API_KEY',
-	'api-url': 'STEEL_API_URL',
+	api_key: 'STEEL_API_KEY',
+	openai_key: 'OPENAI_API_KEY',
+	api_url: 'STEEL_API_URL',
 	task: 'TASK',
 };
 export const TEMPLATES: Template[] = [
@@ -102,7 +102,7 @@ export const TEMPLATES: Template[] = [
 			'source .venv/bin/activate',
 			'pip install .',
 		],
-		runCommand: 'python3 main.py',
+		runCommand: 'source .venv/bin/activate && python3 main.py',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},

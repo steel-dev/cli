@@ -11,21 +11,29 @@ import {Text} from 'ink';
 export const description = 'Starts the development environment';
 
 export const options = zod.object({
-	port: zod.string().describe(
-		option({
-			description: 'Port number',
-			alias: 'p',
-		}),
-	),
-	verbose: zod.string().describe(
-		option({
-			description: 'Enable verbose logging',
-			alias: 'v',
-		}),
-	),
-	'docker-check': zod
+	port: zod
+		.number()
+		.describe(
+			option({
+				description: 'Port number',
+				alias: 'p',
+			}),
+		)
+		.default(3000)
+		.optional(),
+	verbose: zod
 		.string()
-		.describe(option({description: 'Verify Docker is running', alias: 'dc'})),
+		.describe(
+			option({
+				description: 'Enable verbose logging',
+				alias: 'v',
+			}),
+		)
+		.optional(),
+	docker_check: zod
+		.string()
+		.describe(option({description: 'Verify Docker is running', alias: 'dc'}))
+		.optional(),
 });
 
 type Props = {
@@ -43,39 +51,35 @@ function isDockerRunning() {
 
 export default function Start({options}: Props) {
 	const [loading, setLoading] = useState(false);
-	console.log(
-		useEffect(() => {
-			async function start() {
-				setLoading(true);
+	useEffect(() => {
+		async function start() {
+			setLoading(true);
 
-				spawn('git', ['clone', REPO_URL], {
-					cwd: CONFIG_DIR,
-				});
+			spawn('git', ['clone', REPO_URL], {
+				cwd: CONFIG_DIR,
+			});
 
-				if (!isDockerRunning()) {
-					console.log(
-						'⚠️ Docker is not running. Please start it and try again.',
-					);
-					return;
-				}
-
-				setLoading(false);
-
-				console.log('🚀 Starting Docker Compose...');
-
-				const folderName = path.basename(REPO_URL, '.git');
-
-				spawn('docker-compose', ['-f', 'docker-compose.dev.yml', 'up', '-d'], {
-					cwd: path.join(CONFIG_DIR, folderName),
-					stdio: 'inherit',
-				});
-
-				console.log('🖥️  Opening Browser...');
-				await open('http://localhost:' + options.port);
+			if (options?.docker_check && !isDockerRunning()) {
+				console.log('⚠️ Docker is not running. Please start it and try again.');
+				return;
 			}
-			start();
-		}, []),
-	);
+
+			setLoading(false);
+
+			console.log('🚀 Starting Docker Compose...');
+
+			const folderName = path.basename(REPO_URL, '.git');
+
+			spawn('docker-compose', ['-f', 'docker-compose.dev.yml', 'up', '-d'], {
+				cwd: path.join(CONFIG_DIR, folderName),
+				stdio: 'inherit',
+			});
+
+			console.log('🖥️  Opening Browser...');
+			await open('http://localhost:5173');
+		}
+		start();
+	}, []);
 
 	return <Text>{loading ? <Spinner type="dots" /> : null}</Text>;
 }

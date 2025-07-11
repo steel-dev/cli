@@ -15,25 +15,25 @@ export default function Dependencies() {
 			try {
 				// Execute all commands from the template's commands array
 				if (template?.depCommands && template.depCommands.length > 0) {
-					for (const commandStr of template.depCommands) {
-						// Parse the command string into command and arguments
-						const parts = commandStr.split(' ');
-						const command = parts[0] || '';
-						const args = parts.slice(1);
+					// for (const commandStr of template.depCommands) {
+					// Parse the command string into command and arguments
+					const commandStr = template.depCommands.join(' && ');
+					const parts = commandStr.split(' ');
+					const command = parts[0] || '';
+					const args = parts.slice(1);
 
-						// Execute the command
-						const result = spawnSync(command, args, {
-							cwd: directory,
-							shell: true,
-							stdio: 'ignore',
-						});
+					// Execute the command
+					const result = spawnSync(command, args, {
+						cwd: directory,
+						shell: true,
+						stdio: 'ignore',
+					});
 
-						if (result.status !== 0) {
-							throw new Error(`Command failed: ${commandStr}`);
-						}
+					if (result.status !== 0) {
+						throw new Error(`Command failed: ${commandStr}`);
 					}
+					// }
 				}
-
 				setLoading(false);
 				setTask(true);
 				setStep('runner');
