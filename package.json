@@ -1,8 +1,10 @@
 {
-	"name": "steel-cli",
+	"name": "@steel-dev/cli",
 	"version": "0.0.1-alpha.1",
 	"license": "MIT",
-	"bin": "dist/steel.js",
+	"bin": {
+		"steel": "dist/steel.js"
+	},
 	"type": "module",
 	"engines": {
 		"node": ">=16"
