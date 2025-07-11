@@ -1,11 +1,11 @@
-# steel-cli
+# @steel-dev/cli
 
 The CLI for Steel.dev
 
 ## Install
 
 ```bash
-$ npm install --global steel-cli
+$ npm i @steel-dev/cli
 ```
 
 ## CLI
@@ -20,14 +20,14 @@ Options:
   -h, --help                                          Show help
 
 Commands:
-  cookbook [directory to scaffold new steel project]  Start a new project using the Steel CLI
+  forge [directory to scaffold new steel project]     Start a new project using the Steel CLI
+  run [directory to run steel project]                Run a steel project
   files                                               Files Endpoint
-  integrate                                           Integrates the Steel CLI into your project
   login                                               Login to Steel CLI
   logout                                              Logout from Steel CLI
   sessions                                            Sessions Endpoint
-  start                                               Starts the development environment
-  stop                                                Stops the development server
+  browser start                                       Starts the development environment
+  browser stop                                        Stops the development server
   tools                                               Tools Endpoint
   help [command]                                      Show help for command
 ```
