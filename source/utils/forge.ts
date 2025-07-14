@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import {spawn} from 'node:child_process';
 
 export function copyDir(srcDir: string, destDir: string) {
 	fs.mkdirSync(destDir, {recursive: true});
@@ -89,4 +90,30 @@ export function updateEnvVariable(
 	}
 
 	fs.writeFileSync(envPath, updatedLines.join('\n'));
+}
+
+export function runCommand(
+	command: string,
+	args: string[],
+	cwd: string,
+): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, args, {
+			cwd,
+			shell: true,
+			stdio: 'ignore', // show output
+		});
+
+		child.on('exit', code => {
+			if (code === 0) {
+				resolve();
+			} else {
+				reject(new Error(`Process exited with code ${code}`));
+			}
+		});
+
+		child.on('error', err => {
+			reject(err);
+		});
+	});
 }

@@ -21,7 +21,7 @@ export default function ProjectName({args}: {args: any}) {
 			<TextInput
 				value={query}
 				onChange={setQuery}
-				placeholder={args[0]}
+				placeholder={args[0] || 'steel-starter'}
 				onSubmit={() => {
 					if (!query && args[0]) {
 						setTask(toValidProjectName(args[0]));
@@ -29,6 +29,9 @@ export default function ProjectName({args}: {args: any}) {
 					} else if (query) {
 						setTask(toValidProjectName(query));
 						setDirectory(toValidProjectName(query));
+					} else {
+						setTask('steel-starter');
+						setDirectory('steel-starter');
 					}
 					setStep('template');
 				}}

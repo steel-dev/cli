@@ -24,43 +24,15 @@ export default function Runner() {
 				const command = parts[0] || '';
 				const args = parts.slice(1);
 
-				// Show what command we're going to run
-				// console.log(`Running: ${template.runCommand}`);
-
-				// Spawn the process
-				// const process: ChildProcess =
 				spawn(command, args, {
 					cwd: directory,
 					shell: true,
 					stdio: 'inherit', // This will pipe stdout and stderr to the parent process
 				});
 
-				// When the process exits, determine if it was successful
-				// process.on('close', code => {
-				// 	if (code === 0) {
-				// 		setTask(`Command completed successfully: ${template.runCommand}`);
-				// 		// Move to browser step after successful execution
-				// 		setStep('browser');
-				// 	} else {
-				// 		setError(`Command failed with exit code ${code}`);
-				// 	}
-				// 	setLoading(false);
-				// });
 				setTask(`Command completed successfully: ${template.runCommand}`);
 				setStep('browser');
 				setLoading(false);
-				// Handle process error (e.g., command not found)
-				// process.on('error', err => {
-				// 	setError(`Failed to run command: ${err.message}`);
-				// 	setLoading(false);
-				// });
-
-				// The component's cleanup function will handle killing the process if unmounted
-				// return () => {
-				// 	if (process && !process.killed) {
-				// 		process.kill();
-				// 	}
-				// };
 			} catch (error) {
 				console.error('Error running command:', error);
 				setError(`Error running command: ${(error as Error).message}`);

@@ -1,6 +1,6 @@
 {
 	"name": "@steel-dev/cli",
-	"version": "0.0.1-alpha.3",
+	"version": "0.0.1-alpha.4",
 	"license": "MIT",
 	"bin": {
 		"steel": "./dist/steel.js"
@@ -20,6 +20,7 @@
 	"dependencies": {
 		"@babel/parser": "^7.27.2",
 		"ast-types": "^0.14.2",
+		"figures": "^6.1.0",
 		"ink": "^5.2.0",
 		"ink-big-text": "^2.0.0",
 		"ink-form": "^2.0.1",

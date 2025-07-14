@@ -15,48 +15,52 @@ export default function Directory() {
 	const {step, setStep, directory, template} = useRunStep();
 
 	useEffect(() => {
-		let timer: NodeJS.Timeout;
-		if (step === 'directory' && task) {
-			setLoading(true);
+		function buildDirectory() {
+			// let timer: NodeJS.Timeout;
+			if (step === 'directory' && task) {
+				setLoading(true);
 
-			const cwd = process.cwd();
+				const cwd = process.cwd();
 
-			if (!template) {
-				//@ts-ignore
-				return;
-			}
+				if (!template) {
+					setLoading(false);
+					setStep('template');
+					return;
+				}
 
-			const templateDir = path.resolve(
-				fileURLToPath(import.meta.url),
-				'../../../../examples',
-				template?.value,
-			);
-
-			const files = fs.readdirSync(templateDir);
-			fs.mkdir(directory, err => setError(err?.message));
-			for (const file of files.filter(f => f !== 'package.json')) {
-				write(file, directory, templateDir, cwd);
-			}
-
-			let projectName = path.basename(path.resolve(directory));
-			const packageJsonPath = path.join(templateDir, `package.json`);
-			if (fs.existsSync(packageJsonPath)) {
-				const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-				pkg.name = projectName;
-				write(
-					'package.json',
-					directory,
-					templateDir,
-					cwd,
-					JSON.stringify(pkg, null, 2) + '\n',
+				const templateDir = path.resolve(
+					fileURLToPath(import.meta.url),
+					'../../../../examples',
+					template?.value,
 				);
-			}
-			timer = setTimeout(() => {
+
+				const files = fs.readdirSync(templateDir);
+				fs.mkdir(directory, err => setError(err?.message));
+				for (const file of files.filter(f => f !== 'package.json')) {
+					write(file, directory, templateDir, cwd);
+				}
+
+				let projectName = path.basename(path.resolve(directory));
+				const packageJsonPath = path.join(templateDir, `package.json`);
+				if (fs.existsSync(packageJsonPath)) {
+					const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+					pkg.name = projectName;
+					write(
+						'package.json',
+						directory,
+						templateDir,
+						cwd,
+						JSON.stringify(pkg, null, 2) + '\n',
+					);
+				}
+				// timer = setTimeout(() => {
 				setLoading(false);
 				setStep('envvar');
-			}, 6000);
+				// }, 6000);
+			}
 		}
-		return () => clearTimeout(timer);
+		buildDirectory();
+		// return () => clearTimeout(timer);
 	}, [step, task]);
 
 	return (

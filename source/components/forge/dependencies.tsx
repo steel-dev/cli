@@ -3,7 +3,7 @@ import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
-import {spawnSync} from 'node:child_process';
+import {runCommand} from '../../utils/forge.js';
 
 export default function Dependencies() {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
@@ -13,45 +13,48 @@ export default function Dependencies() {
 	useEffect(() => {
 		if (step === 'dependencies' && !task) {
 			setLoading(true);
-			try {
-				if (template?.label.includes('Python')) {
-					if (packageManager === 'poetry') {
-						spawnSync(packageManager, ['init'], {cwd: directory});
-						spawnSync(packageManager, ['env', 'activate'], {cwd: directory});
-						spawnSync(packageManager, ['install'], {
-							cwd: directory,
-						});
-					} else if (packageManager === 'pip') {
-						spawnSync('python', ['-m', 'venv', '.venv'], {cwd: directory});
-						spawnSync('source', ['.venv/bin/activate'], {cwd: directory});
-						spawnSync(packageManager, ['install', '-r', 'requirements.txt'], {
-							cwd: directory,
-						});
-					} else if (packageManager === 'uv') {
-						spawnSync(packageManager, ['init'], {cwd: directory});
-						spawnSync(packageManager, ['venv'], {cwd: directory});
-						spawnSync(
-							packageManager,
-							['pip', 'install', '-r', 'requirements.txt'],
-							{
-								cwd: directory,
-							},
-						);
+
+			async function installDeps() {
+				try {
+					if (template?.label.includes('Python')) {
+						if (packageManager === 'poetry') {
+							await runCommand(packageManager, ['init'], directory);
+							await runCommand(packageManager, ['env', 'activate'], directory);
+							await runCommand(packageManager, ['install'], directory);
+						} else if (packageManager === 'pip') {
+							await runCommand('python', ['-m', 'venv', '.venv'], directory);
+							await runCommand('source', ['.venv/bin/activate'], directory);
+							await runCommand(
+								packageManager,
+								['install', '-r', 'requirements.txt'],
+								directory,
+							);
+						} else if (packageManager === 'uv') {
+							await runCommand(packageManager, ['init'], directory);
+							await runCommand(packageManager, ['venv'], directory);
+							await runCommand(
+								packageManager,
+								['pip', 'install', '-r', 'requirements.txt'],
+								directory,
+							);
+						}
+						setLoading(false);
+						setTask(true);
+						setStep('runner');
+					} else {
+						await runCommand(packageManager, ['install'], directory);
+						setLoading(false);
+						setTask(true);
+						setStep('runner');
 					}
+				} catch (error) {
+					console.error('Error installing dependencies:', error);
+					setError('Error installing dependencies');
 					setLoading(false);
-					setTask(true);
-					setStep('runner');
-				} else {
-					spawnSync(packageManager, ['install'], {cwd: directory});
-					setLoading(false);
-					setTask(true);
-					setStep('runner');
 				}
-			} catch (error) {
-				console.error('Error installing dependencies:', error);
-				setError('Error installing dependencies');
-				setLoading(false);
 			}
+
+			installDeps();
 		}
 	}, [step]);
 	return (

@@ -3,47 +3,40 @@ import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
-import {spawnSync} from 'node:child_process';
+import {runCommand} from '../../utils/forge.js';
 
 export default function Dependencies() {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
-	const {step, setStep, directory, template} = useRunStep();
+	const {step, setStep, envVars, directory, template} = useRunStep();
 
 	useEffect(() => {
 		if (step === 'dependencies' && !task) {
 			setLoading(true);
-			try {
-				// Execute all commands from the template's commands array
-				if (template?.depCommands && template.depCommands.length > 0) {
-					// for (const commandStr of template.depCommands) {
-					// Parse the command string into command and arguments
-					const commandStr = template.depCommands.join(' && ');
-					const parts = commandStr.split(' ');
-					const command = parts[0] || '';
-					const args = parts.slice(1);
 
-					// Execute the command
-					const result = spawnSync(command, args, {
-						cwd: directory,
-						shell: true,
-						stdio: 'ignore',
-					});
-
-					if (result.status !== 0) {
-						throw new Error(`Command failed: ${commandStr}`);
+			async function installDeps() {
+				try {
+					if (template?.depCommands && template.depCommands.length > 0) {
+						const commandStr = template.depCommands.join(' && ');
+						await runCommand(commandStr, [], directory);
 					}
-					// }
+					setTask(true);
+					setLoading(false);
+
+					if (envVars['STEEL_API_URL']) {
+						setStep('browserrunner');
+					} else {
+						setStep('runner');
+					}
+				} catch (error) {
+					console.error('Error installing dependencies:', error);
+					setError('Error installing dependencies');
+					setLoading(false);
 				}
-				setLoading(false);
-				setTask(true);
-				setStep('runner');
-			} catch (error) {
-				console.error('Error installing dependencies:', error);
-				setError('Error installing dependencies');
-				setLoading(false);
 			}
+
+			installDeps();
 		}
-	}, [step]);
+	}, [step, task]);
 
 	return (
 		<Task

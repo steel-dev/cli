@@ -4,10 +4,11 @@ import EnvVar from '../components/run/envvar.js';
 import {TaskList} from 'ink-task-list';
 import Dependencies from '../components/run/dependencies.js';
 import {RunStepProvider} from '../context/runstepcontext.js';
+import BrowserOpener from '../components/run/browseropener.js';
+import BrowserRunner from '../components/run/browserrunner.js';
+import Directory from '../components/run/directory.js';
 import zod from 'zod';
 import {option} from 'pastel';
-import BrowserOpener from '../components/run/browseropener.js';
-import Directory from '../components/run/directory.js';
 
 export const description = 'Start a new project using the Steel CLI';
 
@@ -71,19 +72,10 @@ export default function Cookbook({args, options}: Props) {
 				<Directory />
 				<EnvVar options={options} />
 				<Dependencies />
+				<BrowserRunner />
 				<Runner />
 				<BrowserOpener options={options} />
 			</TaskList>
 		</RunStepProvider>
 	);
 }
-
-// SCRATCHPAD
-// Template template args defined in constants
-// PackageManager (don't know if this is needed), but i'm debating how to handle installing packages
-// I don't think this is needed, but then how do we handle installing stuff? just use the default commands or whatever.
-// EnvVar to update the Env Variables
-// Dependencies (Ask to install these)
-
-// For --task and --base-url, these are often inside of the starter projects and aren't env variables.
-// It might just be easiest to have these all be env variables and then update them in the starter projects.

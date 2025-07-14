@@ -8,11 +8,12 @@ import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
 
 export default function Template({args}: {args?: any}) {
-	const [state, task, , , setTask, ,] = useTask();
-	const {step, setStep, template, setTemplate, setDirectory} = useRunStep();
+	const [state, task, , , setTask, setLoading] = useTask();
+	const {step, setStep, setTemplate, setDirectory} = useRunStep();
 	// Bypass selection if args are provided
 	useEffect(() => {
-		if (args?.length) {
+		if (step === 'template' && args?.length && !task) {
+			setLoading(true);
 			const [templateArg] = args;
 
 			// Find a matching template by label/key/etc.
@@ -28,6 +29,7 @@ export default function Template({args}: {args?: any}) {
 				setTask(template);
 				setTemplate(template);
 				setDirectory(template.value);
+				setLoading(false);
 				setStep('directory');
 			} else if (templateArg) {
 				console.log(`Template "${templateArg}" not found.`);
@@ -38,7 +40,6 @@ export default function Template({args}: {args?: any}) {
 
 	// Skip UI if task is already set (from args)
 	// Return complete task for viewer
-	if (task || template) return null;
 	return (
 		<Task
 			label="Select template"

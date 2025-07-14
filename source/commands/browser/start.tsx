@@ -73,6 +73,11 @@ export default function Start({options}: Props) {
 			spawn('docker-compose', ['-f', 'docker-compose.dev.yml', 'up', '-d'], {
 				cwd: path.join(CONFIG_DIR, folderName),
 				stdio: 'inherit',
+				env: {
+					...process.env,
+					API_PORT: String(options?.port || 3000),
+					ENABLE_VERBOSE_LOGGING: options?.verbose || 'false',
+				},
 			});
 
 			console.log('🖥️  Opening Browser...');
