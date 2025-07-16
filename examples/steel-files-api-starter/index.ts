@@ -11,7 +11,7 @@ const STEEL_API_URL = process.env.STEEL_BASE_URL || 'https://api.steel.dev';
 const STEEL_CONNECT_URL =
 	process.env.STEEL_CONNECT_URL || 'wss://connect.steel.dev';
 
-const STEEL_SESSION_ID = process.env.STEEL_SESSION_ID || '';
+const STEEL_SESSION_ID = process.env.STEEL_SESSION_ID || undefined;
 
 // Initialize Steel client with the API key from environment variables
 const client = new Steel({

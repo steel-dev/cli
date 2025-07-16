@@ -22,7 +22,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 STEEL_API_URL = os.getenv("STEEL_API_URL", "https://api.steel.dev")
 STEEL_CONNECT_URL = os.getenv("STEEL_CONNECT_URL", "wss://connect.steel.dev")
 
-STEEL_SESSION_ID = os.getenv('STEEL_SESSION_ID', "")
+STEEL_SESSION_ID = os.getenv('STEEL_SESSION_ID', None)
 # The agent's main instructions
 TASK = os.getenv("TASK", "Go to https://docs.steel.dev/, open the changelog, and tell me what's new.")
 

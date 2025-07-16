@@ -12,7 +12,7 @@ STEEL_API_KEY = os.getenv('STEEL_API_KEY')
 STEEL_API_URL = os.getenv('STEEL_API_URL', 'https://api.steel.dev')
 STEEL_CONNECT_URL = os.getenv('STEEL_CONNECT_URL', 'wss://connect.steel.dev')
 
-STEEL_SESSION_ID = os.getenv('STEEL_SESSION_ID', "")
+STEEL_SESSION_ID = os.getenv('STEEL_SESSION_ID', None)
 
 # Initialize Steel client with the API key from environment variables
 client = Steel(

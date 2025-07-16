@@ -1,7 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import path from 'path';
 import fs from 'fs';
-import {v4 as uuidv4} from 'uuid';
 import {Box, Text} from 'ink';
 import TextInput from 'ink-text-input';
 import {Task} from 'ink-task-list';
@@ -14,17 +13,10 @@ import {useTask} from '../../hooks/usetask.js';
 import type {Options} from '../../commands/forge.js';
 
 export default function EnvVar({options}: {options: Options}) {
-	const {
-		step,
-		setStep,
-		template,
-		envVars,
-		setEnvVars,
-		directory,
-		setSessionId,
-	} = useForgeStep();
+	const {step, setStep, template, envVars, setEnvVars, directory} =
+		useForgeStep();
 	const [state, task, , , setTask, setLoading, setError] = useTask();
-	const workingDir = directory || process.cwd();
+	const workingDir = directory;
 	// Manage interactive input state
 	const [inputValue, setInputValue] = useState('');
 	const [isCollectingVars, setIsCollectingVars] = useState(false);
@@ -57,14 +49,10 @@ export default function EnvVar({options}: {options: Options}) {
 				const envExamplePath = path.join(workingDir, '.env.example');
 				const envTargetPath = path.join(workingDir, '.env');
 				const curEnvVars = {};
-				const apiKey = getApiKey();
-				if (apiKey) {
-					curEnvVars['STEEL_API_KEY'] = apiKey.apiKey;
-					updateEnvVariable(workingDir, 'STEEL_API_KEY', apiKey.apiKey);
-				}
 				if (fs.existsSync(envExamplePath)) {
 					fs.copyFileSync(envExamplePath, envTargetPath);
 					for (const [key, envVar] of Object.entries(ENV_VAR_MAP)) {
+						console.log(key, envVar);
 						if (key in options) {
 							curEnvVars[envVar] = String(options[key]);
 							updateEnvVariable(workingDir, envVar, String(options[key]));
@@ -80,16 +68,14 @@ export default function EnvVar({options}: {options: Options}) {
 							}
 						}
 					}
+					const apiKey = getApiKey();
+					if (apiKey) {
+						curEnvVars['STEEL_API_KEY'] = apiKey.apiKey;
+						updateEnvVariable(workingDir, 'STEEL_API_KEY', apiKey.apiKey);
+					}
 					setEnvVars(curEnvVars);
 					const remaining = pendingVars.slice(1);
 					setPendingVars(remaining);
-					// If api-url not provided, create a session ID
-					if (!('api_url' in options)) {
-						const sessionId = uuidv4();
-						setSessionId(sessionId);
-						curEnvVars['STEEL_SESSION_ID'] = sessionId;
-						updateEnvVariable(workingDir, 'STEEL_SESSION_ID', sessionId);
-					}
 					fs.unlinkSync(envExamplePath);
 				}
 				// Calculate which vars we still need after setup

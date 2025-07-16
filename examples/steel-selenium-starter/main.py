@@ -17,7 +17,7 @@ STEEL_API_KEY = os.getenv('STEEL_API_KEY')
 STEEL_API_URL = os.getenv('STEEL_API_URL', 'https://api.steel.dev')
 STEEL_CONNECT_URL = os.getenv('STEEL_CONNECT_URL', 'http://connect.steelbrowser.com/selenium')
 
-STEEL_SESSION_ID = os.getenv("STEEL_SESSION_ID", "")
+STEEL_SESSION_ID = os.getenv("STEEL_SESSION_ID", None)
 
 if not STEEL_API_KEY:
     raise EnvironmentError("STEEL_API_KEY environment variable not set.")
