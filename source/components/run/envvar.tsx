@@ -23,7 +23,6 @@ export default function EnvVar({options}: {options: Options}) {
 		setSessionId,
 	} = useRunStep();
 	const [state, task, , , setTask, setLoading, setError] = useTask();
-	const workingDir = directory || process.cwd();
 	// Manage interactive input state
 	const [inputValue, setInputValue] = useState('');
 	const [isCollectingVars, setIsCollectingVars] = useState(false);
@@ -53,9 +52,11 @@ export default function EnvVar({options}: {options: Options}) {
 				if (apiKey) {
 					curEnvVars['STEEL_API_KEY'] = apiKey.apiKey;
 				}
-				const envExamplePath = path.join(workingDir, '.env.example');
+				console.log('cur:', curEnvVars);
+				const envExamplePath = path.join(directory, '.env.example');
 				if (fs.existsSync(envExamplePath)) {
 					for (const [key, envVar] of Object.entries(ENV_VAR_MAP)) {
+						console.log('Key:', key, 'Value:', envVar);
 						if (key in options) {
 							curEnvVars[envVar] = String(options[key]);
 							// Special case: set CONNECT_URL if api-url exists
@@ -63,6 +64,7 @@ export default function EnvVar({options}: {options: Options}) {
 								curEnvVars['STEEL_CONNECT_URL'] =
 									'ws:' + options[key].split(':')[1];
 							}
+							console.log('cur:', curEnvVars);
 						}
 					}
 					const remaining = pendingVars.slice(1);
@@ -75,6 +77,7 @@ export default function EnvVar({options}: {options: Options}) {
 					}
 					fs.unlinkSync(envExamplePath);
 				}
+				console.log(curEnvVars);
 				// Calculate which vars we still need after setup
 				const stillNeeded =
 					template?.env?.filter(
@@ -85,7 +88,8 @@ export default function EnvVar({options}: {options: Options}) {
 					setPendingVars(stillNeeded);
 					setIsCollectingVars(true);
 				} else {
-					setTask(curEnvVars);
+					setTask(envVars);
+					setIsCollectingVars(false);
 					setStep('dependencies');
 				}
 				setLoading(false);
@@ -120,7 +124,7 @@ export default function EnvVar({options}: {options: Options}) {
 				label="Setting up environment variables"
 				state={state}
 				spinner={spinners.dots}
-				isExpanded={step === 'envvar' && isCollectingVars}
+				isExpanded={step === 'envvar' && !task && isCollectingVars}
 			>
 				{currentPromptVar && (
 					<>

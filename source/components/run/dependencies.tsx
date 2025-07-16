@@ -36,12 +36,8 @@ export default function Dependencies() {
 							depsDir,
 						});
 						if (!fs.existsSync(depsDir)) {
-							// const commandStr = depCommands.join(' && ');
 							for (const command of depCommands) {
-								const parts = command.split(' ');
-								const call = parts[0] || '';
-								const args = parts.slice(1);
-								await runCommand(call, args, directory);
+								await runCommand(command, directory);
 							}
 						}
 					}

@@ -92,13 +92,9 @@ export function updateEnvVariable(
 	fs.writeFileSync(envPath, updatedLines.join('\n'));
 }
 
-export function runCommand(
-	command: string,
-	args: string[],
-	cwd: string,
-): Promise<void> {
+export function runCommand(command: string, cwd: string): Promise<void> {
 	return new Promise((resolve, reject) => {
-		const child = spawn(command, args, {
+		const child = spawn(command, {
 			cwd,
 			shell: true,
 			stdio: 'ignore', // show output

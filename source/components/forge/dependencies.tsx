@@ -14,23 +14,21 @@ export default function Dependencies() {
 				try {
 					if (template?.label.includes('Python')) {
 						if (packageManager === 'poetry') {
-							await runCommand(packageManager, ['init'], directory);
-							await runCommand(packageManager, ['env', 'activate'], directory);
-							await runCommand(packageManager, ['install'], directory);
+							await runCommand(`${packageManager} init`, directory);
+							await runCommand(`${packageManager} env activate`, directory);
+							await runCommand(`${packageManager} install`, directory);
 						} else if (packageManager === 'pip') {
-							await runCommand('python', ['-m', 'venv', '.venv'], directory);
-							await runCommand('source', ['.venv/bin/activate'], directory);
+							await runCommand('python3 -m venv .venv', directory);
+							await runCommand('source .venv/bin/activate', directory);
 							await runCommand(
-								packageManager,
-								['install', '-r', 'requirements.txt'],
+								`${packageManager} install -r requirements.txt`,
 								directory,
 							);
 						} else if (packageManager === 'uv') {
-							await runCommand(packageManager, ['init'], directory);
-							await runCommand(packageManager, ['venv'], directory);
+							await runCommand(`${packageManager} init`, directory);
+							await runCommand(`${packageManager} venv`, directory);
 							await runCommand(
-								packageManager,
-								['pip', 'install', '-r', 'requirements.txt'],
+								`${packageManager} pip install -r requirements.txt`,
 								directory,
 							);
 						}
@@ -38,7 +36,7 @@ export default function Dependencies() {
 						setTask(true);
 						setStep('runner');
 					} else {
-						await runCommand(packageManager, ['install'], directory);
+						await runCommand(`${packageManager} install`, directory);
 						setLoading(false);
 						setTask(true);
 						setStep('runner');

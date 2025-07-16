@@ -11,12 +11,13 @@
 	},
 	"scripts": {
 		"prepare": "husky",
-		"build": "tsc",
+		"build": "tsc && npm run copy-examples",
+		"copy-examples": "cp -r examples dist/examples",
 		"dev": "tsc --watch",
 		"lint": "eslint . --ext .ts,.tsx",
 		"lint:fix": "eslint . --ext .ts,.tsx --fix",
-		"format": "prettier --check . && ava",
-		"format:fix": "prettier --write . && ava --fix"
+		"format": "prettier --check .",
+		"format:fix": "prettier --write ."
 	},
 	"files": [
 		"dist",
@@ -55,7 +56,6 @@
 		"@typescript-eslint/eslint-plugin": "^8.37.0",
 		"@typescript-eslint/parser": "^8.37.0",
 		"@vdemedes/prettier-config": "^2.0.1",
-		"ava": "^6.2.0",
 		"chalk": "^5.4.1",
 		"eslint": "^9.31.0",
 		"eslint-config-prettier": "^10.1.5",

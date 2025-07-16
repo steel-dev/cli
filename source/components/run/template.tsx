@@ -1,4 +1,6 @@
+import path from 'path';
 import React, {useEffect} from 'react';
+import {fileURLToPath} from 'url';
 import {Task} from 'ink-task-list';
 import {TEMPLATES} from '../../utils/constants.js';
 import SelectInput from 'ink-select-input';
@@ -7,6 +9,9 @@ import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
 import type {Template} from '../../utils/types.js';
 import {Args} from '../../commands/run.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default function Template({args}: {args: Args}) {
 	const [state, task, , , setTask, setLoading] = useTask();
@@ -27,7 +32,9 @@ export default function Template({args}: {args: Args}) {
 				const template = found;
 				setTask(template);
 				setTemplate(template);
-				setDirectory(template.value);
+				setDirectory(
+					path.resolve(__dirname, `../../examples/${template.value}/`),
+				);
 				setStep('envvar');
 			} else if (templateArg) {
 				console.log(`Template "${templateArg}" not found.`);
@@ -52,7 +59,9 @@ export default function Template({args}: {args: Args}) {
 					const template = item as Template;
 					setTask(template);
 					setTemplate(template);
-					setDirectory(template.value);
+					setDirectory(
+						path.resolve(__dirname, `../../examples/${template.value}/`),
+					);
 					setStep('directory');
 				}}
 			/>
