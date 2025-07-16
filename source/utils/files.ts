@@ -133,7 +133,6 @@ export function fileParse(filePath: string): CodeSections {
 
 export function readIndentation(line: string | undefined): number | undefined {
 	let indentation = 0;
-	//@ts-ignore
 	if (!line) return;
 	for (const char of line) {
 		if (char === ' ' || char === '\t') {
@@ -151,19 +150,19 @@ export function indentation(
 	arr: Array<string>,
 ): number {
 	let indentation: number = 0;
-	let curIndentation = readIndentation(line);
+	const curIndentation = readIndentation(line);
 	if (curIndentation) {
 		indentation = curIndentation;
 	}
 	if (index + 1 < arr.length) {
-		let nextIndentation = readIndentation(arr[index + 1]);
+		const nextIndentation = readIndentation(arr[index + 1]);
 		if (nextIndentation && nextIndentation >= indentation) {
 			indentation = nextIndentation;
 		}
 	}
 	return indentation;
 }
-//@ts-ignore
+
 function isPythonIndentationStart(item: string) {
 	const controlKeywords = [
 		'def',
@@ -198,20 +197,20 @@ export function insertCode(
 	let found: boolean = false;
 
 	for (let index = 0; index < body.length; index++) {
-		let item = body[index];
+		const item = body[index];
 		if (item === undefined) continue;
 
 		let commentIndex: number = Math.min(item.indexOf(comment));
 		if (commentIndex === -1) {
 			commentIndex = item.length;
 		}
-		let substring: string = item.substring(0, commentIndex);
+		const substring: string = item.substring(0, commentIndex);
 		if (substring.includes(search)) {
 			found = true;
 			console.log(substring);
 		}
 		// if (found) {
-		let curIndentation = readIndentation(item);
+		const curIndentation = readIndentation(item);
 		indentation = curIndentation;
 		// }
 		console.log('PREV:', prevIndentation);
@@ -309,7 +308,7 @@ export function ensureDirectoryExists(dirPath: string) {
 	try {
 		fs.mkdirSync(dirPath, {recursive: true});
 		console.log(`Directory created or already exists: ${dirPath}`);
-	} catch (error: any) {
+	} catch (error) {
 		console.error(`Error creating directory: ${error.message}`);
 	}
 }
@@ -319,7 +318,7 @@ export function ensureAndAppendFile(filePath: string, content: string) {
 		// Check if the file exists
 		fs.accessSync(filePath);
 		console.log('File exists. Proceeding to write to it.');
-	} catch (error: any) {
+	} catch (error) {
 		if (error.code === 'ENOENT') {
 			console.log('File does not exist. It will be created.');
 		} else {
@@ -331,7 +330,7 @@ export function ensureAndAppendFile(filePath: string, content: string) {
 		// Append to the file (creates it if it does not exist)
 		fs.appendFileSync(filePath, content, 'utf8');
 		console.log(`${filePath}: Data appended successfully.`);
-	} catch (err: any) {
+	} catch (err) {
 		console.error('Error appending to file:', err.message);
 	}
 }

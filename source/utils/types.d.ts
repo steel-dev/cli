@@ -4,8 +4,8 @@ export type Template = {
 	value: string;
 	label: string;
 	alias: string;
-	depCommands?: string[];
-	runCommand?: string;
+	depCommands?: (options: {depsDir: string}) => string[];
+	runCommand?: (options: {depsDir: string}) => string;
 	env?: {value: string; label: string; required?: boolean}[];
 };
 
@@ -21,4 +21,8 @@ export type CodeSections = {
 	imports: string[];
 	exports: string[];
 	body: string[];
+};
+
+export type TemplateOptions = {
+	depsDir: string;
 };

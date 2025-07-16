@@ -1,3 +1,4 @@
+import React from 'react';
 import ApiDashboard from '../../../components/apidashboard.js';
 
 export const description = 'Release All Sessions';

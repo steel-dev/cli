@@ -12,7 +12,7 @@ export function getApiKey(): {
 			return {apiKey: parsedConfig.apiKey, name: parsedConfig.name};
 		}
 		return null;
-	} catch (error) {
+	} catch {
 		return null;
 	}
 }
@@ -29,12 +29,12 @@ export function getSettings(): {
 			setSettings({instance: 'local'});
 			return {instance: 'local'};
 		}
-	} catch (error) {
+	} catch {
 		return null;
 	}
 }
 
-export function setSettings(value: any): void {
+export function setSettings(value: object): void {
 	try {
 		const config = fs.readFileSync(CONFIG_PATH, 'utf-8');
 		const parsedConfig = JSON.parse(config);

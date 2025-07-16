@@ -1,5 +1,5 @@
 import {Box, Text, useInput, Newline} from 'ink';
-import {useEffect, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import TextInput from 'ink-text-input';
 import ProgressBar from './progressbar.js';
 // import {useFullscreen} from '../hooks/usefullscreen.js';

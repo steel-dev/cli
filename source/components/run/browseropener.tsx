@@ -1,15 +1,14 @@
-import {useEffect} from 'react';
+import React, {useEffect} from 'react';
 import open from 'open';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
-// import {Text} from 'ink';
+import type {Options} from '../../commands/run.js';
 
-export default function BrowserOpener({options}: {options: any}) {
+export default function BrowserOpener({options}: {options: Options}) {
 	const {step, sessionId} = useRunStep();
 	const [state, task, , , setTask, setLoading, setError] = useTask();
-
 	useEffect(() => {
 		if (step === 'browser' && !task) {
 			setLoading(true);

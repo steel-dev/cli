@@ -1,3 +1,4 @@
+import React from 'react';
 import {Box, Text, useStdout} from 'ink';
 
 export default function ProgressBar({

@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {spawn} from 'child_process';
 import open from 'open';
 import {CONFIG_DIR, REPO_URL} from '../../utils/constants.js';
@@ -44,7 +44,7 @@ function isDockerRunning() {
 	try {
 		spawn('docker', ['info']);
 		return true;
-	} catch (error) {
+	} catch {
 		return false;
 	}
 }

@@ -1,21 +1,21 @@
-import {useEffect} from 'react';
+import React, {useEffect} from 'react';
 import {Task} from 'ink-task-list';
 import {TEMPLATES} from '../../utils/constants.js';
-import {Template} from '../../utils/types.js';
 import SelectInput from 'ink-select-input';
 import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
+import type {Template} from '../../utils/types.js';
+import {Args} from '../../commands/run.js';
 
-export default function Template({args}: {args?: any}) {
+export default function Template({args}: {args: Args}) {
 	const [state, task, , , setTask, setLoading] = useTask();
 	const {step, setStep, setTemplate, setDirectory} = useRunStep();
 	// Bypass selection if args are provided
 	useEffect(() => {
-		if (step === 'template' && args?.length && !task) {
+		if (step === 'template' && args?.length > 0 && !task) {
 			setLoading(true);
 			const [templateArg] = args;
-
 			// Find a matching template by label/key/etc.
 			const found = TEMPLATES.find(
 				t =>
@@ -23,20 +23,19 @@ export default function Template({args}: {args?: any}) {
 					t.label === templateArg ||
 					t.alias === templateArg,
 			);
-
 			if (found) {
-				const template = found as Template;
+				const template = found;
 				setTask(template);
 				setTemplate(template);
 				setDirectory(template.value);
-				setLoading(false);
-				setStep('directory');
+				setStep('envvar');
 			} else if (templateArg) {
 				console.log(`Template "${templateArg}" not found.`);
 				// Optionally: fall back to selection or exit
 			}
+			setLoading(false);
 		}
-	}, [args, setTask, setTemplate, setStep]);
+	}, [args, task]);
 
 	// Skip UI if task is already set (from args)
 	// Return complete task for viewer

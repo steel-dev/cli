@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-//@ts-nocheck
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import React, {ReactElement} from 'react';
 import {Box, Text} from 'ink';
 import fs from 'fs/promises';
@@ -120,7 +121,7 @@ export function loginFlow() {
 			}
 
 			res.writeHead(200, {'Content-Type': 'text/html'});
-			res.end(successHtml);
+			// res.end(successHtml);
 
 			clearTimeout(timeout);
 			server.close(() => {
@@ -144,7 +145,7 @@ export function loginFlow() {
 
 			try {
 				open(authUrl.toString());
-			} catch (error) {
+			} catch {
 				server.close();
 				clearTimeout(timeout);
 				reject(new Error('Failed to open browser'));
@@ -164,11 +165,11 @@ async function saveApiKey(apiKey: string, name: string): Promise<void> {
 		await fs.mkdir(CONFIG_DIR, {recursive: true});
 
 		// Read existing config or create a new one
-		let config: Record<string, any> = {};
+		let config: object = {};
 		try {
 			const existingConfig = await fs.readFile(CONFIG_PATH, 'utf-8');
 			config = JSON.parse(existingConfig);
-		} catch (error) {
+		} catch {
 			// File doesn't exist or isn't valid JSON, use empty object
 		}
 

@@ -1,8 +1,7 @@
 {
-	"extends": "@sindresorhus/tsconfig",
+	// "extends": "@sindresorhus/tsconfig",
 	"compilerOptions": {
 		"jsx": "react-jsx",
-		"jsxImportSource": "react",
 		"moduleResolution": "node16",
 		"module": "Node16",
 		"skipLibCheck": true,

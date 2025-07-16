@@ -1,4 +1,4 @@
-import {createContext, useContext, useState, ReactNode} from 'react';
+import React, {createContext, useContext, useState, ReactNode} from 'react';
 import {Template} from '../utils/types.js';
 
 type RunStepContextType = {
@@ -12,6 +12,8 @@ type RunStepContextType = {
 	setDirectory: (directory: string | null) => void;
 	sessionId: string | null;
 	setSessionId: (id: string | null) => void;
+	hash: string | null;
+	setHash: (hash: string | null) => void;
 };
 
 const RunStepContext = createContext<RunStepContextType | undefined>(undefined);
@@ -23,6 +25,7 @@ export const RunStepProvider = ({children}: {children: ReactNode}) => {
 	const [envVars, setEnvVars] = useState<Record<string, string>>({});
 	const [directory, setDirectory] = useState<string | null>(null);
 	const [sessionId, setSessionId] = useState<string | null>(null);
+	const [hash, setHash] = useState<string | null>(null);
 
 	return (
 		<RunStepContext.Provider
@@ -37,6 +40,8 @@ export const RunStepProvider = ({children}: {children: ReactNode}) => {
 				setDirectory,
 				sessionId,
 				setSessionId,
+				hash,
+				setHash,
 			}}
 		>
 			{children}

@@ -11,7 +11,7 @@ type Options = {
 
 type TriggerFn = (
 	data?: Record<string, string>,
-	callback?: (data: any[]) => void,
+	callback?: (data: object[]) => void,
 ) => Promise<void>;
 
 export function useLazyApi({
@@ -19,8 +19,8 @@ export function useLazyApi({
 	endpoint,
 	resultObject,
 	contentType = 'application/json',
-}: Options): [boolean, any[], Error | null, TriggerFn] {
-	const [data, setData] = useState<any[]>([]);
+}: Options): [boolean, object[], Error | null, TriggerFn] {
+	const [data, setData] = useState<object[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<Error | null>(null);
 
@@ -41,7 +41,7 @@ export function useLazyApi({
 				if (data) {
 					endpoint = endpoint.replace(/\{(\w+)\}/g, (_, key: string) => {
 						if (data[key]) {
-							let value = data[key];
+							const value = data[key];
 							delete data[key];
 							return value;
 						}

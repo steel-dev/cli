@@ -1,19 +1,15 @@
-import {useEffect} from 'react';
+import React, {useEffect} from 'react';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
 import {runCommand} from '../../utils/forge.js';
-
 export default function Dependencies() {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
-
 	const {step, setStep, packageManager, directory, template} = useForgeStep();
-
 	useEffect(() => {
 		if (step === 'dependencies' && !task) {
 			setLoading(true);
-
 			async function installDeps() {
 				try {
 					if (template?.label.includes('Python')) {
@@ -53,7 +49,6 @@ export default function Dependencies() {
 					setLoading(false);
 				}
 			}
-
 			installDeps();
 		}
 	}, [step]);

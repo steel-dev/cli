@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import {useEffect} from 'react';
 import open from 'open';
 

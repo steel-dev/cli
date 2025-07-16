@@ -59,7 +59,7 @@ export function updateEnvVariable(
 ) {
 	const envPath = path.resolve(directory, '.env');
 
-	let envContent = fs.readFileSync(envPath, 'utf8');
+	const envContent = fs.readFileSync(envPath, 'utf8');
 	const lines = envContent.split('\n');
 
 	let keyFound = false;

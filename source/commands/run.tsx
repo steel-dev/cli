@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+
+import React from 'react';
 import Template from '../components/run/template.js';
 import Runner from '../components/run/runner.js';
 import EnvVar from '../components/run/envvar.js';
@@ -6,7 +9,6 @@ import Dependencies from '../components/run/dependencies.js';
 import {RunStepProvider} from '../context/runstepcontext.js';
 import BrowserOpener from '../components/run/browseropener.js';
 import BrowserRunner from '../components/run/browserrunner.js';
-import Directory from '../components/run/directory.js';
 import zod from 'zod';
 import {option} from 'pastel';
 
@@ -59,9 +61,13 @@ export const options = zod.object({
 	skip_auth: zod.boolean().describe('Skip authentication').optional(),
 });
 
+export type Options = zod.infer<typeof options>;
+
+export type Args = zod.infer<typeof args>;
+
 type Props = {
-	args: zod.infer<typeof args>;
-	options: zod.infer<typeof options>;
+	args: Args;
+	options: Options;
 };
 
 export default function Cookbook({args, options}: Props) {
@@ -69,7 +75,6 @@ export default function Cookbook({args, options}: Props) {
 		<RunStepProvider>
 			<TaskList>
 				<Template args={args} />
-				<Directory />
 				<EnvVar options={options} />
 				<Dependencies />
 				<BrowserRunner />

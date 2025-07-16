@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+
+import React from 'react';
 import EnvVar from '../components/forge/envvar.js';
 import Template from '../components/forge/template.js';
 import Directory from '../components/forge/directory.js';
@@ -40,9 +43,12 @@ export const options = zod.object({
 	skip_auth: zod.boolean().describe('Skip authentication').optional(),
 });
 
+export type Options = zod.infer<typeof options>;
+export type Args = zod.infer<typeof args>;
+
 type Props = {
-	args: zod.infer<typeof args>;
-	options: zod.infer<typeof options>;
+	args: Args;
+	options: Options;
 };
 
 export default function Forge({args, options}: Props) {

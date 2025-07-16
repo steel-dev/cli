@@ -3,10 +3,10 @@ import type {LoadingState, OtherStates} from '../utils/types.js';
 
 export function useTask(): [
 	LoadingState | OtherStates | undefined,
-	any,
+	string | object | boolean | undefined,
 	boolean,
 	string | undefined,
-	React.Dispatch<React.SetStateAction<any>>,
+	React.Dispatch<React.SetStateAction<string | object | boolean | undefined>>,
 	React.Dispatch<React.SetStateAction<boolean>>,
 	React.Dispatch<React.SetStateAction<string | undefined>>,
 ] {

@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import path from 'path';
 import fs from 'fs';
 import {v4 as uuidv4} from 'uuid';
@@ -7,12 +7,12 @@ import TextInput from 'ink-text-input';
 import {Task} from 'ink-task-list';
 import spinners from 'cli-spinners';
 import {getApiKey} from '../../utils/session.js';
-import {updateEnvVariable} from '../../utils/forge.js';
 import {ENV_VAR_MAP} from '../../utils/constants.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import {useTask} from '../../hooks/usetask.js';
-// import type {Template} from '../../utils/types.js';
-export default function EnvVar({options}: {options: any}) {
+import type {Options} from '../../commands/run.js';
+
+export default function EnvVar({options}: {options: Options}) {
 	const {
 		step,
 		setStep,
@@ -28,75 +28,59 @@ export default function EnvVar({options}: {options: any}) {
 	const [inputValue, setInputValue] = useState('');
 	const [isCollectingVars, setIsCollectingVars] = useState(false);
 	// Queue state for pending actions
-	const [pendingVars, setPendingVars] = useState<
-		Array<{value: string; label: string}>
-	>([]);
-
+	const [pendingVars, setPendingVars] = useState([]);
 	// Derive required env vars
-	const isEnvVarRequired = (varName: string, env: Record<string, string>) => {
+	const isEnvVarRequired = (varName, env) => {
 		switch (varName) {
 			case 'STEEL_API_KEY':
 				return !env['STEEL_API_URL'];
 			case 'STEEL_API_URL':
 				if (inputValue !== '') {
-					updateEnvVariable(
-						workingDir,
-						'STEEL_CONNECT_URL',
-						'ws:' + inputValue.split(':')[1],
-					);
+					env['STEEL_CONNECT_URL'] = 'ws:' + inputValue.split(':')[1];
 				}
 				return !env['STEEL_API_KEY'];
 			default:
 				return template.env.find(e => e.value === varName)?.required ?? false;
 		}
 	};
-
 	// Setup: preload values from options and write .env
 	useEffect(() => {
 		if (step === 'envvar' && !task && !isCollectingVars) {
 			setLoading(true);
 			try {
-				const apiKey = getApiKey();
-				if (apiKey) setTask(apiKey);
-				const envExamplePath = path.join(workingDir, '.env.example');
-				const envTargetPath = path.join(workingDir, '.env');
 				const curEnvVars = {};
+				const apiKey = getApiKey();
+				if (apiKey) {
+					curEnvVars['STEEL_API_KEY'] = apiKey.apiKey;
+				}
+				const envExamplePath = path.join(workingDir, '.env.example');
 				if (fs.existsSync(envExamplePath)) {
-					fs.copyFileSync(envExamplePath, envTargetPath);
 					for (const [key, envVar] of Object.entries(ENV_VAR_MAP)) {
 						if (key in options) {
 							curEnvVars[envVar] = String(options[key]);
-							updateEnvVariable(workingDir, envVar, String(options[key]));
 							// Special case: set CONNECT_URL if api-url exists
 							if (key === 'api_url') {
-								updateEnvVariable(
-									workingDir,
-									'CONNECT_URL',
-									'ws:' + options[key].split(':')[1],
-								);
+								curEnvVars['STEEL_CONNECT_URL'] =
+									'ws:' + options[key].split(':')[1];
 							}
 						}
 					}
-					setEnvVars(curEnvVars);
 					const remaining = pendingVars.slice(1);
 					setPendingVars(remaining);
 					// If api-url not provided, create a session ID
 					if (!('api_url' in options)) {
 						const sessionId = uuidv4();
 						setSessionId(sessionId);
-						updateEnvVariable(workingDir, 'STEEL_SESSION_ID', sessionId);
+						curEnvVars['STEEL_SESSION_ID'] = sessionId;
 					}
 					fs.unlinkSync(envExamplePath);
 				}
-
 				// Calculate which vars we still need after setup
 				const stillNeeded =
 					template?.env?.filter(
 						e => isEnvVarRequired(e.value, curEnvVars) && !curEnvVars[e.value],
 					) || [];
-
-				// console.log(stillNeeded);
-
+				setEnvVars(curEnvVars);
 				if (stillNeeded.length > 0) {
 					setPendingVars(stillNeeded);
 					setIsCollectingVars(true);
@@ -104,7 +88,6 @@ export default function EnvVar({options}: {options: any}) {
 					setTask(curEnvVars);
 					setStep('dependencies');
 				}
-
 				setLoading(false);
 			} catch (error) {
 				console.error('Error updating environment variables:', error);
@@ -113,27 +96,21 @@ export default function EnvVar({options}: {options: any}) {
 			}
 		}
 	}, [step, task, isCollectingVars]);
-
 	// Handle submission of individual env var inputs
-	const handleInputSubmit = (val: string) => {
+	const handleInputSubmit = val => {
 		if (pendingVars.length === 0) return;
-
 		const currentVar = pendingVars[0];
 		const updatedEnvVars = {...envVars, [currentVar.value]: val};
 		setEnvVars(updatedEnvVars);
-		updateEnvVariable(workingDir, currentVar.value, val);
-
 		const remaining = pendingVars.slice(1);
 		setPendingVars(remaining);
 		setInputValue('');
-
 		if (remaining.length === 0) {
 			setIsCollectingVars(false);
 			setTask(updatedEnvVars);
 			setStep('dependencies');
 		}
 	};
-
 	// Dequeue next action to be process and rendered
 	const currentPromptVar = pendingVars[0] || null;
 

@@ -1,4 +1,4 @@
-import {useEffect} from 'react';
+import React, {useEffect} from 'react';
 import {spawn} from 'child_process';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
@@ -11,7 +11,7 @@ function isDockerRunning() {
 	try {
 		spawn('docker', ['info']);
 		return true;
-	} catch (error) {
+	} catch {
 		return false;
 	}
 }
@@ -22,23 +22,18 @@ export default function BrowserRunner() {
 	useEffect(() => {
 		if (step === 'browserrunner' && !task) {
 			setLoading(true);
-
 			try {
 				spawn('git', ['clone', REPO_URL], {
 					cwd: CONFIG_DIR,
 				});
-
 				if (!isDockerRunning()) {
 					console.log(
 						'⚠️ Docker is not running. Please start it and try again.',
 					);
 					return;
 				}
-
 				console.log('🚀 Starting Docker Compose...');
-
 				const folderName = path.basename(REPO_URL, '.git');
-
 				spawn('docker-compose', ['-f', 'docker-compose.dev.yml', 'up', '-d'], {
 					cwd: path.join(CONFIG_DIR, folderName),
 					stdio: 'inherit',
@@ -55,7 +50,7 @@ export default function BrowserRunner() {
 				setStep('runner');
 				setLoading(false);
 			} catch (error) {
-				setError('Error starting Steel Browser Locally');
+				setError(`Error starting Steel Browser Locally ${error}`);
 				setLoading(false);
 			}
 		}
