@@ -5,6 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium import webdriver
 from selenium.webdriver.remote.remote_connection import RemoteConnection
+from selenium.webdriver.remote.client_config import ClientConfig
 from steel import Steel
 import http.client
 
@@ -32,7 +33,9 @@ class CustomRemoteConnection(RemoteConnection):
     _session_id = STEEL_SESSION_ID
 
     def __init__(self, remote_server_addr: str, session_id: str):
-        super().__init__(remote_server_addr)
+        # Create client config with the remote server address
+        client_config = ClientConfig(remote_server_addr=remote_server_addr)
+        super().__init__(client_config=client_config)
         self._session_id = session_id
 
     def get_remote_connection_headers(self, parsed_url, keep_alive=False):
@@ -119,9 +122,9 @@ You can view the session live at {session.session_viewer_url}
         print("An error occurred:", error)
     finally:
         # Cleanup: Gracefully close browser and release session when done
-        if driver:
-            driver.quit()
-            print("Driver closed")
+        # if driver:
+        #     driver.quit()
+        #     print("Driver closed")
 
         if session:
             print("Releasing session...")

@@ -5,6 +5,7 @@ The CLI for Steel.dev
 ## Install
 
 Requires Node 18+
+To run the Typescript examples, ensure that you have `ts-node` installed globally.
 
 ```bash
 $ npm i @steel-dev/cli -g

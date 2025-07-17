@@ -6,8 +6,9 @@ import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
 import {spawn} from 'child_process';
 import {CACHE_DIR} from '../../utils/constants.js';
+import type {Options} from '../../commands/run.js';
 
-export default function Runner() {
+export default function Runner({options}: {options: Options}) {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
 	const {step, setStep, envVars, template, directory, hash} = useRunStep();
 	useEffect(() => {
@@ -26,10 +27,14 @@ export default function Runner() {
 					cwd: directory,
 					shell: true,
 					stdio: 'inherit', // This will pipe stdout and stderr to the parent process
-					env: envVars,
+					env: {...envVars, ...process.env},
 				});
 				setTask(`Command completed successfully: ${template.runCommand}`);
-				setStep('browser');
+				if (options.view) {
+					setStep('browser');
+				} else {
+					setStep('done');
+				}
 				setLoading(false);
 			} catch (error) {
 				console.error('Error running command:', error);

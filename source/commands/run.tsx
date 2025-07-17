@@ -78,7 +78,7 @@ export default function Cookbook({args, options}: Props) {
 				<EnvVar options={options} />
 				<Dependencies />
 				<BrowserRunner />
-				<Runner />
+				<Runner options={options} />
 				<BrowserOpener options={options} />
 			</TaskList>
 		</RunStepProvider>

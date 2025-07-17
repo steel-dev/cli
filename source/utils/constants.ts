@@ -37,7 +37,7 @@ export const TEMPLATES = [
 			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) =>
-			`NODE_PATH=${options.depsDir}/node_modules/ node index.js`,
+			`NODE_PATH=${options.depsDir}/node_modules node index.js`,
 	},
 	{
 		alias: 'playwright',
@@ -49,10 +49,21 @@ export const TEMPLATES = [
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
 		depCommands: (options: TemplateOptions) => [
-			`npm install --prefix ${options.depsDir} --prefer-offline --no-audit --silent`,
+			`mkdir -p ${options.depsDir}`,
+			`cp package.json ${options.depsDir}/package.json`,
+			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
 		],
-		runCommand: (options: TemplateOptions) =>
-			`NODE_PATH=${options.depsDir} npm run start`,
+		runCommand: (options: TemplateOptions) => {
+			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
+			const compilerOptions = JSON.stringify({
+				baseUrl: '.',
+				paths: {
+					'*': [`${options.depsDir}/node_modules/*`],
+				},
+			});
+
+			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+		},
 	},
 	{
 		alias: 'puppeteer-js',
@@ -64,10 +75,12 @@ export const TEMPLATES = [
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
 		depCommands: (options: TemplateOptions) => [
-			`npm install --prefix ${options.depsDir} --prefer-offline --no-audit --silent`,
+			`mkdir -p ${options.depsDir}`,
+			`cp package.json ${options.depsDir}/package.json`,
+			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) =>
-			`NODE_PATH=${options.depsDir} npm run start`,
+			`NODE_PATH=${options.depsDir}/node_modules node index.js`,
 	},
 	{
 		alias: 'puppeteer',
@@ -79,10 +92,21 @@ export const TEMPLATES = [
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
 		depCommands: (options: TemplateOptions) => [
-			`npm install --prefix ${options.depsDir} --prefer-offline --no-audit --silent`,
+			`mkdir -p ${options.depsDir}`,
+			`cp package.json ${options.depsDir}/package.json`,
+			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
 		],
-		runCommand: (options: TemplateOptions) =>
-			`NODE_PATH=${options.depsDir} npm run start`,
+		runCommand: (options: TemplateOptions) => {
+			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
+			const compilerOptions = JSON.stringify({
+				baseUrl: '.',
+				paths: {
+					'*': [`${options.depsDir}/node_modules/*`],
+				},
+			});
+
+			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+		},
 	},
 	{
 		alias: 'files',
@@ -94,10 +118,12 @@ export const TEMPLATES = [
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 		],
 		depCommands: (options: TemplateOptions) => [
-			`npm install --prefix ${options.depsDir} --prefer-offline --no-audit --silent`,
+			`mkdir -p ${options.depsDir}`,
+			`cp package.json ${options.depsDir}/package.json`,
+			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) =>
-			`NODE_PATH=${options.depsDir} npm run start`,
+			`NODE_PATH=${options.depsDir}/node_modules ts-node index.ts`,
 	},
 	{
 		alias: 'oai-cua',
@@ -111,10 +137,21 @@ export const TEMPLATES = [
 			{value: 'TASK', label: 'Task for the agent'},
 		],
 		depCommands: (options: TemplateOptions) => [
-			`npm install --prefix ${options.depsDir} --prefer-offline --no-audit --silent`,
+			`mkdir -p ${options.depsDir}`,
+			`cp package.json ${options.depsDir}/package.json`,
+			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
 		],
-		runCommand: (options: TemplateOptions) =>
-			`NODE_PATH=${options.depsDir} npm run start`,
+		runCommand: (options: TemplateOptions) => {
+			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
+			const compilerOptions = JSON.stringify({
+				baseUrl: '.',
+				paths: {
+					'*': [`${options.depsDir}/node_modules/*`],
+				},
+			});
+
+			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+		},
 	},
 	{
 		alias: 'browser-use',

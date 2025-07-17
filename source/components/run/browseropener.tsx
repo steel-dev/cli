@@ -21,8 +21,6 @@ export default function BrowserOpener({options}: {options: Options}) {
 					// Open the browser
 					open(url);
 					setTask(`Opened ${url}`);
-				} else {
-					setTask('skipped');
 				}
 				setLoading(false);
 				// setStep('done');
