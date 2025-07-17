@@ -49,7 +49,7 @@ export default function Template({args}: {args: Args}) {
 					const template = item as Template;
 					setTask(template);
 					setTemplate(template);
-					setStep('packagemanager');
+					setStep('projectname');
 				}}
 			/>
 		</Task>

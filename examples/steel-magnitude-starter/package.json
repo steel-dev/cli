@@ -1,0 +1,20 @@
+{
+  "name": "steel-magnitude-app2",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "postinstall": "patchright install chromium"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "magnitude-core": "latest",
+    "steel-sdk": "^0.8.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.20.0",
+    "typescript": "^5.0.0"
+  }
+}

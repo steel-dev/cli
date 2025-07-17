@@ -122,8 +122,43 @@ export const TEMPLATES = [
 			`cp package.json ${options.depsDir}/package.json`,
 			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
 		],
-		runCommand: (options: TemplateOptions) =>
-			`NODE_PATH=${options.depsDir}/node_modules ts-node index.ts`,
+		runCommand: (options: TemplateOptions) => {
+			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
+			const compilerOptions = JSON.stringify({
+				baseUrl: '.',
+				paths: {
+					'*': [`${options.depsDir}/node_modules/*`],
+				},
+			});
+
+			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+		},
+	},
+	{
+		alias: 'creds',
+		value: 'steel-credentials-starter',
+		label: 'Playwright + Credentials API Starter in TypeScript',
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+		],
+		depCommands: (options: TemplateOptions) => [
+			`mkdir -p ${options.depsDir}`,
+			`cp package.json ${options.depsDir}/package.json`,
+			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+		],
+		runCommand: (options: TemplateOptions) => {
+			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
+			const compilerOptions = JSON.stringify({
+				baseUrl: '.',
+				paths: {
+					'*': [`${options.depsDir}/node_modules/*`],
+				},
+			});
+
+			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+		},
 	},
 	{
 		alias: 'oai-cua',
@@ -132,6 +167,34 @@ export const TEMPLATES = [
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
+			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+			{value: 'STEEL_API_URL', label: 'Steel API URL'},
+			{value: 'TASK', label: 'Task for the agent'},
+		],
+		depCommands: (options: TemplateOptions) => [
+			`mkdir -p ${options.depsDir}`,
+			`cp package.json ${options.depsDir}/package.json`,
+			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+		],
+		runCommand: (options: TemplateOptions) => {
+			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
+			const compilerOptions = JSON.stringify({
+				baseUrl: '.',
+				paths: {
+					'*': [`${options.depsDir}/node_modules/*`],
+				},
+			});
+
+			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+		},
+	},
+	{
+		alias: 'magnitude',
+		value: 'steel-magnitude-starter',
+		label: 'Steel + Magnitude',
+		env: [
+			{value: 'STEEL_API_KEY', label: 'Steel API key'},
+			{value: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', required: true},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
 			{value: 'STEEL_API_URL', label: 'Steel API URL'},
 			{value: 'TASK', label: 'Task for the agent'},

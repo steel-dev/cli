@@ -55,8 +55,8 @@ export default function Forge({args, options}: Props) {
 	return (
 		<ForgeStepProvider>
 			<TaskList>
-				<ProjectName args={args} />
 				<Template args={args} />
+				<ProjectName args={args} />
 				<PackageManager />
 				<Directory />
 				<EnvVar options={options} />

@@ -34,7 +34,7 @@ export default function ProjectName({args}: {args: Args}) {
 						setTask('steel-starter');
 						setDirectory('steel-starter');
 					}
-					setStep('template');
+					setStep('packagemanager');
 				}}
 			/>
 		</Task>
