@@ -32,8 +32,8 @@ export const options = zod.object({
 		.boolean()
 		.describe(
 			option({
-				description: 'Auto open live session viewer',
-				alias: 'v',
+				description: 'Open live session viewer',
+				alias: 'o',
 			}),
 		)
 		.optional(),

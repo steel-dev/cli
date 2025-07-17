@@ -1,6 +1,6 @@
 import { startBrowserAgent } from "magnitude-core";
 import z from 'zod';
-import Steel from 'steel-sdk/index.mjs';
+import Steel from 'steel-sdk';
 import dotenv from 'dotenv';
 
 dotenv.config();

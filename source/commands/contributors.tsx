@@ -110,6 +110,9 @@ export default function Contributors() {
 							'GET /users/{username}',
 							{
 								username: contributor.login,
+								headers: {
+									accept: 'application/vnd.github.v3+json',
+								},
 							},
 						);
 
@@ -119,9 +122,11 @@ export default function Contributors() {
 							{
 								owner: 'steel-dev',
 								repo: 'steel-browser',
+								headers: {
+									accept: 'application/vnd.github.v3+json',
+								},
 							},
 						);
-						console.log(commitStats);
 
 						const stats = commitStats.find(
 							stat => stat.author.login === contributor.login,

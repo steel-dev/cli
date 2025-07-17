@@ -16,7 +16,7 @@ const STEEL_SESSION_ID = process.env.STEEL_SESSION_ID || undefined;
 // Initialize Steel client with the API key from environment variables
 const client = new Steel({
 	steelAPIKey: STEEL_API_KEY,
-	baseUrl: STEEL_API_URL,
+	baseURL: STEEL_API_URL,
 });
 
 async function main() {

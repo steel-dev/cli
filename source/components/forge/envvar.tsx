@@ -44,6 +44,11 @@ export default function EnvVar({options}: {options: Options}) {
 	// Setup: preload values from options and write .env
 	useEffect(() => {
 		if (step === 'envvar' && !task && !isCollectingVars) {
+			if (options.skip_auth) {
+				setTask('skip_auth');
+				setStep('dependencies');
+				return;
+			}
 			setLoading(true);
 			try {
 				const envExamplePath = path.join(workingDir, '.env.example');
