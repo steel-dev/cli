@@ -20,7 +20,7 @@ interface Contributor {
 	commits?: number;
 }
 
-export const description = 'Show project contributors from GitHub';
+export const description = 'Show Steel Browser GitHub contributors';
 
 export default function Contributors() {
 	const [contributors, setContributors] = useState<Contributor[]>([]);
