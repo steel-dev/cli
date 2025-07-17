@@ -52,11 +52,11 @@ export default function EnvVar({options}: {options: Options}) {
 				if (apiKey) {
 					curEnvVars['STEEL_API_KEY'] = apiKey.apiKey;
 				}
-				console.log('cur:', curEnvVars);
+				// console.log('cur:', curEnvVars);
 				const envExamplePath = path.join(directory, '.env.example');
 				if (fs.existsSync(envExamplePath)) {
 					for (const [key, envVar] of Object.entries(ENV_VAR_MAP)) {
-						console.log('Key:', key, 'Value:', envVar);
+						// console.log('Key:', key, 'Value:', envVar);
 						if (key in options) {
 							curEnvVars[envVar] = String(options[key]);
 							// Special case: set CONNECT_URL if api-url exists
@@ -64,7 +64,7 @@ export default function EnvVar({options}: {options: Options}) {
 								curEnvVars['STEEL_CONNECT_URL'] =
 									'ws:' + options[key].split(':')[1];
 							}
-							console.log('cur:', curEnvVars);
+							// console.log('cur:', curEnvVars);
 						}
 					}
 					const remaining = pendingVars.slice(1);
@@ -77,7 +77,7 @@ export default function EnvVar({options}: {options: Options}) {
 					}
 					fs.unlinkSync(envExamplePath);
 				}
-				console.log(curEnvVars);
+				// console.log(curEnvVars);
 				// Calculate which vars we still need after setup
 				const stillNeeded =
 					template?.env?.filter(

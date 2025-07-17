@@ -18,7 +18,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 STEEL_API_URL = os.getenv("STEEL_API_URL", "https://api.steel.dev")
 STEEL_CONNECT_URL = os.getenv("STEEL_CONNECT_URL", "wss://connect.steel.dev")
 
-STEEL_SESSION_ID = os.getenv("STEEL_SESSION_ID", None)
+STEEL_SESSION_ID = os.getenv("STEEL_SESSION_ID")
 
 def create_response(**kwargs):
     """Send a request to OpenAI API to get a response."""
@@ -72,13 +72,15 @@ class SteelBrowser:
         self._page = None
 
     def __enter__(self):
-        self.session = self.client.sessions.create(
-        	session_id=STEEL_SESSION_ID,
-            use_proxy=False,
-            solve_captcha=False,
-            block_ads=True,
-            dimensions={"width": self.dimensions[0], "height": self.dimensions[1]},
-        )
+        params = {
+            "use_proxy": False,
+            "solve_captcha": False,
+            "block_ads": True,
+            "dimensions": {"width": self.dimensions[0], "height": self.dimensions[1]}
+        }
+        if STEEL_SESSION_ID:
+            params["session_id"] = STEEL_SESSION_ID
+        self.session = self.client.sessions.create(**params)
         print(f"Session created: {self.session.session_viewer_url}")
 
         # Connect to the session
@@ -275,12 +277,13 @@ def main():
         items = []
         while True:
         	# The agent's main instructions
-            user_input = os.getenv("TASK", input("> "))
+         # check if task then ask for input
+            user_input = os.getenv("TASK") or input("> ")
             items.append({"role": "user", "content": user_input})
 
             while True:
                 response = create_response(
-                    model="computer-use-preview",
+                    model="computer-use-preview-2025-03-11",
                     input=items,
                     tools=tools,
                     truncation="auto",

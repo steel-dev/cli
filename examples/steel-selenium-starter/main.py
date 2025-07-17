@@ -17,7 +17,7 @@ STEEL_API_KEY = os.getenv('STEEL_API_KEY')
 STEEL_API_URL = os.getenv('STEEL_API_URL', 'https://api.steel.dev')
 STEEL_CONNECT_URL = os.getenv('STEEL_CONNECT_URL', 'http://connect.steelbrowser.com/selenium')
 
-STEEL_SESSION_ID = os.getenv("STEEL_SESSION_ID", None)
+STEEL_SESSION_ID = os.getenv("STEEL_SESSION_ID")
 
 if not STEEL_API_KEY:
     raise EnvironmentError("STEEL_API_KEY environment variable not set.")
@@ -29,7 +29,7 @@ client = Steel(steel_api_key=STEEL_API_KEY, base_url=STEEL_API_URL)
 
 
 class CustomRemoteConnection(RemoteConnection):
-    _session_id = None
+    _session_id = STEEL_SESSION_ID
 
     def __init__(self, remote_server_addr: str, session_id: str):
         super().__init__(remote_server_addr)
@@ -49,12 +49,15 @@ def main():
     try:
         print("Creating Steel session...")
 
+        params = { "is_selenium": True,
+        # session_timeout=1800000, # Session timeout in ms (default: 5 mins)
+        }
+
+        if STEEL_SESSION_ID:
+            params['session_id'] = STEEL_SESSION_ID
+
         # Create a new Steel session with is_selenium=True
-        session = client.sessions.create(
-        	session_id=STEEL_SESSION_ID,   # Session ID
-            is_selenium=True,              # Enable Selenium mode (required)
-            # session_timeout=1800000,     # Session timeout in ms (default: 5 mins)
-        )
+        session = client.sessions.create(**params)
 
         print(f"""Session created successfully with Session ID: {session.id}.
 You can view the session live at {session.session_viewer_url}

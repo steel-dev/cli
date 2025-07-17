@@ -22,7 +22,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 STEEL_API_URL = os.getenv("STEEL_API_URL", "https://api.steel.dev")
 STEEL_CONNECT_URL = os.getenv("STEEL_CONNECT_URL", "wss://connect.steel.dev")
 
-STEEL_SESSION_ID = os.getenv('STEEL_SESSION_ID', None)
+STEEL_SESSION_ID = os.getenv('STEEL_SESSION_ID')
 # The agent's main instructions
 TASK = os.getenv("TASK", "Go to https://docs.steel.dev/, open the changelog, and tell me what's new.")
 
@@ -32,12 +32,14 @@ if not STEEL_API_KEY or not OPENAI_API_KEY:
 # 2. Initialize Steel client and create session
 client = Steel(steel_api_key=STEEL_API_KEY, base_url=STEEL_API_URL)
 
+params = {}
+
+if STEEL_SESSION_ID:
+    params['session_id'] = STEEL_SESSION_ID # optional session ID
 
 # 3. Create a Steel session to get a remote browser instance for your browser-use agent.
 print("Creating Steel session...")
-session = client.sessions.create(
-	session_id=STEEL_SESSION_ID, # Optional session ID
-)
+session = client.sessions.create(**params)
 print(f"Session created at {session.session_viewer_url}")
 
 print(

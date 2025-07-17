@@ -19,13 +19,10 @@ export default function Runner() {
 			}
 			try {
 				// Parse the command into the binary and its arguments
-				const commands = template.runCommand({
+				const command = template.runCommand({
 					depsDir: path.join(CACHE_DIR, hash),
 				});
-				const parts = commands.split(' ');
-				const command = parts[0] || '';
-				const args = parts.slice(1);
-				spawn(command, args, {
+				spawn(command, {
 					cwd: directory,
 					shell: true,
 					stdio: 'inherit', // This will pipe stdout and stderr to the parent process

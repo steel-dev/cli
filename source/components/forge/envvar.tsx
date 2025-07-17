@@ -52,7 +52,7 @@ export default function EnvVar({options}: {options: Options}) {
 				if (fs.existsSync(envExamplePath)) {
 					fs.copyFileSync(envExamplePath, envTargetPath);
 					for (const [key, envVar] of Object.entries(ENV_VAR_MAP)) {
-						console.log(key, envVar);
+						// console.log(key, envVar);
 						if (key in options) {
 							curEnvVars[envVar] = String(options[key]);
 							updateEnvVariable(workingDir, envVar, String(options[key]));

@@ -4,6 +4,8 @@ The CLI for Steel.dev
 
 ## Install
 
+Requires Node 18+
+
 ```bash
 $ npm i @steel-dev/cli -g
 ```
