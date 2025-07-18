@@ -53,9 +53,9 @@ export default function Template({args}: {args: Args}) {
 					setTemplate(template);
 					setLabel(
 						`You selected: ` +
-						// magenta color for alias and language
-						// (Ink <Text> not available in setLabel, so use ANSI escape codes)
-						`\x1b[35m${template.alias} (${template.language})\x1b[0m`
+							// magenta color for alias and language
+							// (Ink <Text> not available in setLabel, so use ANSI escape codes)
+							`\x1b[35m${template.alias} (${template.language})\x1b[0m`,
 					);
 					setStep('projectname');
 				}}

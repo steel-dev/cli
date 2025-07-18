@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck
+
 import React, {ReactElement} from 'react';
 import {Box, Text} from 'ink';
 import fs from 'fs/promises';
@@ -16,6 +15,7 @@ import {
 	CONFIG_DIR,
 	CONFIG_PATH,
 	SUCCESS_URL,
+	TARGET_API_PATH,
 	// SUCCESS_HTML,
 } from '../utils/constants.js';
 import open from 'open';
@@ -208,7 +208,7 @@ async function saveApiKey(apiKey: string, name: string): Promise<void> {
 		await fs.mkdir(CONFIG_DIR, {recursive: true});
 
 		// Read existing config or create a new one
-		let config: object = {};
+		let config: Record<string, string> = {};
 		try {
 			const existingConfig = await fs.readFile(CONFIG_PATH, 'utf-8');
 			config = JSON.parse(existingConfig);

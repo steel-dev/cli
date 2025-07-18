@@ -95,7 +95,7 @@ export default function Contributors() {
 					{
 						owner: 'steel-dev',
 						repo: 'steel-browser',
-						per_page: 25,
+						per_page: 100,
 						headers: {
 							accept: 'application/vnd.github.v3+json',
 						},
@@ -110,9 +110,6 @@ export default function Contributors() {
 							'GET /users/{username}',
 							{
 								username: contributor.login,
-								headers: {
-									accept: 'application/vnd.github.v3+json',
-								},
 							},
 						);
 
@@ -122,9 +119,6 @@ export default function Contributors() {
 							{
 								owner: 'steel-dev',
 								repo: 'steel-browser',
-								headers: {
-									accept: 'application/vnd.github.v3+json',
-								},
 							},
 						);
 
