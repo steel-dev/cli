@@ -59,6 +59,10 @@ export const options = zod.object({
 		.describe(option({description: 'API Key for OpenAI'}))
 		.optional(),
 	skip_auth: zod.boolean().describe('Skip authentication').optional(),
+	help: zod
+		.boolean()
+		.describe(option({description: 'Show help', alias: 'h'}))
+		.optional(),
 });
 
 export type Options = zod.infer<typeof options>;
