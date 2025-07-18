@@ -1,4 +1,5 @@
-//@ts-nocheck
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import fs from 'fs';
 import {
 	appendToTopofFile,
@@ -11,7 +12,6 @@ import {
 
 import {parse, print, types} from 'recast';
 import tsParser from 'recast/parsers/typescript.js';
-//@ts-ignore
 import {namedTypes as n, builders as b} from 'ast-types';
 
 const requiredImportsPuppeteerJs = [
@@ -37,7 +37,6 @@ const configPuppeteerJs = (file: string) => {
 	}
 
 	// Helper: insert let session; at top of function
-	//@ts-ignore
 	function insertSessionDeclaration(
 		path: types.NodePath<types.namedTypes.Declaration, any>,
 	) {
@@ -405,7 +404,7 @@ const configBrowserUsePy = (file: string) => {
 
 	const browserUseImport: string = 'from browser_use import Agent';
 	// replace import from browser_user with one that uses the new things that we need, Agent, Browser, BrowserContext
-	let foundIndex: number = imports.findIndex(item =>
+	const foundIndex: number = imports.findIndex(item =>
 		item.includes(browserUseImport),
 	);
 
@@ -452,12 +451,12 @@ const configBrowserUsePy = (file: string) => {
 		if (commentIndex === -1) {
 			commentIndex = item.length;
 		}
-		let substring: string = item.substring(0, commentIndex);
+		const substring: string = item.substring(0, commentIndex);
 		if (substring.includes('Agent(')) {
 			// We found the Agent declaration, now we need to see if it ends on this line or on another line
-			let agentIndex: number = substring.indexOf('Agent(');
-			let restSubstring = substring.substring(agentIndex);
-			let closingAgentIndex: number = restSubstring.indexOf(')');
+			const agentIndex: number = substring.indexOf('Agent(');
+			const restSubstring = substring.substring(agentIndex);
+			const closingAgentIndex: number = restSubstring.indexOf(')');
 			if (closingAgentIndex === -1) {
 				// Add in the required config if the Agent config doesn't end on one line
 				const indent = indentation(item, index, arr);

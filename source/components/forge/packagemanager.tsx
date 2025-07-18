@@ -2,14 +2,11 @@ import React from 'react';
 import {Task} from 'ink-task-list';
 import SelectInput from 'ink-select-input';
 import {useTask} from '../../hooks/usetask.js';
-import {useStep} from '../../context/stepcontext.js';
+import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
-
 export default function PackageManager() {
 	const [state, task, , , setTask] = useTask();
-
-	const {step, setPackageManager, setStep, template} = useStep();
-
+	const {step, setPackageManager, setStep, template} = useForgeStep();
 	const items = template?.label.includes('Python')
 		? [
 				{label: 'pip', value: 'pip'},

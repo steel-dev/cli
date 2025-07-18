@@ -1,5 +1,4 @@
 node_modules
 dist
-b-test
-browser-use-test
-pppp-test
+dist copy
+.ropeproject

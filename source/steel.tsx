@@ -3,7 +3,7 @@ import Pastel from 'pastel';
 
 const app = new Pastel({
 	importMeta: import.meta,
-	version: '1.0.0',
+	version: '0.0.1-alpha.6',
 });
 
 await app.run();

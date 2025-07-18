@@ -7,13 +7,16 @@ dotenv.config();
 
 const STEEL_API_KEY = process.env.STEEL_API_KEY;
 
-const STEEL_BASE_URL = process.env.STEEL_BASE_URL || 'https://api.steel.dev';
-const CONNECT_URL = process.env.STEEL_CONNECT_URL || 'wss://connect.steel.dev';
+const STEEL_API_URL = process.env.STEEL_BASE_URL || 'https://api.steel.dev';
+const STEEL_CONNECT_URL =
+	process.env.STEEL_CONNECT_URL || 'wss://connect.steel.dev';
+
+const STEEL_SESSION_ID = process.env.STEEL_SESSION_ID || undefined;
 
 // Initialize Steel client with the API key from environment variables
 const client = new Steel({
 	steelAPIKey: STEEL_API_KEY,
-	baseUrl: STEEL_BASE_URL,
+	baseURL: STEEL_API_URL,
 });
 
 async function main() {
@@ -26,6 +29,7 @@ async function main() {
 		// Create a new Steel session with all available options
 		session = await client.sessions.create({
 			// === Basic Options ===
+			sessionId: STEEL_SESSION_ID, // Optional session ID
 			// useProxy: true, // Use Steel's proxy network (residential IPs)
 			// proxyUrl: 'http://...',         // Use your own proxy (format: protocol://username:password@host:port)
 			// solveCaptcha: true,             // Enable automatic CAPTCHA solving
@@ -59,7 +63,7 @@ async function main() {
 				`File path on Steel session: \x1b[1;37m${uploadedFile.path}\x1b[0m`,
 		);
 
-		const cdpUrl = `${CONNECT_URL}?apiKey=${STEEL_API_KEY}&sessionId=${session.id}`;
+		const cdpUrl = `${STEEL_CONNECT_URL}?apiKey=${STEEL_API_KEY}&sessionId=${session.id}`;
 		// Connect Playwright to the Steel session
 		browser = await chromium.connectOverCDP(cdpUrl);
 

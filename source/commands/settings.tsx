@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import React, {ReactElement, useState} from 'react';
 import {Form} from 'ink-form';
 import {Box, Text} from 'ink';

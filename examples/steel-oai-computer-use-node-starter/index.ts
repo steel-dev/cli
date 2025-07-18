@@ -52,10 +52,11 @@ interface Response {
 const STEEL_API_KEY = process.env.STEEL_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-const STEEL_API_URL = process.env.STEEL_BASE_URL || 'https://api.steel.dev';
+const STEEL_API_URL = process.env.STEEL_API_URL || 'https://api.steel.dev';
 const STEEL_CONNECT_URL =
 	process.env.STEEL_CONNECT_URL || 'wss://connect.steel.dev';
 
+const STEEL_SESSION_ID = process.env.STEEL_SESSION_ID || undefined;
 /**
  * SteelBrowser class for interacting with a Steel browser session
  * This class provides methods to control a browser using Steel's API
@@ -78,6 +79,7 @@ class SteelBrowser {
 
 	async initialize(): Promise<void> {
 		this.session = await this.client.sessions.create({
+			sessionId: STEEL_SESSION_ID, // Optional session ID
 			useProxy: false,
 			solveCaptcha: false,
 			blockAds: true,
@@ -458,9 +460,12 @@ const rl = readline.createInterface({
  * Main function to run the CUA loop
  */
 async function runCuaLoop(): Promise<void> {
-	const task = await new Promise<string>(resolve =>
-		rl.question('What task should the assistant perform? ', resolve),
-	);
+	// Prompt user for task if not provided
+	const task =
+		process.env.TASK ??
+		(await new Promise<string>(resolve =>
+			rl.question('What task should the assistant perform? ', resolve),
+		));
 
 	const browser = new SteelBrowser();
 

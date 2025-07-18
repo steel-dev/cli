@@ -1,15 +1,22 @@
 #!/usr/bin/env node
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import React, {ReactElement} from 'react';
 import {Box, Text} from 'ink';
-import fs from 'fs/promises';
-import puppeteer from 'puppeteer';
+import fs from 'fs';
+import * as http from 'http';
+import * as url from 'url';
+import * as crypto from 'crypto';
+import type {AddressInfo} from 'net';
 import {
-	TARGET_SITE,
-	TARGET_API_PATH,
+	LOGIN_URL,
+	LOGIN_TIMEOUT,
 	CONFIG_DIR,
 	CONFIG_PATH,
+	SUCCESS_URL,
+	// SUCCESS_HTML,
 } from '../utils/constants.js';
-
+import open from 'open';
 import {getApiKey} from '../utils/session.js';
 
 type AuthState = {
@@ -87,76 +94,117 @@ export default function Login(): ReactElement {
 	);
 }
 
-async function loginFlow(): Promise<{
-	apiKey: string | null;
-	name: string | null;
-} | null> {
-	try {
-		const browser = await puppeteer.launch({
-			headless: false,
-			defaultViewport: null,
-			args: ['--no-sandbox', '--window-size=800,800'],
-		});
+function loginFlow() {
+	return new Promise<{apiKey: string | null; name: string | null}>(
+		(resolve, reject) => {
+			const state = crypto.randomBytes(16).toString('hex');
+			//@ts-expect-error server needs to be let, but complains that it can be const
+			let server: http.Server;
 
-		const page = (await browser.pages())[0];
+			const timeout = setTimeout(() => {
+				server?.close();
+				reject(new Error('Login timed out. Please try again.'));
+			}, LOGIN_TIMEOUT);
 
-		// Set up request interception
-		let apiKey: string | null = null;
-		let name: string | null = null;
+			server = http.createServer((req, res) => {
+				const {query} = url.parse(req.url ?? '', true);
+				console.log(query);
 
-		if (page) {
-			// Listen for responses
-			page.on('response', async response => {
-				const url = response.url();
-
-				// If they get put on the playground site, redirect them to the quickstart page
-				if (url.includes('/playground')) {
-					await page.goto('https://app.steel.dev/quickstart');
+				if (query.state !== state) {
+					res.writeHead(400, {'Content-Type': 'text/plain'});
+					res.end('Error: Invalid state parameter. Authentication failed.');
+					reject(new Error('Invalid state parameter. Possible CSRF attack.'));
+					return;
 				}
 
-				if (url.includes(TARGET_API_PATH) && response.status() === 200) {
-					// Check if this is the API key endpoint we're looking for
-					try {
-						const responseBody = await response.json();
-						// The structure of the response will depend on the API
-						if (responseBody.key && responseBody.name) {
-							apiKey = responseBody.key;
-							name = responseBody.name;
-						}
+				const jwt = query.jwt as string;
+				if (!jwt) {
+					res.writeHead(400, {'Content-Type': 'text/plain'});
+					res.end('Error: JWT not found in callback.');
+					reject(new Error('Callback did not include a JWT.'));
+					return;
+				}
 
-						// If we got the API key, close the browser
-						if (apiKey && name) {
-							await browser.close();
-						}
-					} catch (e) {
-						// Response might not be JSON or might have another format
-						console.error('Error parsing response:', e);
-					}
+				res.writeHead(302, {Location: SUCCESS_URL});
+				res.end();
+
+				clearTimeout(timeout);
+				server.close(() => {
+					console.log('Local callback server shut down.');
+				});
+				try {
+					const auth = getApiKeyFromJWT(jwt);
+					resolve(auth);
+				} catch (error) {
+					reject(error);
 				}
 			});
 
-			// Navigate to the login page
-			await page.goto(TARGET_SITE);
+			server.listen(0, '127.0.0.1', async () => {
+				const {port} = server.address() as AddressInfo;
+				console.log(`Local callback server listening on port ${port}...`);
 
-			// Wait for up to 5 minutes for the user to log in and for us to capture the API key
-			const timeout = 5 * 60 * 1000; // 5 minutes in milliseconds
-			const startTime = Date.now();
+				const authUrl = new URL(LOGIN_URL);
+				authUrl.searchParams.set('cli_redirect', 'true');
+				authUrl.searchParams.set('port', port.toString());
+				authUrl.searchParams.set('state', state);
 
-			while (!apiKey && Date.now() - startTime < timeout) {
-				await new Promise(resolve => setTimeout(resolve, 1000)); // Check every second
-			}
+				console.log('Opening your browser for authentication...');
+				console.log('If it does not open automatically, please click:');
+				console.log(authUrl.toString());
 
-			// Close the browser if it's still open
-			if (browser.connected) {
-				await browser.close();
-			}
-		}
+				try {
+					open(authUrl.toString());
+				} catch {
+					server.close();
+					clearTimeout(timeout);
+					reject(new Error('Failed to open browser'));
+				}
+			});
 
-		return {apiKey, name};
-	} catch (error) {
-		console.error('Error during Puppeteer session:', error);
-		return null;
+			server.on('error', err => {
+				clearTimeout(timeout);
+				reject(err);
+			});
+		},
+	);
+}
+
+async function getApiKeyFromJWT(jwt: string): Promise<{
+	apiKey: string | null;
+	name: string | null;
+} | null> {
+	const response = await fetch(TARGET_API_PATH, {
+		method: 'GET',
+		headers: {
+			Authorization: `Bearer ${jwt}`,
+			'Content-Type': 'application/json',
+		},
+	});
+
+	if (!response.ok) {
+		throw new Error(
+			`Failed to get API key: ${response.status} ${response.statusText}`,
+		);
 	}
+
+	const data = (await response.json()).apiKeys;
+
+	if (Array.isArray(data) && data.length > 0) {
+		// TODO: add org selection
+		const apiKey = data[0];
+		return {
+			apiKey: apiKey.key || apiKey.id,
+			name: apiKey.name,
+		};
+	} else if (data.key && data.name) {
+		return {
+			apiKey: data.key,
+			name: data.name,
+		};
+	}
+
+	throw new Error('No API key found in response');
 }
 
 async function saveApiKey(apiKey: string, name: string): Promise<void> {
@@ -165,11 +213,11 @@ async function saveApiKey(apiKey: string, name: string): Promise<void> {
 		await fs.mkdir(CONFIG_DIR, {recursive: true});
 
 		// Read existing config or create a new one
-		let config: Record<string, any> = {};
+		let config: object = {};
 		try {
 			const existingConfig = await fs.readFile(CONFIG_PATH, 'utf-8');
 			config = JSON.parse(existingConfig);
-		} catch (error) {
+		} catch {
 			// File doesn't exist or isn't valid JSON, use empty object
 		}
 

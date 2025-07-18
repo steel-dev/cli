@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 import {Box, Text} from 'ink';
 import React, {ReactElement} from 'react';
 import fs from 'fs/promises';
@@ -77,7 +78,7 @@ async function logoutFlow(): Promise<boolean> {
 		// Write the updated configuration back to the file
 		await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
 		return true;
-	} catch (error) {
+	} catch {
 		return false;
 	}
 }

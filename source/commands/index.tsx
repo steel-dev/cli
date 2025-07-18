@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import React, {useState, useEffect} from 'react';
 import {Box, Text} from 'ink';
 import Link from 'ink-link';

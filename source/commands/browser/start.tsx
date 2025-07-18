@@ -1,23 +1,55 @@
 import React, {useEffect, useState} from 'react';
 import {spawn} from 'child_process';
 import open from 'open';
-import {CONFIG_DIR, REPO_URL} from '../utils/constants.js';
+import {CONFIG_DIR, REPO_URL} from '../../utils/constants.js';
 import path from 'path';
+import zod from 'zod';
+import {option} from 'pastel';
 import Spinner from 'ink-spinner';
 import {Text} from 'ink';
+
+export const description = 'Starts the development environment';
+
+export const options = zod.object({
+	port: zod
+		.number()
+		.describe(
+			option({
+				description: 'Port number',
+				alias: 'p',
+			}),
+		)
+		.default(3000)
+		.optional(),
+	verbose: zod
+		.string()
+		.describe(
+			option({
+				description: 'Enable verbose logging',
+				alias: 'v',
+			}),
+		)
+		.optional(),
+	docker_check: zod
+		.string()
+		.describe(option({description: 'Verify Docker is running', alias: 'dc'}))
+		.optional(),
+});
+
+type Props = {
+	options: zod.infer<typeof options>;
+};
 
 function isDockerRunning() {
 	try {
 		spawn('docker', ['info']);
 		return true;
-	} catch (error) {
+	} catch {
 		return false;
 	}
 }
 
-export const description = 'Starts the development environment';
-
-export default function Start() {
+export default function Start({options}: Props) {
 	const [loading, setLoading] = useState(false);
 	useEffect(() => {
 		async function start() {
@@ -27,7 +59,7 @@ export default function Start() {
 				cwd: CONFIG_DIR,
 			});
 
-			if (!isDockerRunning()) {
+			if (options?.docker_check && !isDockerRunning()) {
 				console.log('⚠️ Docker is not running. Please start it and try again.');
 				return;
 			}
@@ -41,6 +73,11 @@ export default function Start() {
 			spawn('docker-compose', ['-f', 'docker-compose.dev.yml', 'up', '-d'], {
 				cwd: path.join(CONFIG_DIR, folderName),
 				stdio: 'inherit',
+				env: {
+					...process.env,
+					API_PORT: String(options?.port || 3000),
+					ENABLE_VERBOSE_LOGGING: options?.verbose || 'false',
+				},
 			});
 
 			console.log('🖥️  Opening Browser...');

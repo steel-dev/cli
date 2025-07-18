@@ -1,4 +1,3 @@
-//@ts-nocheck
 import React, {useState} from 'react';
 import PostDashboard from './postdashboard.js';
 import GetDashboard from './getdashboard.js';
@@ -58,7 +57,7 @@ export default function ApiDashboard({
 			method,
 			endpoint,
 			resultObject,
-			contentType,
+			// contentType,
 		});
 		return (
 			<GetDashboard

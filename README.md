@@ -1,33 +1,36 @@
-# steel-cli
+# @steel-dev/cli
 
 The CLI for Steel.dev
 
 ## Install
 
+Requires Node 18+
+To run the Typescript examples, ensure that you have `ts-node` installed globally.
+
 ```bash
-$ npm install --global steel-cli
+$ npm i @steel-dev/cli -g
 ```
 
 ## CLI
 
 ```
-$ steel-cli --help
+$ steel --help
 
-Usage: steel-cli [options] [command]
+Usage: steel [options] [command]
 
 Options:
   -v, --version                                       Show version number
   -h, --help                                          Show help
 
 Commands:
-  cookbook [directory to scaffold new steel project]  Start a new project using the Steel CLI
+  forge [directory to scaffold new Steel project]     Start a new project using the Steel CLI
+  run [example Steel project to run]                  Run a Steel project
   files                                               Files Endpoint
-  integrate                                           Integrates the Steel CLI into your project
   login                                               Login to Steel CLI
   logout                                              Logout from Steel CLI
   sessions                                            Sessions Endpoint
-  start                                               Starts the development environment
-  stop                                                Stops the development server
+  browser start                                       Starts the development environment
+  browser stop                                        Stops the development server
   tools                                               Tools Endpoint
   help [command]                                      Show help for command
 ```

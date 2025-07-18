@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import {spawn} from 'node:child_process';
 
 export function copyDir(srcDir: string, destDir: string) {
 	fs.mkdirSync(destDir, {recursive: true});
@@ -58,18 +59,27 @@ export function updateEnvVariable(
 ) {
 	const envPath = path.resolve(directory, '.env');
 
-	let envContent = fs.readFileSync(envPath, 'utf8');
+	const envContent = fs.readFileSync(envPath, 'utf8');
 	const lines = envContent.split('\n');
 
 	let keyFound = false;
 	const updatedLines = lines.map(line => {
+		// if line is empty or starts with a comment or new value is empty, don't update it
 		if (!line.trim() || line.trim().startsWith('#')) {
 			return line;
 		}
-
 		const [currentKey] = line.split('=');
 		if (currentKey === key) {
 			keyFound = true;
+			if (newValue.trim() === '') return line;
+			// if new value has spaces, wrap it in quotes
+			if (newValue.includes(' ')) {
+				newValue = `"${newValue}"`;
+			}
+			// if new value has special characters, escape them
+			if (newValue.includes('\\')) {
+				newValue = newValue.replace(/\\/g, '\\\\');
+			}
 			return `${key}=${newValue}`;
 		}
 		return line;
@@ -80,4 +90,26 @@ export function updateEnvVariable(
 	}
 
 	fs.writeFileSync(envPath, updatedLines.join('\n'));
+}
+
+export function runCommand(command: string, cwd: string): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, {
+			cwd,
+			shell: true,
+			stdio: 'ignore', // show output
+		});
+
+		child.on('exit', code => {
+			if (code === 0) {
+				resolve();
+			} else {
+				reject(new Error(`Process exited with code ${code}`));
+			}
+		});
+
+		child.on('error', err => {
+			reject(err);
+		});
+	});
 }

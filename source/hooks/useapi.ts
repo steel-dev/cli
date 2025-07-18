@@ -12,8 +12,8 @@ export function useApi({
 	method,
 	endpoint,
 	resultObject,
-}: Props): [boolean, any[], Error | null] {
-	const [data, setData] = useState<any[]>([]);
+}: Props): [boolean, object[], Error | null] {
+	const [data, setData] = useState<object[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
 	const [error, setError] = useState<Error | null>(null);
 
