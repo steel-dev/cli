@@ -1,16 +1,18 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import {Task} from 'ink-task-list';
 import {TEMPLATES} from '../../utils/constants.js';
-import SelectInput from 'ink-select-input';
+import TemplatePicker from '../templatepicker.js';
 import {useTask} from '../../hooks/usetask.js';
 import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
 import type {Template} from '../../utils/types.js';
 import {Args} from '../../commands/forge.js';
+import {Text} from 'ink';
 
 export default function Template({args}: {args: Args}) {
 	const [state, task, , , setTask, setLoading] = useTask();
 	const {step, setStep, setTemplate} = useForgeStep();
+	const [label, setLabel] = useState('Select template');
 
 	useEffect(() => {
 		if (step === 'template' && args?.length > 0 && !task) {
@@ -25,8 +27,9 @@ export default function Template({args}: {args: Args}) {
 			);
 			if (found) {
 				const template = found;
-				setTask(template);
+				setTask(true);
 				setTemplate(template);
+				setLabel(`You selected: ${template.alias} (${template.language})`);
 				setStep('packagemanager');
 			} else if (templateArg) {
 				console.log(`Template "${templateArg}" not found.`);
@@ -38,17 +41,22 @@ export default function Template({args}: {args: Args}) {
 
 	return (
 		<Task
-			label="Select template"
+			label={label}
 			state={state}
 			spinner={spinners.dots}
 			isExpanded={step === 'template' && !task}
 		>
-			<SelectInput
-				items={TEMPLATES}
-				onSelect={item => {
-					const template = item as Template;
-					setTask(template);
+			<TemplatePicker
+				templates={TEMPLATES}
+				onSelect={template => {
+					setTask(true);
 					setTemplate(template);
+					setLabel(
+						`You selected: ` +
+						// magenta color for alias and language
+						// (Ink <Text> not available in setLabel, so use ANSI escape codes)
+						`\x1b[35m${template.alias} (${template.language})\x1b[0m`
+					);
 					setStep('projectname');
 				}}
 			/>

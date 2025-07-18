@@ -26,6 +26,7 @@ export const TEMPLATES = [
 		alias: 'playwright-js',
 		label: 'Playwright',
 		value: 'steel-playwright-starter-js',
+		language: 'JS',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -43,6 +44,7 @@ export const TEMPLATES = [
 		alias: 'playwright',
 		label: 'Playwright + TypeScript',
 		value: 'steel-playwright-starter',
+		language: 'TS',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -69,6 +71,7 @@ export const TEMPLATES = [
 		alias: 'puppeteer-js',
 		label: 'Puppeteer',
 		value: 'steel-puppeteer-starter-js',
+		language: 'JS',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -86,6 +89,7 @@ export const TEMPLATES = [
 		alias: 'puppeteer',
 		value: 'steel-puppeteer-starter',
 		label: 'Puppeteer + TypeScript',
+		language: 'TS',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -112,6 +116,7 @@ export const TEMPLATES = [
 		alias: 'files',
 		value: 'steel-files-api-starter',
 		label: 'Playwright + Files API Starter in TypeScript',
+		language: 'TS',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -138,6 +143,7 @@ export const TEMPLATES = [
 		alias: 'creds',
 		value: 'steel-credentials-starter',
 		label: 'Playwright + Credentials API Starter in TypeScript',
+		language: 'TS',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -164,6 +170,7 @@ export const TEMPLATES = [
 		alias: 'oai-cua',
 		value: 'steel-oai-computer-use-starter',
 		label: 'Steel + OpenAI Computer Use + TypeScript',
+		language: 'TS',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
@@ -192,6 +199,7 @@ export const TEMPLATES = [
 		alias: 'magnitude',
 		value: 'steel-magnitude-starter',
 		label: 'Steel + Magnitude',
+		language: 'TS',
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', required: true},
@@ -220,6 +228,7 @@ export const TEMPLATES = [
 		alias: 'browser-use',
 		value: 'steel-browser-use-starter',
 		label: '(Python) Steel + Browser Use',
+		language: 'PY',
 		depCommands: (options: TemplateOptions) => [
 			`python3 -m venv ${options.depsDir}`,
 			`${options.depsDir}/bin/pip install -r requirements.txt`,
@@ -238,6 +247,7 @@ export const TEMPLATES = [
 		alias: 'oai-cua-py',
 		value: 'steel-oai-computer-use-python-starter',
 		label: '(Python) Steel + OpenAI Computer Use',
+		language: 'PY',
 		depCommands: (options: TemplateOptions) => [
 			`python3 -m venv ${options.depsDir}`,
 			`${options.depsDir}/bin/pip install -r requirements.txt`,
@@ -256,6 +266,7 @@ export const TEMPLATES = [
 		alias: 'playwright-py',
 		value: 'steel-playwright-python-starter',
 		label: '(Python) Steel + Playwright',
+		language: 'PY',
 		depCommands: (options: TemplateOptions) => [
 			`python3 -m venv ${options.depsDir}`,
 			`${options.depsDir}/bin/pip install -r requirements.txt`,
@@ -272,6 +283,7 @@ export const TEMPLATES = [
 		alias: 'selenium',
 		value: 'steel-selenium-starter',
 		label: '(Python) Steel + Selenium',
+		language: 'PY',
 		depCommands: (options: TemplateOptions) => [
 			`python3 -m venv ${options.depsDir}`,
 			`${options.depsDir}/bin/pip install -r requirements.txt`,

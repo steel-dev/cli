@@ -1,9 +1,10 @@
 import path from 'path';
-import React, {useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import {fileURLToPath} from 'url';
 import {Task} from 'ink-task-list';
+import {Text} from 'ink';
 import {TEMPLATES} from '../../utils/constants.js';
-import SelectInput from 'ink-select-input';
+import TemplatePicker from '../templatepicker.js';
 import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
@@ -15,7 +16,8 @@ const __dirname = path.dirname(__filename);
 
 export default function Template({args}: {args: Args}) {
 	const [state, task, , , setTask, setLoading] = useTask();
-	const {step, setStep, setTemplate, setDirectory} = useRunStep();
+	const {step, setStep, setTemplate, setDirectory, template} = useRunStep();
+
 	// Bypass selection if args are provided
 	useEffect(() => {
 		if (step === 'template' && args?.length > 0 && !task) {
@@ -30,7 +32,7 @@ export default function Template({args}: {args: Args}) {
 			);
 			if (found) {
 				const template = found;
-				setTask(template);
+				setTask(true);
 				setTemplate(template);
 				setDirectory(
 					path.resolve(__dirname, `../../examples/${template.value}/`),
@@ -44,25 +46,29 @@ export default function Template({args}: {args: Args}) {
 		}
 	}, [args, task]);
 
+	// Compute label based on current state
+	const label = template
+		? `You selected: \x1b[35m${template.alias} (${template.language})\x1b[0m`
+		: 'Select template';
+
 	// Skip UI if task is already set (from args)
 	// Return complete task for viewer
 	return (
 		<Task
-			label="Select template"
+			label={label}
 			state={state}
 			spinner={spinners.dots}
 			isExpanded={step === 'template' && !task}
 		>
-			<SelectInput
-				items={TEMPLATES}
-				onSelect={item => {
-					const template = item as Template;
-					setTask(template);
+			<TemplatePicker
+				templates={TEMPLATES}
+				onSelect={template => {
+					setTask(true);
 					setTemplate(template);
 					setDirectory(
 						path.resolve(__dirname, `../../examples/${template.value}/`),
 					);
-					setStep('directory');
+					setStep('envvar');
 				}}
 			/>
 		</Task>
