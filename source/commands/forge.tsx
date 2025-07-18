@@ -28,6 +28,15 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	api_url: zod
+		.string()
+		.describe(
+			option({
+				description: 'API URL for Steel API',
+				alias: 'a',
+			}),
+		)
+		.optional(),
 	api_key: zod
 		.string()
 		.describe(

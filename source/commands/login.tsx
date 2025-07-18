@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck
+
 import React, {ReactElement} from 'react';
 import {Box, Text} from 'ink';
-import fs from 'fs';
+import fs from 'fs/promises';
 import * as http from 'http';
 import * as url from 'url';
 import * as crypto from 'crypto';
@@ -14,6 +13,7 @@ import {
 	CONFIG_DIR,
 	CONFIG_PATH,
 	SUCCESS_URL,
+	TARGET_API_PATH,
 	// SUCCESS_HTML,
 } from '../utils/constants.js';
 import open from 'open';
@@ -94,80 +94,78 @@ export default function Login(): ReactElement {
 	);
 }
 
-function loginFlow() {
-	return new Promise<{apiKey: string | null; name: string | null}>(
-		(resolve, reject) => {
-			const state = crypto.randomBytes(16).toString('hex');
-			//@ts-expect-error server needs to be let, but complains that it can be const
-			let server: http.Server;
+async function loginFlow(): Promise<{
+	apiKey: string | null;
+	name: string | null;
+} | null> {
+	return new Promise((resolve, reject) => {
+		const state = crypto.randomBytes(16).toString('hex');
+		let server: http.Server;
 
-			const timeout = setTimeout(() => {
-				server?.close();
-				reject(new Error('Login timed out. Please try again.'));
-			}, LOGIN_TIMEOUT);
+		const timeout = setTimeout(() => {
+			server?.close();
+			reject(new Error('Login timed out. Please try again.'));
+		}, LOGIN_TIMEOUT);
 
-			server = http.createServer((req, res) => {
-				const {query} = url.parse(req.url ?? '', true);
-				console.log(query);
+		server = http.createServer(async (req, res) => {
+			const parsedUrl = new url.URL(req.url ?? '');
+			const query = parsedUrl.searchParams;
 
-				if (query.state !== state) {
-					res.writeHead(400, {'Content-Type': 'text/plain'});
-					res.end('Error: Invalid state parameter. Authentication failed.');
-					reject(new Error('Invalid state parameter. Possible CSRF attack.'));
-					return;
-				}
+			if (query['state'] !== state) {
+				res.writeHead(400, {'Content-Type': 'text/plain'});
+				res.end('Error: Invalid state parameter. Authentication failed.');
+				reject(new Error('Invalid state parameter. Possible CSRF attack.'));
+				return;
+			}
 
-				const jwt = query.jwt as string;
-				if (!jwt) {
-					res.writeHead(400, {'Content-Type': 'text/plain'});
-					res.end('Error: JWT not found in callback.');
-					reject(new Error('Callback did not include a JWT.'));
-					return;
-				}
+			const jwt = query['jwt'] as string;
+			if (!jwt) {
+				res.writeHead(400, {'Content-Type': 'text/plain'});
+				res.end('Error: JWT not found in callback.');
+				reject(new Error('Callback did not include a JWT.'));
+				return;
+			}
 
-				res.writeHead(302, {Location: SUCCESS_URL});
-				res.end();
+			res.writeHead(302, {Location: SUCCESS_URL});
+			res.end();
 
+			clearTimeout(timeout);
+			server.close();
+
+			try {
+				const auth = await getApiKeyFromJWT(jwt);
+				resolve(auth);
+			} catch (error) {
+				reject(error);
+			}
+		});
+
+		server.listen(0, '127.0.0.1', async () => {
+			const {port} = server.address() as AddressInfo;
+
+			const authUrl = new URL(LOGIN_URL);
+			authUrl.searchParams.set('cli_redirect', 'true');
+			authUrl.searchParams.set('port', port.toString());
+			authUrl.searchParams.set('state', state);
+
+			console.log('Opening your browser for authentication...');
+			console.log('If it does not open automatically, please click:');
+			console.log(authUrl.toString());
+
+			try {
+				await open(authUrl.toString());
+			} catch {
+				server.close();
 				clearTimeout(timeout);
-				server.close(() => {
-					console.log('Local callback server shut down.');
-				});
-				try {
-					const auth = getApiKeyFromJWT(jwt);
-					resolve(auth);
-				} catch (error) {
-					reject(error);
-				}
-			});
+				reject(new Error('Failed to open browser'));
+			}
+		});
 
-			server.listen(0, '127.0.0.1', async () => {
-				const {port} = server.address() as AddressInfo;
-				console.log(`Local callback server listening on port ${port}...`);
-
-				const authUrl = new URL(LOGIN_URL);
-				authUrl.searchParams.set('cli_redirect', 'true');
-				authUrl.searchParams.set('port', port.toString());
-				authUrl.searchParams.set('state', state);
-
-				console.log('Opening your browser for authentication...');
-				console.log('If it does not open automatically, please click:');
-				console.log(authUrl.toString());
-
-				try {
-					open(authUrl.toString());
-				} catch {
-					server.close();
-					clearTimeout(timeout);
-					reject(new Error('Failed to open browser'));
-				}
-			});
-
-			server.on('error', err => {
-				clearTimeout(timeout);
-				reject(err);
-			});
-		},
-	);
+		server.on('error', err => {
+			clearTimeout(timeout);
+			reject(err);
+		});
+	});
 }
 
 async function getApiKeyFromJWT(jwt: string): Promise<{
@@ -213,7 +211,7 @@ async function saveApiKey(apiKey: string, name: string): Promise<void> {
 		await fs.mkdir(CONFIG_DIR, {recursive: true});
 
 		// Read existing config or create a new one
-		let config: object = {};
+		let config: Record<string, string> = {};
 		try {
 			const existingConfig = await fs.readFile(CONFIG_PATH, 'utf-8');
 			config = JSON.parse(existingConfig);
