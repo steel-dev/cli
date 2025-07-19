@@ -7,7 +7,6 @@ import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
 import type {Template} from '../../utils/types.js';
 import {Args} from '../../commands/forge.js';
-import {Text} from 'ink';
 
 export default function Template({args}: {args: Args}) {
 	const [state, task, , , setTask, setLoading] = useTask();
