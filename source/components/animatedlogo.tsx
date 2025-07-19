@@ -2,7 +2,6 @@
 
 import React, {useState, useEffect} from 'react';
 import {Box, Text} from 'ink';
-import Link from 'ink-link';
 
 // The static ASCII logo that will remain fixed
 const logoLines = [
@@ -109,32 +108,5 @@ export default function AnimatedLogo() {
 			return <Box key={rowIndex}>{renderedRow}</Box>;
 		});
 
-	return (
-		<Box flexDirection="column">
-			{renderAnimatedLogo()}
-			<Box marginTop={1}>
-				<Text color="cyan">Humans use Chrome, Agents use Steel.</Text>
-			</Box>
-			<Box>
-				<Text color="blue">
-					Steel is an open-source browser API purpose-built for AI agents.
-				</Text>
-			</Box>
-			<Box>
-				<Text color="blue">
-					Give one or 1,000 agents the ability to interact with any website.
-				</Text>
-			</Box>
-			<Box>
-				<Link url="https://docs.steel.dev/">
-					<Text color="yellow">Documentation</Text>
-				</Link>
-			</Box>
-			<Box>
-				<Link url="https://github.com/steel-dev/steel-browser">
-					<Text color="green">GitHub</Text>
-				</Link>
-			</Box>
-		</Box>
-	);
+	return renderAnimatedLogo();
 }

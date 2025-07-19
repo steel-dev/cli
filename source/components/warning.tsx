@@ -1,30 +1,28 @@
 import React from 'react';
 import {Box, Text} from 'ink';
 
-export default function Success({
+export function Warning({
 	title,
 	message,
 	details = [],
-	condition = false,
 }: {
 	title?: string;
 	message?: string;
 	details?: string[];
-	condition?: boolean;
 }) {
-	return condition ? (
+	return (
 		<Box flexDirection="column" marginTop={1} marginBottom={1}>
-			{/* Success Header */}
+			{/* Warning Header */}
 			<Box marginBottom={1}>
-				<Text bold color="green">
-					✅ {title || 'Success'}
+				<Text bold color="yellow">
+					⚠️ {title || 'Warning'}
 				</Text>
 			</Box>
 
 			{/* Main Message */}
 			{message && (
 				<Box paddingLeft={2} marginBottom={details.length > 0 ? 1 : 0}>
-					<Text color="green">{message}</Text>
+					<Text color="yellow">{message}</Text>
 				</Box>
 			)}
 
@@ -34,7 +32,7 @@ export default function Success({
 					{details.map((detail, index) => (
 						<Box key={index} paddingLeft={4} marginBottom={0}>
 							<Box width={2}>
-								<Text color="green">└─</Text>
+								<Text color="yellow">└─</Text>
 							</Box>
 							<Text>{detail}</Text>
 						</Box>
@@ -42,5 +40,5 @@ export default function Success({
 				</Box>
 			)}
 		</Box>
-	) : null;
+	);
 }

@@ -11,12 +11,15 @@ import {ForgeStepProvider} from '../context/forgestepcontext.js';
 import zod from 'zod';
 import {option} from 'pastel';
 import PackageManager from '../components/forge/packagemanager.js';
+import ForgeSuccess from '../components/forge/success.js';
 
 export const description = 'Start a new project using the Steel CLI';
 
 export const args = zod.tuple([
-	zod.string().describe('Example Project to start').optional(),
+	zod.string().describe('Example template to start').optional(),
 ]);
+
+export const argsLabels = ['template'];
 
 export const options = zod.object({
 	name: zod
@@ -70,6 +73,7 @@ export default function Forge({args, options}: Props) {
 				<Directory />
 				<EnvVar options={options} />
 				<Dependencies />
+				<ForgeSuccess />
 			</TaskList>
 		</ForgeStepProvider>
 	);

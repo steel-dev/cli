@@ -15,8 +15,10 @@ import {option} from 'pastel';
 export const description = 'Start a new project using the Steel CLI';
 
 export const args = zod.tuple([
-	zod.string().describe('Example Project to run').optional(),
+	zod.string().describe('Example template to run').optional(),
 ]);
+
+export const argsLabels = ['template'];
 
 export const options = zod.object({
 	api_url: zod

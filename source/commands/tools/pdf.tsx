@@ -3,6 +3,8 @@ import zod from 'zod';
 import {option} from 'pastel';
 import ApiDashboard from '../../components/apidashboard.js';
 
+export const description = 'Generate a PDF from a page';
+
 export const options = zod.object({
 	url: zod
 		.string()
