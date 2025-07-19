@@ -9,16 +9,13 @@ import * as crypto from 'crypto';
 import type {AddressInfo} from 'net';
 import open from 'open';
 import {
-	SIGN_IN_URL,
+	LOGIN_URL,
 	SUCCESS_URL,
 	TARGET_API_PATH,
 	CONFIG_DIR,
 	CONFIG_PATH,
-	SUCCESS_URL,
-	TARGET_API_PATH,
 	// SUCCESS_HTML,
 } from '../utils/constants.js';
-import open from 'open';
 import {getApiKey} from '../utils/session.js';
 
 type AuthState = {
@@ -145,7 +142,7 @@ async function loginFlow(): Promise<{
 		server.listen(0, '127.0.0.1', async () => {
 			const {port} = server.address() as AddressInfo;
 
-			const authUrl = new URL(SIGN_IN_URL);
+			const authUrl = new URL(LOGIN_URL);
 			authUrl.searchParams.set('cli_redirect', 'true');
 			authUrl.searchParams.set('port', port.toString());
 			authUrl.searchParams.set('state', state);
