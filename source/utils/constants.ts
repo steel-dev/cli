@@ -2,7 +2,7 @@ import path from 'path';
 import os from 'os';
 import type {TemplateOptions} from './types.js';
 
-export const SIGN_IN_URL = 'https://app.steel.dev/sign-in';
+// export const SIGN_IN_URL = 'https://app.steel.dev/sign-in';
 // export const SUCCESS_URL = 'https://app.steel.dev/sign-in/cli-success';
 // export const TARGET_API_PATH = 'https://api.steel.dev/v1/api-keys';
 // export const API_PATH = 'https://api.steel.dev/v1';
@@ -15,11 +15,6 @@ export const CACHE_DIR = path.join(os.homedir(), '.cache', 'steel');
 export const REPO_URL = 'https://github.com/steel-dev/steel-browser.git';
 // export const LOGIN_URL = 'https://app.steel.dev/sign-in';
 export const LOGIN_URL = 'https://cowboys.steel.dev/sign-in';
-// export const SUCCESS_URL = 'https://app.steel.dev/sign-in/cli-success';
-// export const TARGET_API_PATH = 'https://api.steel.dev/v1/api-keys';
-// export const API_PATH = 'https://api.steel.dev/v1';
-// export const LOCAL_API_PATH = 'http://localhost:3000/v1';
-
 export const SUCCESS_URL = 'https://cowboys.steel.dev/sign-in/cli-success';
 export const TARGET_API_PATH = 'https://steel-api-staging.fly.dev/v1/api-keys';
 export const API_PATH = 'https://steel-api-staging.fly.dev/v1';
