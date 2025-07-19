@@ -23,10 +23,10 @@ export default function Callout({variant, title, children}: CalloutProps) {
 		variant === 'success'
 			? figures.tick
 			: variant === 'failed'
-			? figures.cross
-			: variant === 'warning'
-			? figures.warning
-			: figures.info;
+				? figures.cross
+				: variant === 'warning'
+					? figures.warning
+					: figures.info;
 
 	// The label area: icon + label, with padding on the right, all on one background
 	return (
@@ -42,21 +42,15 @@ export default function Callout({variant, title, children}: CalloutProps) {
 				{/* Icon + label + right padding, all on one background */}
 				<Text backgroundColor={border} color="black" bold>
 					{' '}
-					{icon} {label}
-					{' '}
+					{icon} {label}{' '}
 				</Text>
 				{/* Title, separated by a space, not on colored background */}
-				{title && (
-					<Text bold>
-						{' '}
-						{title}
-					</Text>
-				)}
+				{title && <Text bold> {title}</Text>}
 			</Box>
 			{/* Add a blank line between the header and the message */}
 			{children && (
 				<>
-					<Text>{' '}</Text>
+					<Text> </Text>
 					<Text color="gray">
 						{typeof children === 'string'
 							? children
@@ -83,8 +77,7 @@ export default function Callout({variant, title, children}: CalloutProps) {
 														color="white"
 													>
 														{' '}
-														{codeMatch[1]}
-														{' '}
+														{codeMatch[1]}{' '}
 													</Text>
 												);
 											}
