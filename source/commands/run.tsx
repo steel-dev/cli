@@ -70,7 +70,7 @@ type Props = {
 	options: Options;
 };
 
-export default function Cookbook({args, options}: Props) {
+export default function Cookbook({args}: Props) {
 	return (
 		<RunStepProvider>
 			<TaskList>

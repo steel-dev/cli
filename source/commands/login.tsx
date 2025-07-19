@@ -3,14 +3,16 @@
 // @ts-nocheck
 import React, {ReactElement} from 'react';
 import {Box, Text} from 'ink';
-import fs from 'fs';
+import fs from 'fs/promises';
 import * as http from 'http';
 import * as url from 'url';
 import * as crypto from 'crypto';
 import type {AddressInfo} from 'net';
+import open from 'open';
 import {
-	LOGIN_URL,
-	LOGIN_TIMEOUT,
+	SIGN_IN_URL,
+	SUCCESS_URL,
+	TARGET_API_PATH,
 	CONFIG_DIR,
 	CONFIG_PATH,
 	SUCCESS_URL,
@@ -24,6 +26,8 @@ type AuthState = {
 	message: string;
 	apiKey?: string;
 };
+
+const LOGIN_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
 export const description = 'Login to Steel CLI';
 
@@ -41,7 +45,7 @@ export default function Login(): ReactElement {
 			if (config) {
 				setState({
 					status: 'success',
-					message: `You are already logged in with API Key: ${config.name}`,
+					message: `You are already logged in`,
 				});
 				return;
 			}
@@ -94,92 +98,91 @@ export default function Login(): ReactElement {
 	);
 }
 
-function loginFlow() {
-	return new Promise<{apiKey: string | null; name: string | null}>(
-		(resolve, reject) => {
-			const state = crypto.randomBytes(16).toString('hex');
-			//@ts-expect-error server needs to be let, but complains that it can be const
-			let server: http.Server;
+async function loginFlow(): Promise<{
+	apiKey: string | null;
+	name: string | null;
+} | null> {
+	return new Promise((resolve, reject) => {
+		const state = crypto.randomBytes(16).toString('hex');
 
-			const timeout = setTimeout(() => {
-				server?.close();
-				reject(new Error('Login timed out. Please try again.'));
-			}, LOGIN_TIMEOUT);
+		const server = http.createServer(async (req, res) => {
+			const {query} = url.parse(req.url ?? '', true);
 
-			server = http.createServer((req, res) => {
-				const {query} = url.parse(req.url ?? '', true);
-				console.log(query);
+			if (query['state'] !== state) {
+				res.writeHead(400, {'Content-Type': 'text/plain'});
+				res.end('Error: Invalid state parameter. Authentication failed.');
+				reject(new Error('Invalid state parameter. Possible CSRF attack.'));
+				return;
+			}
 
-				if (query.state !== state) {
-					res.writeHead(400, {'Content-Type': 'text/plain'});
-					res.end('Error: Invalid state parameter. Authentication failed.');
-					reject(new Error('Invalid state parameter. Possible CSRF attack.'));
-					return;
-				}
+			const jwt = query['jwt'] as string;
+			if (!jwt) {
+				res.writeHead(400, {'Content-Type': 'text/plain'});
+				res.end('Error: JWT not found in callback.');
+				reject(new Error('Callback did not include a JWT.'));
+				return;
+			}
 
-				const jwt = query.jwt as string;
-				if (!jwt) {
-					res.writeHead(400, {'Content-Type': 'text/plain'});
-					res.end('Error: JWT not found in callback.');
-					reject(new Error('Callback did not include a JWT.'));
-					return;
-				}
+			res.writeHead(302, {Location: SUCCESS_URL});
+			res.end();
 
-				res.writeHead(302, {Location: SUCCESS_URL});
-				res.end();
+			clearTimeout(timeout);
+			server.close();
 
+			try {
+				const auth = await createApiKeyUsingJWT(jwt);
+				resolve(auth);
+			} catch (error) {
+				reject(error);
+			}
+		});
+
+		const timeout = setTimeout(() => {
+			server?.close();
+			reject(new Error('Login timed out. Please try again.'));
+		}, LOGIN_TIMEOUT);
+
+		server.listen(0, '127.0.0.1', async () => {
+			const {port} = server.address() as AddressInfo;
+
+			const authUrl = new URL(SIGN_IN_URL);
+			authUrl.searchParams.set('cli_redirect', 'true');
+			authUrl.searchParams.set('port', port.toString());
+			authUrl.searchParams.set('state', state);
+
+			console.log('Opening your browser for authentication...');
+			console.log('If it does not open automatically, please click:');
+			console.log(authUrl.toString());
+
+			try {
+				await open(authUrl.toString());
+			} catch {
+				server.close();
 				clearTimeout(timeout);
-				server.close(() => {
-					console.log('Local callback server shut down.');
-				});
-				try {
-					const auth = getApiKeyFromJWT(jwt);
-					resolve(auth);
-				} catch (error) {
-					reject(error);
-				}
-			});
+				reject(new Error('Failed to open browser'));
+			}
+		});
 
-			server.listen(0, '127.0.0.1', async () => {
-				const {port} = server.address() as AddressInfo;
-				console.log(`Local callback server listening on port ${port}...`);
-
-				const authUrl = new URL(LOGIN_URL);
-				authUrl.searchParams.set('cli_redirect', 'true');
-				authUrl.searchParams.set('port', port.toString());
-				authUrl.searchParams.set('state', state);
-
-				console.log('Opening your browser for authentication...');
-				console.log('If it does not open automatically, please click:');
-				console.log(authUrl.toString());
-
-				try {
-					open(authUrl.toString());
-				} catch {
-					server.close();
-					clearTimeout(timeout);
-					reject(new Error('Failed to open browser'));
-				}
-			});
-
-			server.on('error', err => {
-				clearTimeout(timeout);
-				reject(err);
-			});
-		},
-	);
+		server.on('error', err => {
+			clearTimeout(timeout);
+			reject(err);
+		});
+	});
 }
 
-async function getApiKeyFromJWT(jwt: string): Promise<{
+async function createApiKeyUsingJWT(jwt: string): Promise<{
 	apiKey: string | null;
 	name: string | null;
 } | null> {
 	const response = await fetch(TARGET_API_PATH, {
-		method: 'GET',
+		method: 'POST',
 		headers: {
-			Authorization: `Bearer ${jwt}`,
 			'Content-Type': 'application/json',
+			Authorization: `Bearer ${jwt}`,
 		},
+		body: JSON.stringify({
+			name: 'CLI',
+		}),
 	});
 
 	if (!response.ok) {
@@ -188,23 +191,15 @@ async function getApiKeyFromJWT(jwt: string): Promise<{
 		);
 	}
 
-	const data = (await response.json()).apiKeys;
+	const data = await response.json();
 
-	if (Array.isArray(data) && data.length > 0) {
-		// TODO: add org selection
-		const apiKey = data[0];
-		return {
-			apiKey: apiKey.key || apiKey.id,
-			name: apiKey.name,
-		};
-	} else if (data.key && data.name) {
-		return {
-			apiKey: data.key,
-			name: data.name,
-		};
+	if (!data.key || !data.name) {
+		throw new Error('No API key found in response');
 	}
-
-	throw new Error('No API key found in response');
+	return {
+		apiKey: data.key,
+		name: data.name,
+	};
 }
 
 async function saveApiKey(apiKey: string, name: string): Promise<void> {
