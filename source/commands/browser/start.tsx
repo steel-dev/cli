@@ -7,6 +7,7 @@ import zod from 'zod';
 import {option} from 'pastel';
 import Spinner from 'ink-spinner';
 import {Text} from 'ink';
+import Callout from '../../components/callout.js';
 
 export const description = 'Starts the development environment';
 
@@ -51,22 +52,26 @@ function isDockerRunning() {
 
 export default function Start({options}: Props) {
 	const [loading, setLoading] = useState(false);
+	const [dockerError, setDockerError] = useState(false);
+	const [status, setStatus] = useState('');
+
 	useEffect(() => {
 		async function start() {
 			setLoading(true);
+			setStatus('Cloning repository...');
 
 			spawn('git', ['clone', REPO_URL], {
 				cwd: CONFIG_DIR,
 			});
 
 			if (options?.docker_check && !isDockerRunning()) {
-				console.log('⚠️ Docker is not running. Please start it and try again.');
+				setDockerError(true);
+				setLoading(false);
 				return;
 			}
 
+			setStatus('Starting Docker Compose...');
 			setLoading(false);
-
-			console.log('🚀 Starting Docker Compose...');
 
 			const folderName = path.basename(REPO_URL, '.git');
 
@@ -80,11 +85,33 @@ export default function Start({options}: Props) {
 				},
 			});
 
-			console.log('🖥️  Opening Browser...');
+			setStatus('Opening browser...');
 			await open('http://localhost:5173');
 		}
 		start();
 	}, []);
 
-	return <Text>{loading ? <Spinner type="dots" /> : null}</Text>;
+	if (dockerError) {
+		return (
+			<Callout variant="failed" title="Docker Not Running">
+				Docker is not running. Please start Docker and try again.
+			</Callout>
+		);
+	}
+
+	if (loading) {
+		return (
+			<Callout variant="info" title="Starting Development Environment">
+				<Text>
+					<Spinner type="dots" /> {status}
+				</Text>
+			</Callout>
+		);
+	}
+
+	return (
+		<Callout variant="success" title="Development Environment Started">
+			Browser opened at http://localhost:5173
+		</Callout>
+	);
 }

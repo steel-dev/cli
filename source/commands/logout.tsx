@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import {Box, Text} from 'ink';
+import {Box} from 'ink';
 import React, {ReactElement} from 'react';
 import fs from 'fs/promises';
+import Callout from '../components/callout.js';
 import {CONFIG_PATH} from '../utils/constants.js';
 
 type AuthState = {
@@ -55,12 +56,26 @@ export default function Logout(): ReactElement {
 
 	return (
 		<Box flexDirection="column">
-			<Text>
-				{state.status === 'pending' && '⏳ '}
-				{state.status === 'success' && '✅ '}
-				{state.status === 'error' && '🚫 '}
-				{state.message}
-			</Text>
+			{state.status === 'pending' && (
+				<Callout variant="info" title="Logout in Progress">
+					{state.message}
+				</Callout>
+			)}
+			{state.status === 'success' && (
+				<Callout variant="success" title="Logout Successful">
+					{state.message}
+				</Callout>
+			)}
+			{state.status === 'error' && (
+				<Callout variant="failed" title="Logout Failed">
+					{state.message}
+				</Callout>
+			)}
+			{state.status === 'idle' && (
+				<Callout variant="info" title="Starting Logout">
+					{state.message}
+				</Callout>
+			)}
 		</Box>
 	);
 }
