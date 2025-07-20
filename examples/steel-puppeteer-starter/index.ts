@@ -62,7 +62,7 @@ async function main() {
 		// Navigate to Hacker News
 		console.log('Navigating to Hacker News...');
 		await page.goto('https://news.ycombinator.com', {
-			waitUntil: 'networkidle0',
+			waitUntil: 'load',
 		});
 
 		// Extract the top 5 stories
