@@ -69,7 +69,7 @@ export const TEMPLATES = [
 				},
 			});
 
-			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
 	},
 	{
@@ -114,7 +114,7 @@ export const TEMPLATES = [
 				},
 			});
 
-			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
 	},
 	{
@@ -141,7 +141,7 @@ export const TEMPLATES = [
 				},
 			});
 
-			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
 	},
 	{
@@ -168,7 +168,7 @@ export const TEMPLATES = [
 				},
 			});
 
-			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
 	},
 	{
@@ -197,7 +197,7 @@ export const TEMPLATES = [
 				},
 			});
 
-			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
 	},
 	{
@@ -226,7 +226,7 @@ export const TEMPLATES = [
 				},
 			});
 
-			return `${nodePath} ts-node --compiler-options '${compilerOptions}' index.ts`;
+			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
 	},
 	{

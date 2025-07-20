@@ -71,7 +71,7 @@ async function main() {
 
 		//  Navigate to the demo website and wait for the page to load.
 		await page.goto('https://demo.testfire.net', {
-			waitUntil: 'networkidle',
+			waitUntil: 'load',
 		});
 
 		// Navigate to the login page
