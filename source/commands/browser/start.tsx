@@ -41,13 +41,16 @@ type Props = {
 	options: zod.infer<typeof options>;
 };
 
-function isDockerRunning() {
-	try {
-		spawn('docker', ['info']);
-		return true;
-	} catch {
-		return false;
-	}
+function isDockerRunning(): Promise<boolean> {
+	return new Promise(resolve => {
+		const isRunning = spawn('docker', ['info']);
+		isRunning.on('close', code => {
+			resolve(code === 0);
+		});
+		isRunning.on('error', () => {
+			resolve(false);
+		});
+	});
 }
 
 export default function Start({options}: Props) {
@@ -64,7 +67,8 @@ export default function Start({options}: Props) {
 				cwd: CONFIG_DIR,
 			});
 
-			if (options?.docker_check && !isDockerRunning()) {
+			const dockerRunning = await isDockerRunning();
+			if (!dockerRunning) {
 				setDockerError(true);
 				setLoading(false);
 				return;
@@ -75,18 +79,29 @@ export default function Start({options}: Props) {
 
 			const folderName = path.basename(REPO_URL, '.git');
 
-			spawn('docker-compose', ['-f', 'docker-compose.dev.yml', 'up', '-d'], {
-				cwd: path.join(CONFIG_DIR, folderName),
-				stdio: 'inherit',
-				env: {
-					...process.env,
-					API_PORT: String(options?.port || 3000),
-					ENABLE_VERBOSE_LOGGING: options?.verbose || 'false',
+			const dockerCompose = spawn(
+				'docker-compose',
+				['-f', 'docker-compose.dev.yml', 'up', '-d'],
+				{
+					cwd: path.join(CONFIG_DIR, folderName),
+					stdio: 'inherit',
+					env: {
+						...process.env,
+						API_PORT: String(options?.port || 3000),
+						ENABLE_VERBOSE_LOGGING: options?.verbose || 'false',
+					},
 				},
-			});
+			);
 
-			setStatus('Opening browser...');
-			await open('http://localhost:5173');
+			dockerCompose.on('close', async code => {
+				if (code !== 0) {
+					setDockerError(true);
+					setLoading(false);
+					return;
+				}
+				setStatus('Opening browser...');
+				await open('http://localhost:5173');
+			});
 		}
 		start();
 	}, []);
@@ -109,9 +124,19 @@ export default function Start({options}: Props) {
 		);
 	}
 
+	if (status === 'Opening browser...') {
+		return (
+			<Callout variant="success" title="Development Environment Started">
+				Browser opened at http://localhost:5173
+			</Callout>
+		);
+	}
+
 	return (
-		<Callout variant="success" title="Development Environment Started">
-			Browser opened at http://localhost:5173
+		<Callout variant="info" title="Starting Development Environment">
+			<Text>
+				<Spinner type="dots" /> {status}
+			</Text>
 		</Callout>
 	);
 }
