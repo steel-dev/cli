@@ -1,8 +1,19 @@
 import React from 'react';
 import {Box, Text} from 'ink';
 
-export default function CommandList({commands}) {
-	// Define which commands are API endpoints
+type Props = {
+	commands: Array<{
+		name: string;
+		description: string;
+		isDefault?: boolean;
+		options?: unknown;
+		args?: unknown;
+	}>;
+};
+
+export default function CommandList({commands}: Props) {
+	// Define command categories
+	const quickstartCommands = ['forge', 'run'];
 	const apiEndpoints = ['sessions', 'files', 'tools'];
 
 	// First, let's build a proper hierarchy
@@ -81,7 +92,12 @@ export default function CommandList({commands}) {
 		return result;
 	};
 
-	// Separate commands into API endpoints and others
+	// Separate commands into three categories
+	const quickstartCmds = commands.filter(cmd => {
+		const rootCommand = cmd.name.split(' ')[0];
+		return quickstartCommands.includes(rootCommand);
+	});
+
 	const apiCommands = commands.filter(cmd => {
 		const rootCommand = cmd.name.split(' ')[0];
 		return apiEndpoints.includes(rootCommand);
@@ -89,13 +105,18 @@ export default function CommandList({commands}) {
 
 	const otherCommands = commands.filter(cmd => {
 		const rootCommand = cmd.name.split(' ')[0];
-		return !apiEndpoints.includes(rootCommand);
+		return (
+			!quickstartCommands.includes(rootCommand) &&
+			!apiEndpoints.includes(rootCommand)
+		);
 	});
 
-	// Build hierarchies for both groups
+	// Build hierarchies for all three groups
+	const quickstartHierarchy = buildHierarchy(quickstartCmds);
 	const apiHierarchy = buildHierarchy(apiCommands);
 	const otherHierarchy = buildHierarchy(otherCommands);
 
+	const processedQuickstartCommands = flattenHierarchy(quickstartHierarchy);
 	const processedApiCommands = flattenHierarchy(apiHierarchy);
 	const processedOtherCommands = flattenHierarchy(otherHierarchy);
 
@@ -131,9 +152,23 @@ export default function CommandList({commands}) {
 
 	return (
 		<>
-			{processedApiCommands.length > 0 && (
+			{processedQuickstartCommands.length > 0 && (
 				<>
 					<Box marginBottom={1} marginTop={1}>
+						<Text bold color="yellow">
+							⚡ Quickstart Commands
+						</Text>
+					</Box>
+					{renderCommands(processedQuickstartCommands)}
+				</>
+			)}
+
+			{processedApiCommands.length > 0 && (
+				<>
+					<Box
+						marginBottom={1}
+						marginTop={processedQuickstartCommands.length > 0 ? 2 : 1}
+					>
 						<Text bold color="yellow">
 							🌐 API Endpoints
 						</Text>
@@ -146,10 +181,15 @@ export default function CommandList({commands}) {
 				<>
 					<Box
 						marginBottom={1}
-						marginTop={processedApiCommands.length > 0 ? 2 : 1}
+						marginTop={
+							processedQuickstartCommands.length > 0 ||
+							processedApiCommands.length > 0
+								? 2
+								: 1
+						}
 					>
 						<Text bold color="yellow">
-							⚡ Other Commands
+						⏺︎ Other Commands
 						</Text>
 					</Box>
 					{renderCommands(processedOtherCommands)}

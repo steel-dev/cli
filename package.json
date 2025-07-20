@@ -11,7 +11,8 @@
 	},
 	"scripts": {
 		"prepare": "husky",
-		"build": "tsc && npm run copy-examples",
+		"clean": "rm -rf dist",
+		"build": "npm run clean && tsc && npm run copy-examples",
 		"copy-examples": "cp -r examples dist/examples",
 		"dev": "tsc --watch",
 		"lint": "eslint . --ext .ts,.tsx",
