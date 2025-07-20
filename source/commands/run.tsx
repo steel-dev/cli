@@ -11,6 +11,7 @@ import BrowserOpener from '../components/run/browseropener.js';
 import BrowserRunner from '../components/run/browserrunner.js';
 import zod from 'zod';
 import {option} from 'pastel';
+import {getSettings} from '../utils/session.js';
 
 export const description = 'Start a new project using the Steel CLI';
 
@@ -76,6 +77,8 @@ type Props = {
 	options: Options;
 };
 
+const settings = getSettings();
+
 export default function Run({args, options}: Props) {
 	return (
 		<RunStepProvider>
@@ -83,9 +86,9 @@ export default function Run({args, options}: Props) {
 				<Template args={args} />
 				<EnvVar options={options} />
 				<Dependencies />
-				<BrowserRunner />
+				{settings.instance === 'local' && <BrowserRunner />}
 				<Runner options={options} />
-				<BrowserOpener options={options} />
+				{options.view && <BrowserOpener options={options} />}
 			</TaskList>
 		</RunStepProvider>
 	);
