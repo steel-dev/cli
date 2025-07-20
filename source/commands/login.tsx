@@ -216,6 +216,7 @@ async function saveApiKey(apiKey: string, name: string): Promise<void> {
 		// Update with new API key
 		config['apiKey'] = apiKey;
 		config['name'] = name;
+		config['instance'] = 'cloud';
 
 		// Save the updated config
 		await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
