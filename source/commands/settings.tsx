@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
-import React, {ReactElement, useState} from 'react';
+import React, {useState} from 'react';
 import {Form} from 'ink-form';
-import {Box, Text} from 'ink';
 import Callout from '../components/callout.js';
 import {getSettings, setSettings} from '../utils/session.js';
 
