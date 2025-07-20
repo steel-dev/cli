@@ -2,6 +2,7 @@
 
 import React from 'react';
 import {Box, Text} from 'ink';
+import Callout from '../components/callout.js';
 import {getApiKey, getSettings} from '../utils/session.js';
 
 export const description = 'Display information about the current session';
@@ -35,7 +36,9 @@ export default function Info() {
 						<Text>{`}`}</Text>
 					</Box>
 				) : (
-					<Text color="red">You are not logged in 🫠</Text>
+					<Callout variant="warning" title="Authentication Required">
+						You are not logged in. Please run `steel login` to authenticate.
+					</Callout>
 				)}
 				{settings ? (
 					<Box flexDirection="column">

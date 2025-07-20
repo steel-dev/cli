@@ -23,11 +23,14 @@ export default function Runner({options}: {options: Options}) {
 				const command = template.runCommand({
 					depsDir: path.join(CACHE_DIR, hash),
 				});
-				spawn(command, {
+				const child = spawn(command, {
 					cwd: directory,
 					shell: true,
 					stdio: 'inherit', // This will pipe stdout and stderr to the parent process
 					env: {...envVars, ...process.env},
+				});
+				process.on('SIGINT', () => {
+					child.kill();
 				});
 				setTask(`Command completed successfully: ${template.runCommand}`);
 				if (options.view) {

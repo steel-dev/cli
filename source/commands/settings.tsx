@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import React, {ReactElement, useState} from 'react';
+import React, {useState} from 'react';
 import {Form} from 'ink-form';
-import {Box, Text} from 'ink';
+import Callout from '../components/callout.js';
 import {getSettings, setSettings} from '../utils/session.js';
 
 export const description = 'Display current settings';
@@ -11,9 +11,9 @@ export default function Settings() {
 	const settings = getSettings();
 	const [sent, setSent] = useState(false);
 	return sent ? (
-		<Box>
-			<Text color="green">Settings saved!</Text>
-		</Box>
+		<Callout variant="success" title="Settings Updated">
+			Your settings have been saved successfully!
+		</Callout>
 	) : (
 		<Form
 			form={{

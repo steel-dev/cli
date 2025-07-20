@@ -41,7 +41,10 @@ export default function Dependencies() {
 							}
 						}
 					}
-					if (envVars['STEEL_API_URL']) {
+					if (
+						envVars['STEEL_API_URL'] &&
+						!envVars['STEEL_API_URL'].includes('api.steel.dev')
+					) {
 						setStep('browserrunner');
 					} else {
 						setStep('runner');

@@ -7,6 +7,7 @@ import {Box, Text} from 'ink';
 import Spinner from 'ink-spinner';
 import zod from 'zod';
 import {option} from 'pastel';
+import Callout from '../components/callout.js';
 import {CACHE_DIR} from '../utils/constants.js';
 
 export const description = 'Manage Steel CLI cache';
@@ -97,22 +98,28 @@ export default function Cache({options}: Props) {
 				<Text bold>Steel CLI Cache Manager</Text>
 			</Box>
 
-			<Box>
-				{status === 'cleaning' ? (
-					<>
-						<Text color="yellow">
-							<Spinner type="dots" />
-						</Text>
-						<Text> {message}</Text>
-					</>
-				) : status === 'done' ? (
-					<Text color="green">{message}</Text>
-				) : status === 'error' ? (
-					<Text color="red">{message}</Text>
-				) : (
-					<Text>{message}</Text>
-				)}
-			</Box>
+			{status === 'cleaning' && (
+				<Callout variant="info" title="Cleaning Cache">
+					<Text>
+						<Spinner type="dots" /> {message}
+					</Text>
+				</Callout>
+			)}
+			{status === 'done' && (
+				<Callout variant="success" title="Cache Cleaned">
+					{message}
+				</Callout>
+			)}
+			{status === 'error' && (
+				<Callout variant="failed" title="Cache Error">
+					{message}
+				</Callout>
+			)}
+			{status === 'idle' && (
+				<Callout variant="info" title="Cache Status">
+					{message}
+				</Callout>
+			)}
 
 			{status === 'done' && deletedItems.length > 0 && (
 				<Box flexDirection="column" marginTop={1}>

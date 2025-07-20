@@ -189,7 +189,7 @@ export default function CommandList({commands}: Props) {
 						}
 					>
 						<Text bold color="yellow">
-						⏺︎ Other Commands
+							⏺︎ Other Commands
 						</Text>
 					</Box>
 					{renderCommands(processedOtherCommands)}
