@@ -8,7 +8,7 @@ import Help from './components/help.js';
 // Check if help flag is provided
 const helpFlag = process.argv.includes('--help') || process.argv.includes('-h');
 const args = process.argv.slice(2).filter(arg => !arg.startsWith('-'));
-const command = args.length > 0 ? args[0] : '';
+const command = args.length > 0 ? args.join(' ') : '';
 
 if (helpFlag || !command) {
 	const {waitUntilExit} = render(<Help command={command} />);

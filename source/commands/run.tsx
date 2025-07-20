@@ -9,6 +9,7 @@ import Dependencies from '../components/run/dependencies.js';
 import {RunStepProvider} from '../context/runstepcontext.js';
 import BrowserOpener from '../components/run/browseropener.js';
 import BrowserRunner from '../components/run/browserrunner.js';
+import CLIWelcomeMessage from '../components/cliwelcomemessage.js';
 import zod from 'zod';
 import {option} from 'pastel';
 
@@ -79,6 +80,7 @@ type Props = {
 export default function Cookbook({args, options}: Props) {
 	return (
 		<RunStepProvider>
+			<CLIWelcomeMessage />
 			<TaskList>
 				<Template args={args} />
 				<EnvVar options={options} />
