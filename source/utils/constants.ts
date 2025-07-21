@@ -34,7 +34,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) =>
 			`NODE_PATH=${options.depsDir}/node_modules node index.js`,
@@ -52,7 +52,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -79,7 +79,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) =>
 			`NODE_PATH=${options.depsDir}/node_modules node index.js`,
@@ -97,7 +97,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -124,7 +124,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -151,7 +151,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -180,7 +180,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -209,7 +209,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
