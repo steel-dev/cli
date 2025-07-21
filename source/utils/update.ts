@@ -113,8 +113,7 @@ function readUpdateCache(): UpdateCache | null {
 		}
 		const cacheData = fs.readFileSync(UPDATE_CACHE_FILE, 'utf8');
 		return JSON.parse(cacheData);
-	} catch (error) {
-		console.debug('Could not read update cache:', error);
+	} catch {
 		return null;
 	}
 }
@@ -129,8 +128,8 @@ function writeUpdateCache(cache: UpdateCache): void {
 			fs.mkdirSync(CONFIG_DIR, {recursive: true});
 		}
 		fs.writeFileSync(UPDATE_CACHE_FILE, JSON.stringify(cache, null, 2));
-	} catch (error) {
-		console.debug('Could not write update cache:', error);
+	} catch {
+		// Do nothing
 	}
 }
 

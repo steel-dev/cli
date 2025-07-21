@@ -168,9 +168,6 @@ if (!skipUpdateCheck) {
 	const {waitUntilExit} = render(<UpdateProgress />);
 	await waitUntilExit();
 } else {
-	// Skip update check and run Pastel directly
-	console.debug('Skipping update check for command:', command);
-
 	// Filter out global flags and update process.argv
 	const originalArgv = process.argv;
 	process.argv = [
