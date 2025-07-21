@@ -7,10 +7,12 @@ import spinners from 'cli-spinners';
 import {spawn} from 'child_process';
 import {CACHE_DIR} from '../../utils/constants.js';
 import type {Options} from '../../commands/run.js';
+import open from 'open';
 
 export default function Runner({options}: {options: Options}) {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
-	const {step, setStep, envVars, template, directory, hash} = useRunStep();
+	const {step, setStep, envVars, template, directory, hash, sessionId} =
+		useRunStep();
 	const [output, setOutput] = useState<string>('');
 
 	useEffect(() => {
@@ -38,6 +40,22 @@ export default function Runner({options}: {options: Options}) {
 				child.stdout?.on('data', data => {
 					const text = data.toString();
 					setOutput(prev => prev + text);
+					if (
+						(output + text).includes('Steel Session created!') &&
+						options.view
+					) {
+						try {
+							// Determine URL based on sessionId - use local default if no sessionId provided
+							const url = sessionId
+								? `https://app.steel.dev/sessions/${sessionId}`
+								: 'http://localhost:5173';
+
+							open(url);
+						} catch {
+							setError('Error opening browser');
+							setLoading(false);
+						}
+					}
 				});
 
 				// Stream stderr to output state
@@ -49,11 +67,7 @@ export default function Runner({options}: {options: Options}) {
 				child.on('close', code => {
 					if (code === 0) {
 						setTask(`Command completed successfully: ${template.runCommand}`);
-						if (options.view) {
-							setStep('browser');
-						} else {
-							setStep('done');
-						}
+						setStep('done');
 					} else {
 						console.log(output);
 						setError(`Command failed with exit code ${code}`);
