@@ -2,22 +2,16 @@ import path from 'path';
 import os from 'os';
 import type {TemplateOptions} from './types.js';
 
-// export const SIGN_IN_URL = 'https://app.steel.dev/sign-in';
-// export const SUCCESS_URL = 'https://app.steel.dev/sign-in/cli-success';
-// export const TARGET_API_PATH = 'https://api.steel.dev/v1/api-keys';
-// export const API_PATH = 'https://api.steel.dev/v1';
+export const LOGIN_URL = 'https://app.steel.dev/sign-in';
+export const SIGN_IN_URL = 'https://app.steel.dev/sign-in';
+export const SUCCESS_URL = 'https://app.steel.dev/sign-in/cli-success';
+export const TARGET_API_PATH = 'https://api.steel.dev/v1/api-keys';
+export const API_PATH = 'https://api.steel.dev/v1';
 export const LOCAL_API_PATH = 'http://localhost:3000/v1';
 export const CONFIG_DIR = path.join(os.homedir(), '.config', 'steel');
 export const CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 export const CACHE_DIR = path.join(os.homedir(), '.cache', 'steel');
-// export const NODE_MODULES_DIR = path.join(CACHE_DIR, 'node_modules');
-// export const PYTHON_VENV_DIR = path.join(CACHE_DIR, 'venvs');
 export const REPO_URL = 'https://github.com/steel-dev/steel-browser.git';
-// export const LOGIN_URL = 'https://app.steel.dev/sign-in';
-export const LOGIN_URL = 'https://cowboys.steel.dev/sign-in';
-export const SUCCESS_URL = 'https://cowboys.steel.dev/sign-in/cli-success';
-export const TARGET_API_PATH = 'https://steel-api-staging.fly.dev/v1/api-keys';
-export const API_PATH = 'https://steel-api-staging.fly.dev/v1';
 export const LOGIN_TIMEOUT = 1 * 60 * 1000; // 5 mins
 export const ENV_VAR_MAP = {
 	api_key: 'STEEL_API_KEY',
@@ -40,7 +34,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) =>
 			`NODE_PATH=${options.depsDir}/node_modules node index.js`,
@@ -58,7 +52,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -85,7 +79,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) =>
 			`NODE_PATH=${options.depsDir}/node_modules node index.js`,
@@ -103,7 +97,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -130,7 +124,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -157,7 +151,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -186,7 +180,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;
@@ -215,7 +209,7 @@ export const TEMPLATES = [
 		depCommands: (options: TemplateOptions) => [
 			`mkdir -p ${options.depsDir}`,
 			`cp package.json ${options.depsDir}/package.json`,
-			`cd ${options.depsDir} && npm install --prefer-offline --no-audit --silent`,
+			`cd ${options.depsDir} && npm install --no-audit --silent`,
 		],
 		runCommand: (options: TemplateOptions) => {
 			const nodePath = `NODE_PATH=${options.depsDir}/node_modules`;

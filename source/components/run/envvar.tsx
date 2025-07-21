@@ -1,6 +1,4 @@
 import React, {useEffect, useState} from 'react';
-import path from 'path';
-import fs from 'fs';
 import {v4 as uuidv4} from 'uuid';
 import {Box, Text} from 'ink';
 import TextInput from 'ink-text-input';
@@ -13,15 +11,8 @@ import {useTask} from '../../hooks/usetask.js';
 import type {Options} from '../../commands/run.js';
 
 export default function EnvVar({options}: {options: Options}) {
-	const {
-		step,
-		setStep,
-		template,
-		envVars,
-		setEnvVars,
-		directory,
-		setSessionId,
-	} = useRunStep();
+	const {step, setStep, template, envVars, setEnvVars, setSessionId} =
+		useRunStep();
 	const [state, task, , , setTask, setLoading, setError] = useTask();
 	// Manage interactive input state
 	const [inputValue, setInputValue] = useState('');
@@ -52,30 +43,22 @@ export default function EnvVar({options}: {options: Options}) {
 				if (apiKey) {
 					curEnvVars['STEEL_API_KEY'] = apiKey.apiKey;
 				}
-				// console.log('cur:', curEnvVars);
-				const envExamplePath = path.join(directory, '.env.example');
-				if (fs.existsSync(envExamplePath)) {
-					for (const [key, envVar] of Object.entries(ENV_VAR_MAP)) {
-						// console.log('Key:', key, 'Value:', envVar);
-						if (key in options) {
-							curEnvVars[envVar] = String(options[key]);
-							// Special case: set CONNECT_URL if api-url exists
-							if (key === 'api_url') {
-								curEnvVars['STEEL_CONNECT_URL'] =
-									'ws:' + options[key].split(':')[1];
-							}
-							// console.log('cur:', curEnvVars);
+				for (const [key, envVar] of Object.entries(ENV_VAR_MAP)) {
+					if (key in options) {
+						curEnvVars[envVar] = String(options[key]);
+						if (key === 'api_url') {
+							curEnvVars['STEEL_CONNECT_URL'] =
+								'ws:' + options[key].split(':')[1];
 						}
 					}
-					const remaining = pendingVars.slice(1);
-					setPendingVars(remaining);
-					// If api-url not provided, create a session ID
-					if (!('api_url' in options)) {
-						const sessionId = uuidv4();
-						setSessionId(sessionId);
-						curEnvVars['STEEL_SESSION_ID'] = sessionId;
-					}
-					fs.unlinkSync(envExamplePath);
+				}
+				const remaining = pendingVars.slice(1);
+				setPendingVars(remaining);
+				// If api-url not provided, create a session ID
+				if (!('api_url' in options)) {
+					const sessionId = uuidv4();
+					setSessionId(sessionId);
+					curEnvVars['STEEL_SESSION_ID'] = sessionId;
 				}
 				// console.log(curEnvVars);
 				// Calculate which vars we still need after setup
@@ -104,7 +87,13 @@ export default function EnvVar({options}: {options: Options}) {
 	const handleInputSubmit = val => {
 		if (pendingVars.length === 0) return;
 		const currentVar = pendingVars[0];
-		const updatedEnvVars = {...envVars, [currentVar.value]: val};
+		const updatedEnvVars = {
+			...envVars,
+			[currentVar.value]:
+				currentVar.value === 'STEEL_API_URL' && val === ''
+					? 'https://api.steel.dev'
+					: val,
+		};
 		setEnvVars(updatedEnvVars);
 		const remaining = pendingVars.slice(1);
 		setPendingVars(remaining);
@@ -137,7 +126,11 @@ export default function EnvVar({options}: {options: Options}) {
 							value={inputValue}
 							onChange={setInputValue}
 							onSubmit={handleInputSubmit}
-							placeholder="Your value here..."
+							placeholder={
+								currentPromptVar.value === 'STEEL_API_URL'
+									? 'https://api.steel.dev'
+									: 'Your value here...'
+							}
 						/>
 					</>
 				)}
