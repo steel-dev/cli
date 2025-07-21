@@ -178,7 +178,7 @@ export default function Start({options}: Props) {
 		return (
 			<Callout variant="info" title="Starting Development Environment">
 				<Text>
-					<Spinner type="dots" /> {status}
+					<Spinner type="dots" /> {status + '\n'}
 				</Text>
 				{output && (
 					<Text dimColor>{output.split('\n').slice(-5).join('\n')}</Text>
