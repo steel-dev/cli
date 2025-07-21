@@ -19,8 +19,10 @@ export default function Dependencies() {
 	const {step, setStep, envVars, directory, template, setHash} = useRunStep();
 	const [output, setOutput] = useState<string>('');
 
+	// Check if the template has a TASK environment variable
 	const hasTaskEnvVar = template?.env?.some(e => e.value === 'TASK');
 
+	// Helper function to determine next step
 	const getNextStep = () => {
 		if (hasTaskEnvVar) {
 			return 'task';
@@ -63,6 +65,7 @@ export default function Dependencies() {
 					setTask(true);
 					setLoading(false);
 				} catch (error) {
+					console.error('Error installing dependencies:', error);
 					setError(`Error installing dependencies: ${error.message}`);
 					setOutput(`Error installing dependencies: ${error.message}`);
 					setLoading(false);

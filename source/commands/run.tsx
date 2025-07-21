@@ -81,12 +81,14 @@ type Props = {
 	options: Options;
 };
 
+// Helper function to determine step order and visibility
 function getStepOrder(
 	template: TemplateType | null,
 	envVars: Record<string, string> | null,
 ): string[] {
 	const baseSteps = ['template', 'envvar', 'dependencies'];
 
+	// Add task step if template has TASK environment variable
 	const hasTaskEnvVar = template?.env?.some(
 		(e: {value: string; label: string; required?: boolean}) =>
 			e.value === 'TASK',
@@ -95,6 +97,7 @@ function getStepOrder(
 		baseSteps.push('task');
 	}
 
+	// Add browserrunner or runner based on API URL
 	if (
 		envVars?.['STEEL_API_URL'] &&
 		!envVars['STEEL_API_URL'].includes('api.steel.dev')

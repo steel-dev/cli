@@ -13,8 +13,10 @@ export default function TaskSelector({options}: {options: Options}) {
 	const [inputValue, setInputValue] = useState('');
 	const [isCollectingTask, setIsCollectingTask] = useState(false);
 
+	// Check if the template has a TASK environment variable
 	const hasTaskEnvVar = template?.env?.some(e => e.value === 'TASK');
 
+	// Helper function to determine next step
 	const getNextStep = () => {
 		if (
 			envVars['STEEL_API_URL'] &&
@@ -80,6 +82,7 @@ export default function TaskSelector({options}: {options: Options}) {
 		setInputValue('');
 	};
 
+	// Only render if this step is active and template has TASK env var
 	if (!hasTaskEnvVar) {
 		return null;
 	}
@@ -95,7 +98,7 @@ export default function TaskSelector({options}: {options: Options}) {
 				{isCollectingTask && (
 					<>
 						<Text>
-							📝 Enter the task for the agent:
+							🎯 Enter the task for the agent:
 							<Text color="cyan"> What should the agent do?</Text>
 						</Text>
 						<TextInput
