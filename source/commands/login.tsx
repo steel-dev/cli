@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 import React, {ReactElement} from 'react';
-import {Box, Text} from 'ink';
+import {Box} from 'ink';
 import fs from 'fs/promises';
 import * as http from 'http';
 import * as url from 'url';
 import * as crypto from 'crypto';
 import type {AddressInfo} from 'net';
 import open from 'open';
+import Callout from '../components/callout.js';
 import {
 	LOGIN_URL,
 	SUCCESS_URL,
@@ -85,12 +86,26 @@ export default function Login(): ReactElement {
 
 	return (
 		<Box flexDirection="column">
-			<Text>
-				{state.status === 'pending' && '⏳ '}
-				{state.status === 'success' && '✅ '}
-				{state.status === 'error' && '🚫 '}
-				{state.message}
-			</Text>
+			{state.status === 'pending' && (
+				<Callout variant="info" title="Authentication in Progress">
+					{state.message}
+				</Callout>
+			)}
+			{state.status === 'success' && (
+				<Callout variant="success" title="Authentication Successful">
+					{state.message}
+				</Callout>
+			)}
+			{state.status === 'error' && (
+				<Callout variant="failed" title="Authentication Failed">
+					{state.message}
+				</Callout>
+			)}
+			{state.status === 'idle' && (
+				<Callout variant="info" title="Starting Authentication">
+					{state.message}
+				</Callout>
+			)}
 		</Box>
 	);
 }

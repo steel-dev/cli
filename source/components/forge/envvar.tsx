@@ -108,7 +108,13 @@ export default function EnvVar({options}: {options: Options}) {
 	const handleInputSubmit = val => {
 		if (pendingVars.length === 0) return;
 		const currentVar = pendingVars[0];
-		const updatedEnvVars = {...envVars, [currentVar.value]: val};
+		const updatedEnvVars = {
+			...envVars,
+			[currentVar.value]:
+				currentVar.value === 'STEEL_API_URL' && val === ''
+					? 'https://api.steel.dev'
+					: val,
+		};
 		setEnvVars(updatedEnvVars);
 		updateEnvVariable(workingDir, currentVar.value, val);
 		const remaining = pendingVars.slice(1);
@@ -142,7 +148,11 @@ export default function EnvVar({options}: {options: Options}) {
 							value={inputValue}
 							onChange={setInputValue}
 							onSubmit={handleInputSubmit}
-							placeholder="Your value here..."
+							placeholder={
+								currentPromptVar.value === 'STEEL_API_URL'
+									? 'https://api.steel.dev'
+									: 'Your value here...'
+							}
 						/>
 					</>
 				)}

@@ -50,7 +50,6 @@ export function useApi({
 					setError(new Error(json.message));
 				}
 			} catch (err) {
-				console.error('API Error:', error);
 				setError(err as Error);
 			}
 			setLoading(false);

@@ -322,7 +322,6 @@ const client = new Steel({
 const requiredImportsPlaywrightPy = [/from playwright/];
 const codePatternsPlaywrightPy = [/launch()/, /playwright/];
 const configPlaywrightPy = (file: string) => {
-	//@ts-ignore
 	const {imports, body, exports} = fileParse(file);
 
 	const addedImports = [

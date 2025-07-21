@@ -76,7 +76,6 @@ export function useLazyApi({
 					setError(new Error(json.message));
 				}
 			} catch (err) {
-				console.error('API Error:', err);
 				setError(err as Error);
 			}
 

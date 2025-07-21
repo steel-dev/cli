@@ -78,9 +78,8 @@ type Props = {
 	options: Options;
 };
 
-const settings = getSettings();
-
 export default function Run({args, options}: Props) {
+	const settings = getSettings();
 	return (
 		<RunStepProvider>
 			<CLIWelcomeMessage />

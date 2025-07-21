@@ -1,6 +1,6 @@
 {
 	"name": "@steel-dev/cli",
-	"version": "0.0.1-alpha.7",
+	"version": "0.0.2-beta",
 	"license": "MIT",
 	"bin": {
 		"steel": "./dist/steel.js"
