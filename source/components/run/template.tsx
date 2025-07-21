@@ -1,8 +1,7 @@
 import path from 'path';
-import React, {useEffect, useState} from 'react';
+import React, {useEffect} from 'react';
 import {fileURLToPath} from 'url';
 import {Task} from 'ink-task-list';
-import {Text} from 'ink';
 import {TEMPLATES} from '../../utils/constants.js';
 import TemplatePicker from '../templatepicker.js';
 import {useTask} from '../../hooks/usetask.js';

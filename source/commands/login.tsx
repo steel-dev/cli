@@ -4,7 +4,6 @@ import React, {ReactElement} from 'react';
 import {Box} from 'ink';
 import fs from 'fs/promises';
 import * as http from 'http';
-import * as url from 'url';
 import * as crypto from 'crypto';
 import type {AddressInfo} from 'net';
 import open from 'open';
@@ -118,7 +117,8 @@ async function loginFlow(): Promise<{
 		const state = crypto.randomBytes(16).toString('hex');
 
 		const server = http.createServer(async (req, res) => {
-			const {query} = url.parse(req.url ?? '', true);
+			const reqUrl = new URL(req.url ?? '', `http://${req.headers.host}`);
+			const query = Object.fromEntries(reqUrl.searchParams.entries());
 
 			if (query['state'] !== state) {
 				res.writeHead(400, {'Content-Type': 'text/plain'});
