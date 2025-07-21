@@ -38,6 +38,14 @@ export const TEMPLATES = [
 		],
 		runCommand: (options: TemplateOptions) =>
 			`NODE_PATH=${options.depsDir}/node_modules node index.js`,
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [
+			`cd ${options.directory}`,
+			`${options.packageManager || 'npm'} install`,
+			`node index.js`,
+		],
 	},
 	{
 		alias: 'playwright',
@@ -65,6 +73,15 @@ export const TEMPLATES = [
 
 			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [
+			`cd ${options.directory}`,
+			`${options.packageManager || 'npm'} install`,
+			`${options.packageManager || 'npm'} run build`,
+			`node dist/index.js`,
+		],
 	},
 	{
 		alias: 'puppeteer-js',
@@ -83,6 +100,14 @@ export const TEMPLATES = [
 		],
 		runCommand: (options: TemplateOptions) =>
 			`NODE_PATH=${options.depsDir}/node_modules node index.js`,
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [
+			`cd ${options.directory}`,
+			`${options.packageManager || 'npm'} install`,
+			`node index.js`,
+		],
 	},
 	{
 		alias: 'puppeteer',
@@ -110,6 +135,15 @@ export const TEMPLATES = [
 
 			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [
+			`cd ${options.directory}`,
+			`${options.packageManager || 'npm'} install`,
+			`${options.packageManager || 'npm'} run build`,
+			`node dist/index.js`,
+		],
 	},
 	{
 		alias: 'files',
@@ -137,6 +171,15 @@ export const TEMPLATES = [
 
 			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [
+			`cd ${options.directory}`,
+			`${options.packageManager || 'npm'} install`,
+			`${options.packageManager || 'npm'} run build`,
+			`node dist/index.js`,
+		],
 	},
 	{
 		alias: 'creds',
@@ -164,6 +207,15 @@ export const TEMPLATES = [
 
 			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [
+			`cd ${options.directory}`,
+			`${options.packageManager || 'npm'} install`,
+			`${options.packageManager || 'npm'} run build`,
+			`node dist/index.js`,
+		],
 	},
 	{
 		alias: 'oai-cua',
@@ -193,6 +245,15 @@ export const TEMPLATES = [
 
 			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [
+			`cd ${options.directory}`,
+			`${options.packageManager || 'npm'} install`,
+			`${options.packageManager || 'npm'} run build`,
+			`node dist/index.js`,
+		],
 	},
 	{
 		alias: 'magnitude',
@@ -222,6 +283,15 @@ export const TEMPLATES = [
 
 			return `${nodePath} npx ts-node --compiler-options '${compilerOptions}' index.ts`;
 		},
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [
+			`cd ${options.directory}`,
+			`${options.packageManager || 'npm'} install`,
+			`${options.packageManager || 'npm'} run build`,
+			`node dist/index.js`,
+		],
 	},
 	{
 		alias: 'browser-use',
@@ -234,6 +304,10 @@ export const TEMPLATES = [
 		],
 		runCommand: (options: TemplateOptions) =>
 			`${options.depsDir}/bin/python3 main.py`,
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [`cd ${options.directory}`, `python main.py`],
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
@@ -253,6 +327,10 @@ export const TEMPLATES = [
 		],
 		runCommand: (options: TemplateOptions) =>
 			`${options.depsDir}/bin/python3 main.py`,
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [`cd ${options.directory}`, `python main.py`],
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
@@ -272,6 +350,10 @@ export const TEMPLATES = [
 		],
 		runCommand: (options: TemplateOptions) =>
 			`${options.depsDir}/bin/python3 main.py`,
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [`cd ${options.directory}`, `python main.py`],
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
@@ -289,6 +371,10 @@ export const TEMPLATES = [
 		],
 		runCommand: (options: TemplateOptions) =>
 			`${options.depsDir}/bin/python3 main.py`,
+		displayRunCommands: (options: {
+			directory: string;
+			packageManager?: string;
+		}) => [`cd ${options.directory}`, `python main.py`],
 		env: [
 			{value: 'STEEL_API_KEY', label: 'Steel API key'},
 			{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},

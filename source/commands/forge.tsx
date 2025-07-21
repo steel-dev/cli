@@ -99,8 +99,8 @@ function ForgeContent({args, options}: Props) {
 				{shouldShowStep('directory', step) && <Directory />}
 				{shouldShowStep('envvar', step) && <EnvVar options={options} />}
 				{shouldShowStep('dependencies', step) && <Dependencies />}
-				{shouldShowStep('success', step) && <ForgeSuccess />}
 			</TaskList>
+			{shouldShowStep('success', step) && <ForgeSuccess />}
 		</>
 	);
 }

@@ -34,12 +34,12 @@ export default function Dependencies() {
 						}
 						setLoading(false);
 						setTask(true);
-						setStep('runner');
+						setStep('success');
 					} else {
 						await runCommand(`${packageManager} install`, directory);
 						setLoading(false);
 						setTask(true);
-						setStep('runner');
+						setStep('success');
 					}
 				} catch (error) {
 					console.error('Error installing dependencies:', error);
