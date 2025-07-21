@@ -14,26 +14,35 @@ $ npm i @steel-dev/cli -g
 ## CLI
 
 ```
-$ steel --help
+USAGE
+  $ steel [command] [options]
 
-Usage: steel [options] [command]
+COMMANDS
 
-Options:
-  -v, --version                                       Show version number
-  -h, --help                                          Show help
+⚡ Quickstart Commands
 
-Commands:
-  forge [directory to scaffold new Steel project]     Start a new project using the Steel CLI
-  run [example Steel project to run]                  Run a Steel project
-  update                                              Update Steel CLI to the latest version
-  files                                               Files Endpoint
-  login                                               Login to Steel CLI
-  logout                                              Logout from Steel CLI
-  sessions                                            Sessions Endpoint
-  browser start                                       Starts the development environment
-  browser stop                                        Stops the development server
-  tools                                               Tools Endpoint
-  help [command]                                      Show help for command
+  forge               Start a new project using the Steel CLI
+  run                 Run a Steel Cookbook automation instantly from the CLI — no setup, no files.
+
+
+⏺︎ Other Commands
+
+  browser
+     └─ start          Starts Steel Browser in development mode
+     └─ stop           Stops any running dev instance of Steel Browser
+  cache               Manage Steel CLI cache which is used to store files for quickly running scripts
+  config              Display information about the current session
+  docs                Navigates to Steel Docs
+  login               Login to Steel CLI
+  logout              Logout from Steel CLI
+  settings            Display current CLI settings (cloud/local)
+  star                Opens the Steel Browser Repository in your browser
+  support             Opens up the Steel Discord Server
+  update              Update Steel CLI to the latest version
+
+COMMON OPTIONS
+  -h, --help          Display help for a command
+  -v, --version       Display Steel CLI version
 ```
 
 ## Auto-Update

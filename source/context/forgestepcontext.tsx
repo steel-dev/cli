@@ -23,7 +23,7 @@ const ForgeStepContext = createContext<ForgeStepContextType | undefined>(
 export const ForgeStepProvider = ({children}: {children: ReactNode}) => {
 	const [step, setStep] = useState<string>('template');
 	const [template, setTemplate] = useState<Template | null>(null);
-	const [directory, setDirectory] = useState<string>('steel-project');
+	const [directory, setDirectory] = useState<string>('steel-starter');
 	const [envVars, setEnvVars] = useState<Record<string, string>>({});
 	const [packageManager, setPackageManager] = useState<string>('npm');
 	const [sessionId, setSessionId] = useState<string | null>(null);

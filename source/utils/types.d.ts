@@ -14,6 +14,13 @@ export type Template = {
 	category?: string;
 	depCommands?: (options: {depsDir: string}) => string[];
 	runCommand?: (options: {depsDir: string}) => string;
+	/**
+	 * Simple run commands for user display (without complex paths/NODE_PATH setup)
+	 */
+	displayRunCommands?: (options: {
+		directory: string;
+		packageManager?: string;
+	}) => string[];
 	env?: {value: string; label: string; required?: boolean}[];
 };
 

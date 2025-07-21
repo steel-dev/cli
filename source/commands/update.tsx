@@ -51,6 +51,7 @@ export default function Update({options}: Props) {
 					force: options.force,
 					autoUpdate: !options.check,
 					silent: false,
+					reactMode: true,
 				});
 				setVersionInfo(info);
 			} catch (err) {
@@ -93,16 +94,23 @@ export default function Update({options}: Props) {
 		if (versionInfo.hasUpdate) {
 			return (
 				<Callout variant="warning" title="Update Available">
-					<Text>Current: v{versionInfo.current}</Text>
-					<Text>Latest: v{versionInfo.latest}</Text>
-					<Text>Run `steel update` to install the latest version.</Text>
-					{versionInfo.changelog && (
+					<Text>
+						Current: v{versionInfo.current} {'\n'}
+					</Text>
+					<Text>
+						Latest: v{versionInfo.latest} {'\n'}
+					</Text>
+					<Text>{'\n'}</Text>
+					<Text>
+						💡 Run `steel update` to update to the latest version {'\n'}
+					</Text>
+					{/* {versionInfo.changelog && (
 						<>
 							<Text>{'\n'}</Text>
 							<Text>📝 What&apos;s new: {'\n'}</Text>
 							<Text>{versionInfo.changelog}</Text>
 						</>
-					)}
+					)} */}
 				</Callout>
 			);
 		} else {
@@ -130,15 +138,15 @@ export default function Update({options}: Props) {
 	return (
 		<Callout variant="success" title="Update Completed">
 			<Text>
-				Updated from v{versionInfo.current} to v{versionInfo.latest}
+				🚀 Updated from v{versionInfo.current} to v{versionInfo.latest}
 			</Text>
-			{versionInfo.changelog && (
+			{/* {versionInfo.changelog && (
 				<>
 					<Text>{'\n'}</Text>
 					<Text>📝 What&apos;s new: {'\n'}</Text>
 					<Text>{versionInfo.changelog}</Text>
 				</>
-			)}
+			)} */}
 		</Callout>
 	);
 }

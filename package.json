@@ -1,6 +1,6 @@
 {
 	"name": "@steel-dev/cli",
-	"version": "0.0.2-beta",
+	"version": "0.0.2-beta.2",
 	"license": "MIT",
 	"bin": {
 		"steel": "./dist/steel.js"
@@ -61,7 +61,9 @@
 		"@eslint/json": "^0.13.0",
 		"@eslint/markdown": "^7.0.0",
 		"@sindresorhus/tsconfig": "^7.0.0",
+		"@types/jest": "^29.5.0",
 		"@types/react": "^19.1.2",
+		"@types/uuid": "^10.0.0",
 		"@typescript-eslint/eslint-plugin": "^8.37.0",
 		"@typescript-eslint/parser": "^8.37.0",
 		"@vdemedes/prettier-config": "^2.0.1",
@@ -79,15 +81,13 @@
 		"globals": "^16.3.0",
 		"husky": "^9.1.7",
 		"ink-testing-library": "^4.0.0",
+		"jest": "^29.7.0",
 		"prettier": "^3.6.2",
+		"rimraf": "^6.0.0",
+		"ts-jest": "^29.1.0",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.8.3",
-		"typescript-eslint": "^8.37.0",
-		"@types/jest": "^29.5.0",
-		"@types/uuid": "^10.0.0",
-		"jest": "^29.7.0",
-		"ts-jest": "^29.1.0",
-		"rimraf": "^6.0.0"
+		"typescript-eslint": "^8.37.0"
 	},
 	"jest": {
 		"preset": "ts-jest",

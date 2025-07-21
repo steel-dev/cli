@@ -1,10 +1,17 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --no-warnings=ExperimentalWarning
 
 import Pastel from 'pastel';
 import React from 'react';
-import {render} from 'ink';
+import {Box, Text, render} from 'ink';
 import Help from './components/help.js';
-import {checkAndUpdate, getCurrentVersion} from './utils/update.js';
+import {
+	checkAndUpdate,
+	getCurrentVersion,
+	setGlobalUpdateInfo,
+	subscribeToUpdateState,
+	type UpdateState,
+} from './utils/update.js';
+import Spinner from 'ink-spinner';
 
 // Check for version flag first
 const versionFlag =
@@ -29,41 +36,155 @@ const skipUpdateCheck =
 	process.env.CI === 'true' || // Skip in CI environments
 	process.env.NODE_ENV === 'test'; // Skip in test environments
 
-if (helpFlag || !command) {
-	const {waitUntilExit} = render(<Help command={command} />);
+// Handle help commands first (before any update checks)
+if (helpFlag || !command || command === 'help') {
+	const {waitUntilExit} = render(
+		<Help command={command === 'help' ? '' : command} />,
+	);
 	await waitUntilExit();
 	process.exit(0);
 }
 
-// Perform update check with timeout (non-blocking)
-if (!skipUpdateCheck) {
-	try {
-		// Set a timeout to avoid blocking the CLI
-		const updateCheckPromise = checkAndUpdate({
-			silent: true,
-			autoUpdate: false,
+// Component to show update progress
+function UpdateProgress() {
+	const [updateState, setUpdateState] = React.useState<UpdateState>({
+		status: 'idle',
+		message: '',
+	});
+	const [shouldProceed, setShouldProceed] = React.useState(false);
+
+	React.useEffect(() => {
+		const unsubscribe = subscribeToUpdateState(state => {
+			setUpdateState(state);
+
+			if (state.status === 'complete') {
+				if (state.versionInfo?.hasUpdate) {
+					setGlobalUpdateInfo(state.versionInfo || null);
+					setShouldProceed(true);
+				} else {
+					setGlobalUpdateInfo(state.versionInfo || null);
+					setShouldProceed(true);
+				}
+			} else if (state.status === 'error') {
+				setShouldProceed(true);
+			}
 		});
 
-		const timeoutPromise = new Promise(resolve => {
-			setTimeout(() => resolve(null), 3000); // 3 second timeout
-		});
-
-		// Race between update check and timeout
-		const result = await Promise.race([updateCheckPromise, timeoutPromise]);
-
-		// If result is null, the timeout won fired
-		if (result === null) {
-			console.debug('Update check timed out');
+		// Start the update check
+		async function performUpdateCheck() {
+			try {
+				await checkAndUpdate({
+					silent: true,
+					autoUpdate: true,
+					reactMode: true,
+				});
+			} catch {
+				setShouldProceed(true);
+			}
 		}
-	} catch (error) {
-		// Silently fail - don't block the CLI if update check fails
-		console.debug('Update check failed:', error);
+
+		performUpdateCheck();
+
+		// Cleanup subscription on unmount
+		return unsubscribe;
+	}, []);
+
+	if (
+		updateState.status === 'idle' ||
+		updateState.status === 'checking' ||
+		updateState.status === 'updating'
+	) {
+		return (
+			<Box marginBottom={1}>
+				<Text>
+					<Spinner type="dots" /> {updateState.message}
+				</Text>
+			</Box>
+		);
 	}
+
+	if (updateState.status === 'complete' && updateState.versionInfo?.hasUpdate) {
+		return (
+			<Box marginBottom={1}>
+				<Text>✅ {updateState.message}</Text>
+			</Box>
+		);
+	}
+
+	if (updateState.status === 'error') {
+		return (
+			<Box marginBottom={1}>
+				<Text color="red">❌ {updateState.message}</Text>
+				{updateState.error && <Text color="gray"> ({updateState.error})</Text>}
+			</Box>
+		);
+	}
+
+	if (shouldProceed) {
+		return <PastelApp />;
+	}
+
+	return null;
 }
 
-const app = new Pastel({
-	importMeta: import.meta,
-	version: getCurrentVersion(),
-});
+// Component to render the Pastel app
+function PastelApp() {
+	React.useEffect(() => {
+		async function runPastel() {
+			// Filter out global flags and update process.argv
+			const originalArgv = process.argv;
+			process.argv = [
+				process.argv[0],
+				process.argv[1],
+				...filterGlobalFlags(process.argv.slice(2)),
+			];
 
-await app.run();
+			const app = new Pastel({
+				importMeta: import.meta,
+				version: getCurrentVersion(),
+			});
+
+			try {
+				await app.run();
+			} finally {
+				// Restore original argv
+				process.argv = originalArgv;
+			}
+		}
+		runPastel();
+	}, []);
+
+	return null;
+}
+
+// Filter out update flags before passing to Pastel
+function filterGlobalFlags(argv: string[]): string[] {
+	return argv.filter(arg => arg !== '--no-update-check');
+}
+
+// Main execution
+if (!skipUpdateCheck) {
+	// Render the update progress component which will handle the flow
+	const {waitUntilExit} = render(<UpdateProgress />);
+	await waitUntilExit();
+} else {
+	// Filter out global flags and update process.argv
+	const originalArgv = process.argv;
+	process.argv = [
+		process.argv[0],
+		process.argv[1],
+		...filterGlobalFlags(process.argv.slice(2)),
+	];
+
+	const app = new Pastel({
+		importMeta: import.meta,
+		version: getCurrentVersion(),
+	});
+
+	try {
+		await app.run();
+	} finally {
+		// Restore original argv
+		process.argv = originalArgv;
+	}
+}

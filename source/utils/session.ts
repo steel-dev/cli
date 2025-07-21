@@ -23,17 +23,13 @@ export function getSettings(): {
 	try {
 		const config = fs.readFileSync(CONFIG_PATH, 'utf-8');
 		const parsedConfig = JSON.parse(config);
-		console.log(parsedConfig);
 		if (parsedConfig && parsedConfig.instance) {
-			console.log('parsedConfig', parsedConfig);
 			return {instance: parsedConfig.instance};
 		} else {
 			setSettings({instance: 'local'});
 			return {instance: 'local'};
 		}
-	} catch (error) {
-		console.error(error);
-		console.log('No settings found, setting to local');
+	} catch {
 		setSettings({instance: 'local'});
 		return {instance: 'local'};
 	}
