@@ -7,16 +7,15 @@ import * as http from 'http';
 import * as url from 'url';
 import * as crypto from 'crypto';
 import type {AddressInfo} from 'net';
+import open from 'open';
 import {
 	LOGIN_URL,
-	LOGIN_TIMEOUT,
-	CONFIG_DIR,
-	CONFIG_PATH,
 	SUCCESS_URL,
 	TARGET_API_PATH,
+	CONFIG_DIR,
+	CONFIG_PATH,
 	// SUCCESS_HTML,
 } from '../utils/constants.js';
-import open from 'open';
 import {getApiKey} from '../utils/session.js';
 
 type AuthState = {
@@ -24,6 +23,8 @@ type AuthState = {
 	message: string;
 	apiKey?: string;
 };
+
+const LOGIN_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
 export const description = 'Login to Steel CLI';
 
@@ -41,7 +42,7 @@ export default function Login(): ReactElement {
 			if (config) {
 				setState({
 					status: 'success',
-					message: `You are already logged in with API Key: ${config.name}`,
+					message: `You are already logged in`,
 				});
 				return;
 			}
@@ -100,16 +101,9 @@ async function loginFlow(): Promise<{
 } | null> {
 	return new Promise((resolve, reject) => {
 		const state = crypto.randomBytes(16).toString('hex');
-		let server: http.Server;
 
-		const timeout = setTimeout(() => {
-			server?.close();
-			reject(new Error('Login timed out. Please try again.'));
-		}, LOGIN_TIMEOUT);
-
-		server = http.createServer(async (req, res) => {
-			const parsedUrl = new url.URL(req.url ?? '');
-			const query = parsedUrl.searchParams;
+		const server = http.createServer(async (req, res) => {
+			const {query} = url.parse(req.url ?? '', true);
 
 			if (query['state'] !== state) {
 				res.writeHead(400, {'Content-Type': 'text/plain'});
@@ -133,12 +127,17 @@ async function loginFlow(): Promise<{
 			server.close();
 
 			try {
-				const auth = await getApiKeyFromJWT(jwt);
+				const auth = await createApiKeyUsingJWT(jwt);
 				resolve(auth);
 			} catch (error) {
 				reject(error);
 			}
 		});
+
+		const timeout = setTimeout(() => {
+			server?.close();
+			reject(new Error('Login timed out. Please try again.'));
+		}, LOGIN_TIMEOUT);
 
 		server.listen(0, '127.0.0.1', async () => {
 			const {port} = server.address() as AddressInfo;
@@ -168,16 +167,19 @@ async function loginFlow(): Promise<{
 	});
 }
 
-async function getApiKeyFromJWT(jwt: string): Promise<{
+async function createApiKeyUsingJWT(jwt: string): Promise<{
 	apiKey: string | null;
 	name: string | null;
 } | null> {
 	const response = await fetch(TARGET_API_PATH, {
-		method: 'GET',
+		method: 'POST',
 		headers: {
-			Authorization: `Bearer ${jwt}`,
 			'Content-Type': 'application/json',
+			Authorization: `Bearer ${jwt}`,
 		},
+		body: JSON.stringify({
+			name: 'CLI',
+		}),
 	});
 
 	if (!response.ok) {
@@ -186,23 +188,15 @@ async function getApiKeyFromJWT(jwt: string): Promise<{
 		);
 	}
 
-	const data = (await response.json()).apiKeys;
+	const data = await response.json();
 
-	if (Array.isArray(data) && data.length > 0) {
-		// TODO: add org selection
-		const apiKey = data[0];
-		return {
-			apiKey: apiKey.key || apiKey.id,
-			name: apiKey.name,
-		};
-	} else if (data.key && data.name) {
-		return {
-			apiKey: data.key,
-			name: data.name,
-		};
+	if (!data.key || !data.name) {
+		throw new Error('No API key found in response');
 	}
-
-	throw new Error('No API key found in response');
+	return {
+		apiKey: data.key,
+		name: data.name,
+	};
 }
 
 async function saveApiKey(apiKey: string, name: string): Promise<void> {
@@ -222,6 +216,7 @@ async function saveApiKey(apiKey: string, name: string): Promise<void> {
 		// Update with new API key
 		config['apiKey'] = apiKey;
 		config['name'] = name;
+		config['instance'] = 'cloud';
 
 		// Save the updated config
 		await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));

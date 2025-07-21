@@ -3,6 +3,7 @@
 	"compilerOptions": {
 		"jsx": "react-jsx",
 		"moduleResolution": "node16",
+		"noUnusedLocals": false,
 		"module": "Node16",
 		"skipLibCheck": true,
 		"outDir": "dist",

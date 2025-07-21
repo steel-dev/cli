@@ -60,7 +60,7 @@ async function main() {
 		// Example script - Navigate to Hacker News and extract the top 5 stories
 		console.log('Navigating to Hacker News...');
 		await page.goto('https://news.ycombinator.com', {
-			waitUntil: 'networkidle',
+			waitUntil: 'load',
 		});
 
 		// Extract the top 5 stories

@@ -23,6 +23,12 @@ export default function BrowserRunner() {
 		if (step === 'browserrunner' && !task) {
 			setLoading(true);
 			try {
+				if (!envVars['STEEL_API_URL'].includes('localhost')) {
+					setTask('Skipping Docker Compose');
+					setStep('runner');
+					setLoading(false);
+					return;
+				}
 				spawn('git', ['clone', REPO_URL], {
 					cwd: CONFIG_DIR,
 				});

@@ -8,6 +8,7 @@ import {TaskList} from 'ink-task-list';
 import Dependencies from '../components/forge/dependencies.js';
 import ProjectName from '../components/forge/projectname.js';
 import {ForgeStepProvider} from '../context/forgestepcontext.js';
+import CLIWelcomeMessage from '../components/cliwelcomemessage.js';
 import zod from 'zod';
 import {option} from 'pastel';
 import PackageManager from '../components/forge/packagemanager.js';
@@ -66,6 +67,7 @@ type Props = {
 export default function Forge({args, options}: Props) {
 	return (
 		<ForgeStepProvider>
+			<CLIWelcomeMessage />
 			<TaskList>
 				<Template args={args} />
 				<ProjectName args={args} />

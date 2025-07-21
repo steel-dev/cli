@@ -1,11 +1,11 @@
 import React, {useState, useEffect} from 'react';
-import {Box, Text, useApp, useInput} from 'ink';
+import {Box, Text} from 'ink';
 import fs from 'fs/promises';
 import path from 'path';
 import {fileURLToPath} from 'url';
 import {dirname} from 'path';
 import CommandList from './commandlist.js';
-import AnimatedLogo from './animatedlogo.js';
+import CLIWelcomeMessage from './cliwelcomemessage.js';
 
 type Props = {
 	command?: string;
@@ -214,14 +214,9 @@ function extractArgumentInfo(argsSchema: any, argsLabels: string[]) {
 }
 
 export default function Help({command}: Props) {
-	const {exit} = useApp();
 	const [commands, setCommands] = useState([]);
 	const [error, setError] = useState('');
 	const [commandInfo, setCommandInfo] = useState(null);
-
-	useInput(() => {
-		exit();
-	});
 
 	// Load commands and potentially specific command help
 	useEffect(() => {
@@ -266,42 +261,23 @@ export default function Help({command}: Props) {
 
 		// Execute load and handle any uncaught errors
 		load();
-	}, [command, exit]);
-
-	function Sidebar() {
-		return (
-			<Box flexDirection="column" justifyContent="center" alignItems="center">
-				<Box marginBottom={1} alignItems="center">
-					<Text bold color="blue">
-						Steel
-					</Text>
-					<Text> - Open-source browser API for AI agents</Text>
-				</Box>
-				<AnimatedLogo />
-				<Box marginTop={1} flexDirection="column" alignItems="center">
-					<Text bold>DOCUMENTATION</Text>
-					<Text>https://docs.steel.dev</Text>
-				</Box>
-				<Box marginTop={1} flexDirection="column" alignItems="center">
-					<Text bold>GITHUB</Text>
-					<Text>https://github.com/steel-dev/steel-browser</Text>
-				</Box>
-			</Box>
-		);
-	}
+	}, [command]);
 
 	// Show specific command help
 	if (command) {
 		return (
-			<Box flexDirection="row" justifyContent="space-evenly">
-				<Sidebar />
+			<Box flexDirection="column" justifyContent="flex-start">
 				<Box flexDirection="column">
-					<Box marginBottom={1}>
+					<Box marginBottom={1} flexDirection="column" gap={1}>
 						<Text bold color="blue">
-							Steel CLI
+							Steel CLI - Help Menu
 						</Text>
-						<Text> - Help for command: </Text>
-						<Text color="green">{command}</Text>
+						<Box>
+							<Text backgroundColor={'white'} color={'black'} bold>
+								{' '}
+								steel {command}{' '}
+							</Text>
+						</Box>
 					</Box>
 
 					{error ? (
@@ -382,8 +358,8 @@ export default function Help({command}: Props) {
 
 	// Main help screen
 	return (
-		<Box flexDirection="row" justifyContent="space-evenly">
-			<Sidebar />
+		<Box flexDirection="column">
+			<CLIWelcomeMessage />
 			<Box flexDirection="column">
 				<Box>
 					<Text bold>USAGE</Text>

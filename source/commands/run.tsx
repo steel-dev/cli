@@ -9,8 +9,10 @@ import Dependencies from '../components/run/dependencies.js';
 import {RunStepProvider} from '../context/runstepcontext.js';
 import BrowserOpener from '../components/run/browseropener.js';
 import BrowserRunner from '../components/run/browserrunner.js';
+import CLIWelcomeMessage from '../components/cliwelcomemessage.js';
 import zod from 'zod';
 import {option} from 'pastel';
+import {getSettings} from '../utils/session.js';
 
 export const description = 'Start a new project using the Steel CLI';
 
@@ -76,16 +78,19 @@ type Props = {
 	options: Options;
 };
 
-export default function Cookbook({args, options}: Props) {
+const settings = getSettings();
+
+export default function Run({args, options}: Props) {
 	return (
 		<RunStepProvider>
+			<CLIWelcomeMessage />
 			<TaskList>
 				<Template args={args} />
 				<EnvVar options={options} />
 				<Dependencies />
-				<BrowserRunner />
+				{settings.instance === 'local' && <BrowserRunner />}
 				<Runner options={options} />
-				<BrowserOpener options={options} />
+				{options.view && <BrowserOpener options={options} />}
 			</TaskList>
 		</RunStepProvider>
 	);

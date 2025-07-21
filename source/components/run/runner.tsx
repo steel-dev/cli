@@ -46,7 +46,7 @@ export default function Runner({options}: {options: Options}) {
 
 	return (
 		<Task
-			label={`Running ${template?.label + ' ' || ''}example`}
+			label={`Running ${template?.label ? `${template.label} ` : ''}example`}
 			state={state}
 			spinner={spinners.dots}
 		/>
