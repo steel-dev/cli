@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import React from 'react';
 import {fileURLToPath} from 'url';
-import {useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
@@ -17,6 +17,8 @@ const __dirname = path.dirname(__filename);
 export default function Dependencies() {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
 	const {step, setStep, envVars, directory, template, setHash} = useRunStep();
+	const [output, setOutput] = useState<string>('');
+
 	useEffect(() => {
 		if (step === 'dependencies' && !task) {
 			setLoading(true);
@@ -53,7 +55,8 @@ export default function Dependencies() {
 					setLoading(false);
 				} catch (error) {
 					console.error('Error installing dependencies:', error);
-					setError('Error installing dependencies');
+					setError(`Error installing dependencies: ${error.message}`);
+					setOutput(`Error installing dependencies: ${error.message}`);
 					setLoading(false);
 				}
 			}
@@ -65,6 +68,7 @@ export default function Dependencies() {
 			label="Installing dependencies"
 			state={state}
 			spinner={spinners.dots}
+			output={output}
 		/>
 	);
 }
