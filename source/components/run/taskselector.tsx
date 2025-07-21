@@ -98,7 +98,7 @@ export default function TaskSelector({options}: {options: Options}) {
 				{isCollectingTask && (
 					<>
 						<Text>
-							🎯 Enter the task for the agent:
+							📝 Enter the task for the agent:
 							<Text color="cyan"> What should the agent do?</Text>
 						</Text>
 						<TextInput

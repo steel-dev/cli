@@ -1,6 +1,7 @@
 import React from 'react';
 import {Box, Text, useStdout} from 'ink';
 import chalk from 'chalk';
+import UpdateNotification from './updatenotification.js';
 
 // ASCII art lines for the logo
 const logoLines = [
@@ -127,6 +128,7 @@ export default function CLIWelcomeMessage() {
 						{'─'.repeat(Math.min(50, terminalWidth - 4))}
 					</Text>
 				</Box>
+				<UpdateNotification />
 			</Box>
 		);
 	}

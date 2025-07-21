@@ -17,10 +17,36 @@ type Props = {
 	command?: string;
 };
 
+interface CommandModule {
+	description?: string;
+	isDefault?: boolean;
+	options?: unknown;
+	args?: unknown;
+	argsLabels?: string[];
+	template?: unknown;
+}
+
+interface ZodDef {
+	typeName?: string;
+	description?: string;
+	shape?: Record<string, ZodDef>;
+	items?: ZodDef[];
+	type?: ZodDef;
+	_def?: ZodDef;
+}
+
+interface ZodSchema {
+	_def?: ZodDef;
+	shape?: Record<string, ZodSchema>;
+}
+
 // Function to scan command directory and get all available commands
 async function getAvailableCommands(baseDir = 'commands') {
 	try {
-		const commandsPath = path.join(process.cwd(), 'dist', baseDir);
+		const __filename = fileURLToPath(import.meta.url);
+		const __dirname = dirname(__filename);
+		const projectRoot = path.resolve(__dirname, '../../');
+		const commandsPath = path.join(projectRoot, 'dist', baseDir);
 
 		// Check if directory exists first
 		try {
@@ -51,7 +77,9 @@ async function getAvailableCommands(baseDir = 'commands') {
 			} else if (file.name.endsWith('.js')) {
 				// It's a command file
 				const commandPath = path.join(commandsPath, file.name);
-				const commandModule = await import(`file://${commandPath}`);
+				const commandModule = (await import(
+					`file://${commandPath}`
+				)) as CommandModule;
 
 				commands.push({
 					name: file.name.replace(/\.js$/, ''),
@@ -89,7 +117,7 @@ async function getCommandModule(commandPath: string) {
 	const fullPath = path.join(projectRoot, 'dist/commands', `${commandPath}.js`);
 
 	try {
-		const commandModule = await import(`file://${fullPath}`);
+		const commandModule = (await import(`file://${fullPath}`)) as CommandModule;
 		return commandModule;
 	} catch (directErr) {
 		// Try to handle subcommands (e.g. "browser start")
@@ -101,7 +129,9 @@ async function getCommandModule(commandPath: string) {
 				...parts.slice(0, -1),
 				`${parts[parts.length - 1]}.js`,
 			);
-			const commandModule = await import(`file://${subcommandPath}`);
+			const commandModule = (await import(
+				`file://${subcommandPath}`
+			)) as CommandModule;
 			return commandModule;
 		}
 		throw directErr;
@@ -109,14 +139,14 @@ async function getCommandModule(commandPath: string) {
 }
 
 // Function to extract option information in a formatted way
-function extractOptionInfo(optionSchema: any) {
+function extractOptionInfo(optionSchema: ZodSchema) {
 	if (!optionSchema) return [];
 
 	try {
 		const shape = optionSchema.shape || optionSchema._def?.shape;
 		if (!shape) return [];
 
-		return Object.entries(shape).map(([name, def]: [string, any]) => {
+		return Object.entries(shape).map(([name, def]: [string, ZodSchema]) => {
 			const description = def._def?.description || '';
 			const type = def._def?.typeName || '';
 
@@ -132,7 +162,7 @@ function extractOptionInfo(optionSchema: any) {
 						desc = config.description || '';
 						alias = config.alias || '';
 					}
-				} catch (e) {
+				} catch {
 					// If parsing fails, use the original description
 					desc = description;
 				}
@@ -141,7 +171,7 @@ function extractOptionInfo(optionSchema: any) {
 					const parsed = JSON.parse(description);
 					desc = parsed.description || '';
 					alias = parsed.alias || '';
-				} catch (e) {
+				} catch {
 					// If parsing fails, use the original description
 					desc = description;
 				}
@@ -165,14 +195,14 @@ function extractOptionInfo(optionSchema: any) {
 }
 
 // Function to extract argument information
-function extractArgumentInfo(argsSchema: any, argsLabels: string[]) {
+function extractArgumentInfo(argsSchema: ZodSchema, argsLabels: string[]) {
 	if (!argsSchema) return [];
 
 	try {
 		// Handle tuple-style arguments
 		if (argsSchema._def?.typeName === 'ZodTuple') {
 			const items = argsSchema._def.items || [];
-			return items.map((item: any, index: number) => {
+			return items.map((item: ZodSchema, index: number) => {
 				const description = item._def?.description || '';
 				const isOptional = item._def?.typeName === 'ZodOptional';
 
@@ -252,10 +282,10 @@ export default function Help({command}: Props) {
 							setCommandInfo({
 								name: command,
 								description: commandModule.description || '',
-								options: extractOptionInfo(commandModule.options),
+								options: extractOptionInfo(commandModule.options as ZodSchema),
 								args: extractArgumentInfo(
-									commandModule.args,
-									commandModule.argsLabels,
+									commandModule.args as ZodSchema,
+									commandModule.argsLabels || [],
 								),
 								usage: `steel ${command}${commandModule.args ? ' [arguments]' : ''}${commandModule.options ? ' [options]' : ''}`,
 								template: commandModule.template, // Include template info if available

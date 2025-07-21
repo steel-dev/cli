@@ -9,6 +9,7 @@ import * as crypto from 'crypto';
 import type {AddressInfo} from 'net';
 import open from 'open';
 import Callout from '../components/callout.js';
+import UpdateNotification from '../components/updatenotification.js';
 import {
 	LOGIN_URL,
 	SUCCESS_URL,
@@ -86,6 +87,7 @@ export default function Login(): ReactElement {
 
 	return (
 		<Box flexDirection="column">
+			<UpdateNotification />
 			{state.status === 'pending' && (
 				<Callout variant="info" title="Authentication in Progress">
 					{state.message}
