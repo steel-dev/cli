@@ -54,7 +54,6 @@ export default function Dependencies() {
 					setTask(true);
 					setLoading(false);
 				} catch (error) {
-					console.error('Error installing dependencies:', error);
 					setError(`Error installing dependencies: ${error.message}`);
 					setOutput(`Error installing dependencies: ${error.message}`);
 					setLoading(false);

@@ -26,6 +26,7 @@ export default function CLIWelcomeMessage() {
 	return (
 		<Box flexDirection="column" marginBottom={2}>
 			<Text>{steelWelcomeMessage}</Text>
+			<Text color="gray">{'─'.repeat(50)}</Text>
 		</Box>
 	);
 }

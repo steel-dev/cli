@@ -167,7 +167,7 @@ export const TEMPLATES = [
 	},
 	{
 		alias: 'oai-cua',
-		value: 'steel-oai-computer-use-starter',
+		value: 'steel-oai-computer-use-node-starter',
 		label: 'Steel + OpenAI Computer Use + TypeScript',
 		language: 'TS',
 		env: [
