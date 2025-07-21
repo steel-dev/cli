@@ -6,6 +6,12 @@ import {fileURLToPath} from 'url';
 import {dirname} from 'path';
 import CommandList from './commandlist.js';
 import CLIWelcomeMessage from './cliwelcomemessage.js';
+import TemplateList from './templatelist.js';
+import {
+	isTemplateCommand,
+	createTemplateCommandModule,
+} from '../utils/templateHelp.js';
+import {TEMPLATES} from '../utils/constants.js';
 
 type Props = {
 	command?: string;
@@ -64,6 +70,16 @@ async function getAvailableCommands(baseDir = 'commands') {
 
 // Function to get command module for a specific command
 async function getCommandModule(commandPath: string) {
+	// Check if this is a template-specific help request first
+	const templateCommand = isTemplateCommand(commandPath);
+	if (templateCommand) {
+		// Return virtual command module for template
+		return createTemplateCommandModule(
+			templateCommand.command as 'run' | 'forge',
+			templateCommand.template,
+		);
+	}
+
 	// Get the current file path to determine the project root
 	const __filename = fileURLToPath(import.meta.url);
 	const __dirname = dirname(__filename);
@@ -97,37 +113,37 @@ function extractOptionInfo(optionSchema: any) {
 	if (!optionSchema) return [];
 
 	try {
-		const shape = optionSchema._def?.shape;
+		const shape = optionSchema.shape || optionSchema._def?.shape;
 		if (!shape) return [];
 
 		return Object.entries(shape).map(([name, def]: [string, any]) => {
 			const description = def._def?.description || '';
 			let type = def._def?.typeName || '';
 
-			// Extract alias if available (in the description using option helper)
+			// Extract alias and description from pastel option config
 			let alias = '';
-			if (description.includes('alias')) {
+			let desc = description;
+
+			if (description.includes('__pastel_option_config__')) {
 				try {
-					// Try to parse the option description for aliases
-					const aliasMatch = description.match(
-						/alias['"]?\s*:\s*['"]([a-zA-Z0-9])['"]?/,
-					);
-					if (aliasMatch) {
-						alias = aliasMatch[1];
+					const configMatch = description.match(/__pastel_option_config__(.+)/);
+					if (configMatch) {
+						const config = JSON.parse(configMatch[1]);
+						desc = config.description || '';
+						alias = config.alias || '';
 					}
 				} catch (e) {
-					// Ignore parsing errors
+					// If parsing fails, use the original description
+					desc = description;
 				}
-			}
-
-			// Get readable description text
-			let desc = description;
-			if (desc.startsWith('{')) {
+			} else if (description.startsWith('{')) {
 				try {
-					const parsed = JSON.parse(desc);
+					const parsed = JSON.parse(description);
 					desc = parsed.description || '';
+					alias = parsed.alias || '';
 				} catch (e) {
 					// If parsing fails, use the original description
+					desc = description;
 				}
 			}
 
@@ -242,6 +258,7 @@ export default function Help({command}: Props) {
 									commandModule.argsLabels,
 								),
 								usage: `steel ${command}${commandModule.args ? ' [arguments]' : ''}${commandModule.options ? ' [options]' : ''}`,
+								template: commandModule.template, // Include template info if available
 							});
 						} else {
 							setError(`Command '${command}' not found.`);
@@ -338,6 +355,18 @@ export default function Help({command}: Props) {
 									))}
 								</>
 							)}
+
+							{(command === 'run' || command === 'forge') &&
+								TEMPLATES.length > 0 && (
+									<>
+										<Box marginBottom={1} marginTop={1}>
+											<Text bold>TEMPLATES</Text>
+										</Box>
+										<Box paddingLeft={2} marginBottom={1}>
+											<TemplateList templates={TEMPLATES} />
+										</Box>
+									</>
+								)}
 						</>
 					) : (
 						<Box marginBottom={1} flexDirection="column">
