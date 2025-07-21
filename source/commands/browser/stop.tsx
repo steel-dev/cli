@@ -8,7 +8,7 @@ import Spinner from 'ink-spinner';
 import {Text} from 'ink';
 import Callout from '../../components/callout.js';
 
-export const description = 'Stops the development environment';
+export const description = 'Stops any running dev instance of Steel Browser';
 
 export const options = zod.object({
 	verbose: zod

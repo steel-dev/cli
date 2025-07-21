@@ -9,7 +9,7 @@ import Spinner from 'ink-spinner';
 import {Text} from 'ink';
 import Callout from '../../components/callout.js';
 
-export const description = 'Starts the development environment';
+export const description = 'Starts Steel Browser in development mode';
 
 export const options = zod.object({
 	port: zod
