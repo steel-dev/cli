@@ -60,7 +60,6 @@ export default function EnvVar({options}: {options: Options}) {
 					setSessionId(sessionId);
 					curEnvVars['STEEL_SESSION_ID'] = sessionId;
 				}
-				// console.log(curEnvVars);
 				// Calculate which vars we still need after setup
 				const stillNeeded =
 					template?.env?.filter(

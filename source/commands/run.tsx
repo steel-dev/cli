@@ -4,15 +4,17 @@ import React from 'react';
 import Template from '../components/run/template.js';
 import Runner from '../components/run/runner.js';
 import EnvVar from '../components/run/envvar.js';
+import TaskSelector from '../components/run/taskselector.js';
 import {TaskList} from 'ink-task-list';
 import Dependencies from '../components/run/dependencies.js';
-import {RunStepProvider} from '../context/runstepcontext.js';
+import {RunStepProvider, useRunStep} from '../context/runstepcontext.js';
 import BrowserOpener from '../components/run/browseropener.js';
 import BrowserRunner from '../components/run/browserrunner.js';
 import CLIWelcomeMessage from '../components/cliwelcomemessage.js';
 import zod from 'zod';
 import {option} from 'pastel';
 import {getSettings} from '../utils/session.js';
+import type {Template as TemplateType} from '../utils/types.js';
 
 export const description =
 	'Run a Steel Cookbook automation instantly from the CLI — no setup, no files.';
@@ -79,19 +81,84 @@ type Props = {
 	options: Options;
 };
 
-export default function Run({args, options}: Props) {
+function getStepOrder(
+	template: TemplateType | null,
+	envVars: Record<string, string> | null,
+): string[] {
+	const baseSteps = ['template', 'envvar', 'dependencies'];
+
+	const hasTaskEnvVar = template?.env?.some(
+		(e: {value: string; label: string; required?: boolean}) =>
+			e.value === 'TASK',
+	);
+	if (hasTaskEnvVar) {
+		baseSteps.push('task');
+	}
+
+	if (
+		envVars?.['STEEL_API_URL'] &&
+		!envVars['STEEL_API_URL'].includes('api.steel.dev')
+	) {
+		baseSteps.push('browserrunner');
+	}
+
+	baseSteps.push('runner');
+	baseSteps.push('browser', 'done');
+
+	return baseSteps;
+}
+
+function shouldShowTask(
+	taskStep: string,
+	currentStep: string,
+	template: TemplateType | null,
+	envVars: Record<string, string> | null,
+): boolean {
+	const stepOrder = getStepOrder(template, envVars);
+	const currentIndex = stepOrder.indexOf(currentStep);
+	const taskIndex = stepOrder.indexOf(taskStep);
+
+	// Show if current step or if step has been passed (completed)
+	return taskIndex <= currentIndex;
+}
+
+function RunContent({args, options}: Props) {
+	const {step, template, envVars} = useRunStep();
 	const settings = getSettings();
+
 	return (
-		<RunStepProvider>
+		<>
 			<CLIWelcomeMessage />
 			<TaskList>
-				<Template args={args} />
-				<EnvVar options={options} />
-				<Dependencies />
-				{settings?.instance === 'local' && <BrowserRunner />}
-				<Runner options={options} />
-				{options.view && <BrowserOpener options={options} />}
+				{shouldShowTask('template', step, template, envVars) && (
+					<Template args={args} />
+				)}
+				{shouldShowTask('envvar', step, template, envVars) && (
+					<EnvVar options={options} />
+				)}
+				{shouldShowTask('dependencies', step, template, envVars) && (
+					<Dependencies />
+				)}
+				{shouldShowTask('task', step, template, envVars) && (
+					<TaskSelector options={options} />
+				)}
+				{shouldShowTask('browserrunner', step, template, envVars) &&
+					settings.instance === 'local' && <BrowserRunner />}
+				{shouldShowTask('runner', step, template, envVars) && (
+					<Runner options={options} />
+				)}
+				{shouldShowTask('browser', step, template, envVars) && options.view && (
+					<BrowserOpener options={options} />
+				)}
 			</TaskList>
+		</>
+	);
+}
+
+export default function Run({args, options}: Props) {
+	return (
+		<RunStepProvider>
+			<RunContent args={args} options={options} />
 		</RunStepProvider>
 	);
 }

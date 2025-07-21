@@ -19,6 +19,22 @@ export default function Dependencies() {
 	const {step, setStep, envVars, directory, template, setHash} = useRunStep();
 	const [output, setOutput] = useState<string>('');
 
+	const hasTaskEnvVar = template?.env?.some(e => e.value === 'TASK');
+
+	const getNextStep = () => {
+		if (hasTaskEnvVar) {
+			return 'task';
+		}
+		if (
+			envVars['STEEL_API_URL'] &&
+			!envVars['STEEL_API_URL'].includes('api.steel.dev')
+		) {
+			return 'browserrunner';
+		} else {
+			return 'runner';
+		}
+	};
+
 	useEffect(() => {
 		if (step === 'dependencies' && !task) {
 			setLoading(true);
@@ -43,14 +59,7 @@ export default function Dependencies() {
 							}
 						}
 					}
-					if (
-						envVars['STEEL_API_URL'] &&
-						!envVars['STEEL_API_URL'].includes('api.steel.dev')
-					) {
-						setStep('browserrunner');
-					} else {
-						setStep('runner');
-					}
+					setStep(getNextStep());
 					setTask(true);
 					setLoading(false);
 				} catch (error) {

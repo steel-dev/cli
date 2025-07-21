@@ -118,7 +118,7 @@ function extractOptionInfo(optionSchema: any) {
 
 		return Object.entries(shape).map(([name, def]: [string, any]) => {
 			const description = def._def?.description || '';
-			let type = def._def?.typeName || '';
+			const type = def._def?.typeName || '';
 
 			// Extract alias and description from pastel option config
 			let alias = '';
@@ -404,7 +404,9 @@ export default function Help({command}: Props) {
 					<CommandList commands={commands} />
 				) : (
 					<Box paddingLeft={2}>
-						<Text color="yellow">No commands found. Try using 'steel'.</Text>
+						<Text color="yellow">
+							No commands found. Try using &lsquo;steel&rsquo;.
+						</Text>
 					</Box>
 				)}
 
