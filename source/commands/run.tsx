@@ -8,7 +8,6 @@ import TaskSelector from '../components/run/taskselector.js';
 import {TaskList} from 'ink-task-list';
 import Dependencies from '../components/run/dependencies.js';
 import {RunStepProvider, useRunStep} from '../context/runstepcontext.js';
-import BrowserOpener from '../components/run/browseropener.js';
 import BrowserRunner from '../components/run/browserrunner.js';
 import CLIWelcomeMessage from '../components/cliwelcomemessage.js';
 import zod from 'zod';
@@ -149,9 +148,6 @@ function RunContent({args, options}: Props) {
 					settings.instance === 'local' && <BrowserRunner />}
 				{shouldShowTask('runner', step, template, envVars) && (
 					<Runner options={options} />
-				)}
-				{shouldShowTask('browser', step, template, envVars) && options.view && (
-					<BrowserOpener options={options} />
 				)}
 			</TaskList>
 		</>
