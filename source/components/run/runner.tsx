@@ -55,6 +55,7 @@ export default function Runner({options}: {options: Options}) {
 							setStep('done');
 						}
 					} else {
+						console.log(output);
 						setError(`Command failed with exit code ${code}`);
 						setOutput(`Command failed with exit code ${code}`);
 					}

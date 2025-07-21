@@ -10,7 +10,8 @@ import {option} from 'pastel';
 import Callout from '../components/callout.js';
 import {CACHE_DIR} from '../utils/constants.js';
 
-export const description = 'Manage Steel CLI cache';
+export const description =
+	'Manage Steel CLI cache which is used to store files for quickly running scripts';
 
 export const options = zod.object({
 	clean: zod
