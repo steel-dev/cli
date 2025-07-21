@@ -14,7 +14,8 @@ import zod from 'zod';
 import {option} from 'pastel';
 import {getSettings} from '../utils/session.js';
 
-export const description = 'Start a new project using the Steel CLI';
+export const description =
+	'Run a Steel Cookbook automation instantly from the CLI — no setup, no files.';
 
 export const args = zod.tuple([
 	zod.string().describe('Example template to run').optional(),
@@ -87,7 +88,7 @@ export default function Run({args, options}: Props) {
 				<Template args={args} />
 				<EnvVar options={options} />
 				<Dependencies />
-				{settings.instance === 'local' && <BrowserRunner />}
+				{settings?.instance === 'local' && <BrowserRunner />}
 				<Runner options={options} />
 				{options.view && <BrowserOpener options={options} />}
 			</TaskList>
