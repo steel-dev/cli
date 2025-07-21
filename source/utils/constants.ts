@@ -41,11 +41,7 @@ export const TEMPLATES = [
 		displayRunCommands: (options: {
 			directory: string;
 			packageManager?: string;
-		}) => [
-			`cd ${options.directory}`,
-			`${options.packageManager || 'npm'} install`,
-			`node index.js`,
-		],
+		}) => [`cd ${options.directory}`, `node index.js`],
 	},
 	{
 		alias: 'playwright',
@@ -78,7 +74,6 @@ export const TEMPLATES = [
 			packageManager?: string;
 		}) => [
 			`cd ${options.directory}`,
-			`${options.packageManager || 'npm'} install`,
 			`${options.packageManager || 'npm'} run build`,
 			`node dist/index.js`,
 		],
@@ -103,11 +98,7 @@ export const TEMPLATES = [
 		displayRunCommands: (options: {
 			directory: string;
 			packageManager?: string;
-		}) => [
-			`cd ${options.directory}`,
-			`${options.packageManager || 'npm'} install`,
-			`node index.js`,
-		],
+		}) => [`cd ${options.directory}`, `node index.js`],
 	},
 	{
 		alias: 'puppeteer',
@@ -140,7 +131,6 @@ export const TEMPLATES = [
 			packageManager?: string;
 		}) => [
 			`cd ${options.directory}`,
-			`${options.packageManager || 'npm'} install`,
 			`${options.packageManager || 'npm'} run build`,
 			`node dist/index.js`,
 		],
@@ -176,7 +166,6 @@ export const TEMPLATES = [
 			packageManager?: string;
 		}) => [
 			`cd ${options.directory}`,
-			`${options.packageManager || 'npm'} install`,
 			`${options.packageManager || 'npm'} run build`,
 			`node dist/index.js`,
 		],
@@ -212,7 +201,6 @@ export const TEMPLATES = [
 			packageManager?: string;
 		}) => [
 			`cd ${options.directory}`,
-			`${options.packageManager || 'npm'} install`,
 			`${options.packageManager || 'npm'} run build`,
 			`node dist/index.js`,
 		],
@@ -250,7 +238,6 @@ export const TEMPLATES = [
 			packageManager?: string;
 		}) => [
 			`cd ${options.directory}`,
-			`${options.packageManager || 'npm'} install`,
 			`${options.packageManager || 'npm'} run build`,
 			`node dist/index.js`,
 		],
@@ -288,7 +275,6 @@ export const TEMPLATES = [
 			packageManager?: string;
 		}) => [
 			`cd ${options.directory}`,
-			`${options.packageManager || 'npm'} install`,
 			`${options.packageManager || 'npm'} run build`,
 			`node dist/index.js`,
 		],
