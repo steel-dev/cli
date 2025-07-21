@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import {CONFIG_PATH} from './constants.js';
+import {CONFIG_PATH, CONFIG_DIR} from './constants.js';
 
 export function getApiKey(): {
 	apiKey: string;
@@ -39,6 +39,9 @@ export function getSettings(): {
 
 export function setSettings(value: object): void {
 	try {
+		// Ensure config directory exists
+		fs.mkdirSync(CONFIG_DIR, {recursive: true});
+
 		let parsedConfig = {};
 		try {
 			const config = fs.readFileSync(CONFIG_PATH, 'utf-8');
