@@ -53,13 +53,40 @@ function isDockerRunning(): Promise<boolean> {
 	});
 }
 
+async function waitForApiHealth(
+	port: number,
+	maxRetries = 30,
+	retryDelay = 500,
+): Promise<boolean> {
+	const healthUrl = `http://localhost:${port}/v1/health`;
+
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		try {
+			const response = await fetch(healthUrl);
+			if (response.ok) {
+				return true;
+			}
+		} catch {
+			// API not ready yet, continue polling
+		}
+
+		// Wait before next attempt
+		await new Promise(resolve => setTimeout(resolve, retryDelay));
+	}
+
+	return false;
+}
+
 export default function Start({options}: Props) {
 	const [loading, setLoading] = useState(false);
 	const [dockerError, setDockerError] = useState(false);
 	const [status, setStatus] = useState('');
+	const [output, setOutput] = useState<string>('');
+	const [apiReady, setApiReady] = useState(false);
 
 	useEffect(() => {
 		async function start() {
+			const port = options?.port || 3000;
 			setLoading(true);
 			setStatus('Cloning repository...');
 
@@ -75,7 +102,6 @@ export default function Start({options}: Props) {
 			}
 
 			setStatus('Starting Docker Compose...');
-			setLoading(false);
 
 			const folderName = path.basename(REPO_URL, '.git');
 
@@ -84,14 +110,26 @@ export default function Start({options}: Props) {
 				['-f', 'docker-compose.dev.yml', 'up', '-d'],
 				{
 					cwd: path.join(CONFIG_DIR, folderName),
-					stdio: 'inherit',
+					stdio: ['pipe', 'pipe', 'pipe'], // Capture stdout and stderr
 					env: {
 						...process.env,
-						API_PORT: String(options?.port || 3000),
+						API_PORT: String(port),
 						ENABLE_VERBOSE_LOGGING: options?.verbose || 'false',
 					},
 				},
 			);
+
+			// Stream stdout to output state
+			dockerCompose.stdout?.on('data', data => {
+				const text = data.toString();
+				setOutput(prev => prev + text);
+			});
+
+			// Stream stderr to output state
+			dockerCompose.stderr?.on('data', data => {
+				const text = data.toString();
+				setOutput(prev => prev + text);
+			});
 
 			dockerCompose.on('close', async code => {
 				if (code !== 0) {
@@ -99,8 +137,28 @@ export default function Start({options}: Props) {
 					setLoading(false);
 					return;
 				}
+
+				setStatus('Waiting for API to be ready...');
+				setOutput(''); // Clear docker output for cleaner display
+
+				const isApiHealthy = await waitForApiHealth(port);
+				if (!isApiHealthy) {
+					setDockerError(true);
+					setStatus('API failed to start within expected time');
+					setLoading(false);
+					return;
+				}
+
 				setStatus('Opening browser...');
+				setApiReady(true);
+				setLoading(false);
 				await open('http://localhost:5173');
+			});
+
+			dockerCompose.on('error', error => {
+				console.error('Error starting Docker Compose:', error);
+				setDockerError(true);
+				setLoading(false);
 			});
 		}
 		start();
@@ -108,8 +166,10 @@ export default function Start({options}: Props) {
 
 	if (dockerError) {
 		return (
-			<Callout variant="failed" title="Docker Not Running">
-				Docker is not running. Please start Docker and try again.
+			<Callout variant="failed" title="Startup Failed">
+				{status.includes('API failed')
+					? status
+					: 'Docker is not running. Please start Docker and try again.'}
 			</Callout>
 		);
 	}
@@ -118,15 +178,18 @@ export default function Start({options}: Props) {
 		return (
 			<Callout variant="info" title="Starting Development Environment">
 				<Text>
-					<Spinner type="dots" /> {status}
+					<Spinner type="dots" /> {status + '\n'}
 				</Text>
+				{output && (
+					<Text dimColor>{output.split('\n').slice(-5).join('\n')}</Text>
+				)}
 			</Callout>
 		);
 	}
 
-	if (status === 'Opening browser...') {
+	if (apiReady) {
 		return (
-			<Callout variant="success" title="Development Environment Started">
+			<Callout variant="success" title="Development Environment Ready">
 				Browser opened at http://localhost:5173
 			</Callout>
 		);
