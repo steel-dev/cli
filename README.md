@@ -1,6 +1,6 @@
 # @steel-dev/cli
 
-The CLI for Steel.dev
+The CLI for Steel.dev.
 
 ## Install
 
@@ -12,6 +12,7 @@ $ npm i @steel-dev/cli -g
 ```
 
 ## CLI
+The full reference documentation of this CLI can be found in [cli-reference.md](docs/cli-reference.md).
 
 ```
 USAGE
