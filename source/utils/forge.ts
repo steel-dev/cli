@@ -94,22 +94,17 @@ export function updateEnvVariable(
 
 export function runCommand(command: string, cwd: string): Promise<void> {
 	return new Promise((resolve, reject) => {
-		let output = '';
 		const child = spawn(command, {
 			cwd,
 			shell: true,
 			stdio: 'ignore', // show output
 		});
 
-		child.stdout?.on('data', data => {
-			output += data.toString();
-		});
-
 		child.on('exit', code => {
 			if (code === 0) {
 				resolve();
 			} else {
-				reject(new Error(`Process exited with code ${code}: ${output}`));
+				reject(new Error(`Process exited with code ${code}`));
 			}
 		});
 
