@@ -12,6 +12,7 @@ $ npm i @steel-dev/cli -g
 ```
 
 ## CLI
+
 The full reference documentation of this CLI can be found in [cli-reference.md](docs/cli-reference.md).
 
 ```
