@@ -113,3 +113,48 @@ export function runCommand(command: string, cwd: string): Promise<void> {
 		});
 	});
 }
+
+export function runCommandWithOutput(
+	command: string,
+	cwd: string,
+	onOutput?: (data: string) => void,
+): Promise<string> {
+	return new Promise((resolve, reject) => {
+		let output = '';
+		const child = spawn(command, {
+			cwd,
+			shell: true,
+			stdio: ['pipe', 'pipe', 'pipe'], // Capture stdout and stderr
+		});
+
+		// Stream stdout
+		child.stdout?.on('data', data => {
+			const text = data.toString();
+			output += text;
+			if (onOutput) {
+				onOutput(text);
+			}
+		});
+
+		// Stream stderr
+		child.stderr?.on('data', data => {
+			const text = data.toString();
+			output += text;
+			if (onOutput) {
+				onOutput(text);
+			}
+		});
+
+		child.on('exit', code => {
+			if (code === 0) {
+				resolve(output);
+			} else {
+				reject(new Error(`Process exited with code ${code}: ${output}`));
+			}
+		});
+
+		child.on('error', err => {
+			reject(err);
+		});
+	});
+}
