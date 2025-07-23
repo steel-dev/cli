@@ -7,7 +7,7 @@ import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
 import {runCommand} from '../../utils/forge.js';
-import {hashDeps} from '../../utils/cache.js';
+import {hashDeps, hashString} from '../../utils/cache.js';
 import {CACHE_DIR} from '../../utils/constants.js';
 
 export default function Dependencies() {
@@ -43,6 +43,7 @@ export default function Dependencies() {
 							template.language === 'PY' ? 'requirements.txt' : 'package.json';
 						const depFilePath = path.join(directory, depFileName);
 
+						console.log(depFilePath);
 						if (fs.existsSync(depFilePath)) {
 							const hash = hashDeps(depFilePath);
 							setHash(hash);
@@ -55,7 +56,13 @@ export default function Dependencies() {
 									await runCommand(command, directory);
 								}
 							}
+						} else {
+							const hash = hashString(directory);
+							setHash(hash);
 						}
+					} else {
+						const hash = hashString(directory || '');
+						setHash(hash);
 					}
 					setStep(getNextStep());
 					setTask(true);
