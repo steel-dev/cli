@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
-import {fileURLToPath} from 'url';
 import {useEffect} from 'react';
 import SelectInput from 'ink-select-input';
 import {Task} from 'ink-task-list';
 import {write} from '../../utils/forge.js';
+import {loadManifest, getTemplateDirectory} from '../../utils/registry.js';
 import {useTask} from '../../hooks/usetask.js';
 import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
@@ -41,54 +41,65 @@ export default function Directory() {
 	useEffect(() => {
 		if (step === 'directory' && task) {
 			setLoading(true);
-			const cwd = process.cwd();
 
-			const templateDir = path.resolve(
-				fileURLToPath(import.meta.url),
-				'../../../../examples',
-				template?.value,
-			);
-			const files = fs.readdirSync(templateDir);
+			async function setupDirectory() {
+				try {
+					const cwd = process.cwd();
+					const manifest = loadManifest();
+					const example = manifest.examples.find(e => e.id === template?.value);
 
-			// Create directory if it doesn't exist, or handle existing directory based on task
-			if (task === 'proceed' || task === 'yes' || task === 'ignore') {
-				if (task === 'yes') {
-					// Remove existing files if user chose to
-					if (fs.existsSync(directory)) {
-						fs.rmSync(directory, {recursive: true, force: true});
-					}
-				}
-
-				// Create directory (this will work whether it exists or not)
-				fs.mkdir(directory, {recursive: true}, err => {
-					if (err && err.code !== 'EEXIST') {
-						setError(err?.message);
+					if (!example) {
+						setError('Template not found in manifest');
+						setLoading(false);
 						return;
 					}
-				});
 
-				// Copy files
-				for (const file of files.filter(f => f !== 'package.json')) {
-					write(file, directory, templateDir, cwd);
-				}
+					const templateDir = await getTemplateDirectory(example, manifest);
+					const files = fs.readdirSync(templateDir);
 
-				const projectName = path.basename(path.resolve(directory));
-				const packageJsonPath = path.join(templateDir, `package.json`);
-				if (fs.existsSync(packageJsonPath)) {
-					const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-					pkg.name = projectName;
-					write(
-						'package.json',
-						directory,
-						templateDir,
-						cwd,
-						JSON.stringify(pkg, null, 2) + '\n',
-					);
+					if (task === 'proceed' || task === 'yes' || task === 'ignore') {
+						if (task === 'yes') {
+							if (fs.existsSync(directory)) {
+								fs.rmSync(directory, {recursive: true, force: true});
+							}
+						}
+
+						fs.mkdir(directory, {recursive: true}, err => {
+							if (err && err.code !== 'EEXIST') {
+								setError(err?.message);
+								return;
+							}
+						});
+
+						for (const file of files.filter(f => f !== 'package.json')) {
+							write(file, directory, templateDir, cwd);
+						}
+
+						const projectName = path.basename(path.resolve(directory));
+						const packageJsonPath = path.join(templateDir, `package.json`);
+						if (fs.existsSync(packageJsonPath)) {
+							const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+							pkg.name = projectName;
+							write(
+								'package.json',
+								directory,
+								templateDir,
+								cwd,
+								JSON.stringify(pkg, null, 2) + '\n',
+							);
+						}
+					}
+
+					setLoading(false);
+					setStep('envvar');
+				} catch (error) {
+					console.error('Error setting up directory:', error);
+					setError('Error setting up directory');
+					setLoading(false);
 				}
 			}
 
-			setLoading(false);
-			setStep('envvar');
+			setupDirectory();
 		}
 	}, [step, task, directory, template, setLoading, setError, setStep]);
 
