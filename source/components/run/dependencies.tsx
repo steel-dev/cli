@@ -1,7 +1,6 @@
 import path from 'path';
 import fs from 'fs';
 import React from 'react';
-import {fileURLToPath} from 'url';
 import {useEffect, useState} from 'react';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
@@ -10,9 +9,6 @@ import spinners from 'cli-spinners';
 import {runCommand} from '../../utils/forge.js';
 import {hashDeps} from '../../utils/cache.js';
 import {CACHE_DIR} from '../../utils/constants.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export default function Dependencies() {
 	const [state, task, , , setTask, setLoading, setError] = useTask();
@@ -42,22 +38,22 @@ export default function Dependencies() {
 			setLoading(true);
 			async function installDeps() {
 				try {
-					if (template?.depCommands) {
-						// Takes the dependencies file (requirements.txt/package.json) and hashes it to create a unique identifier for caching purposes
-						const hash = hashDeps(
-							path.resolve(
-								__dirname,
-								`../../examples/${template.value}/${template.label.includes('Python') ? 'requirements.txt' : 'package.json'}`,
-							),
-						);
-						setHash(hash);
-						const depsDir = path.join(CACHE_DIR, hash);
-						const depCommands = template.depCommands({
-							depsDir,
-						});
-						if (!fs.existsSync(depsDir)) {
-							for (const command of depCommands) {
-								await runCommand(command, directory);
+					if (template?.depCommands && directory) {
+						const depFileName =
+							template.language === 'PY' ? 'requirements.txt' : 'package.json';
+						const depFilePath = path.join(directory, depFileName);
+
+						if (fs.existsSync(depFilePath)) {
+							const hash = hashDeps(depFilePath);
+							setHash(hash);
+							const depsDir = path.join(CACHE_DIR, hash);
+							const depCommands = template.depCommands({
+								depsDir,
+							});
+							if (!fs.existsSync(depsDir)) {
+								for (const command of depCommands) {
+									await runCommand(command, directory);
+								}
 							}
 						}
 					}

@@ -12,8 +12,7 @@
 	"scripts": {
 		"prepare": "husky",
 		"clean": "rm -rf dist",
-		"build": "npm run clean && tsc && npm run copy-examples",
-		"copy-examples": "cp -r examples dist/examples",
+		"build": "npm run clean && tsc",
 		"dev": "tsc --watch",
 		"lint": "eslint . --ext .ts,.tsx",
 		"lint:fix": "eslint . --ext .ts,.tsx --fix",
@@ -28,7 +27,7 @@
 	},
 	"files": [
 		"dist",
-		"examples"
+		"manifest.json"
 	],
 	"dependencies": {
 		"@babel/parser": "^7.27.2",
@@ -49,6 +48,7 @@
 		"pastel": "^3.0.0",
 		"react": "^18.2.0",
 		"recast": "^0.23.11",
+		"tar-stream": "^3.1.7",
 		"uuid": "^11.1.0",
 		"zod": "^3.24.3"
 	},

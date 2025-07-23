@@ -1,6 +1,77 @@
 import path from 'path';
 import fs from 'fs';
-import {spawn} from 'node:child_process';
+import {spawn, ChildProcess} from 'node:child_process';
+
+// Track active child processes to clean them up on exit
+const activeProcesses = new Set<ChildProcess>();
+let isExiting = false;
+
+// Setup cleanup handlers
+function setupProcessCleanup() {
+	const cleanup = async (signal?: string) => {
+		if (isExiting) return;
+		isExiting = true;
+
+		console.log(`\n🧹 Cleaning up ${activeProcesses.size} active processes...`);
+
+		const killPromises = Array.from(activeProcesses).map(child => {
+			return new Promise<void>(resolve => {
+				if (child.killed) {
+					resolve();
+					return;
+				}
+
+				const forceTimeout = setTimeout(() => {
+					if (!child.killed) {
+						child.kill('SIGKILL');
+					}
+					resolve();
+				}, 2000);
+
+				child.on('exit', () => {
+					clearTimeout(forceTimeout);
+					resolve();
+				});
+
+				child.kill('SIGTERM');
+			});
+		});
+
+		try {
+			await Promise.all(killPromises);
+		} catch (error) {
+			console.error('Error during cleanup:', error);
+		}
+
+		activeProcesses.clear();
+
+		if (signal === 'SIGINT') {
+			process.exit(130);
+		} else {
+			process.exit(0);
+		}
+	};
+
+	process.on('SIGINT', () => cleanup('SIGINT'));
+	process.on('SIGTERM', () => cleanup('SIGTERM'));
+	process.on('beforeExit', () => cleanup());
+
+	process.on('uncaughtException', error => {
+		console.error('Uncaught exception:', error);
+		cleanup().then(() => process.exit(1));
+	});
+
+	process.on('unhandledRejection', reason => {
+		console.error('Unhandled rejection:', reason);
+		cleanup().then(() => process.exit(1));
+	});
+}
+
+let cleanupInitialized = false;
+if (!cleanupInitialized) {
+	setupProcessCleanup();
+	cleanupInitialized = true;
+}
 
 export function copyDir(srcDir: string, destDir: string) {
 	fs.mkdirSync(destDir, {recursive: true});
@@ -94,13 +165,23 @@ export function updateEnvVariable(
 
 export function runCommand(command: string, cwd: string): Promise<void> {
 	return new Promise((resolve, reject) => {
+		if (isExiting) {
+			reject(new Error('Process is exiting'));
+			return;
+		}
+
 		const child = spawn(command, {
 			cwd,
 			shell: true,
-			stdio: 'ignore', // show output
+			stdio: 'ignore',
+			detached: false,
 		});
 
+		activeProcesses.add(child);
+
 		child.on('exit', code => {
+			activeProcesses.delete(child);
+
 			if (code === 0) {
 				resolve();
 			} else {
@@ -109,6 +190,7 @@ export function runCommand(command: string, cwd: string): Promise<void> {
 		});
 
 		child.on('error', err => {
+			activeProcesses.delete(child);
 			reject(err);
 		});
 	});
@@ -120,12 +202,20 @@ export function runCommandWithOutput(
 	onOutput?: (data: string) => void,
 ): Promise<string> {
 	return new Promise((resolve, reject) => {
+		if (isExiting) {
+			reject(new Error('Process is exiting'));
+			return;
+		}
+
 		let output = '';
 		const child = spawn(command, {
 			cwd,
 			shell: true,
-			stdio: ['pipe', 'pipe', 'pipe'], // Capture stdout and stderr
+			stdio: ['pipe', 'pipe', 'pipe'],
+			detached: false,
 		});
+
+		activeProcesses.add(child);
 
 		// Stream stdout
 		child.stdout?.on('data', data => {
@@ -146,6 +236,8 @@ export function runCommandWithOutput(
 		});
 
 		child.on('exit', code => {
+			activeProcesses.delete(child);
+
 			if (code === 0) {
 				resolve(output);
 			} else {
@@ -154,6 +246,7 @@ export function runCommandWithOutput(
 		});
 
 		child.on('error', err => {
+			activeProcesses.delete(child);
 			reject(err);
 		});
 	});

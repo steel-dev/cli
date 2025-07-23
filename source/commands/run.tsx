@@ -14,6 +14,7 @@ import zod from 'zod';
 import {option} from 'pastel';
 import {getSettings} from '../utils/session.js';
 import type {Template as TemplateType} from '../utils/types.js';
+import {useEffect} from 'react';
 
 export const description =
 	'Run a Steel Cookbook automation instantly from the CLI — no setup, no files.';
@@ -127,6 +128,15 @@ function shouldShowTask(
 function RunContent({args, options}: Props) {
 	const {step, template, envVars} = useRunStep();
 	const settings = getSettings();
+
+	useEffect(() => {
+		if (step === 'done') {
+			console.log('\n✅ Workflow completed successfully!');
+			setTimeout(() => {
+				process.kill(process.pid, 'SIGTERM');
+			}, 1000);
+		}
+	}, [step]);
 
 	return (
 		<>
