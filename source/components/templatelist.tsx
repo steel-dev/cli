@@ -14,8 +14,8 @@ interface TemplateItemProps {
 
 function TemplateItem({command, label, language = ''}: TemplateItemProps) {
 	// Truncate and pad strings to fixed widths (same as TemplatePicker)
-	const paddedCommand = command.slice(0, 16).padEnd(16, ' ');
-	const paddedLabel = label.slice(0, 45).padEnd(45, ' ');
+	const paddedCommand = command.slice(0, 31).padEnd(31, ' ');
+	const paddedLabel = label.slice(0, 42).padEnd(42, ' ');
 	const paddedLanguage = language.slice(0, 6).padStart(6, ' ');
 
 	return (
@@ -32,8 +32,8 @@ export default function TemplateList({templates}: TemplateListProps) {
 	const HeaderRow = () => (
 		<Box marginBottom={1}>
 			<Text>{'  '}</Text>
-			<Text color="dim">{'Command'.padEnd(16, ' ')}</Text>
-			<Text color="dim">{'Label'.padEnd(45, ' ')}</Text>
+			<Text color="dim">{'Command'.padEnd(31, ' ')}</Text>
+			<Text color="dim">{'Label'.padEnd(42, ' ')}</Text>
 			<Text color="dim">{'Lang.'.padStart(6, ' ')}</Text>
 		</Box>
 	);

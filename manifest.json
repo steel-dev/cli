@@ -1,7 +1,7 @@
 {
 	"name": "Steel Registry",
 	"description": "A collection of examples for using Steel",
-	"version": "2011da9",
+	"version": "00ae600",
 	"groups": [
 		{
 			"id": "playwright-starter",
@@ -48,7 +48,7 @@
 		{
 			"slug": "browser-use-python",
 			"id": "browser-use-python",
-			"title": "Drive a Steel Session with Playwright-python",
+			"title": "Using Steel with Browser Use",
 			"accentColor": "purple",
 			"category": "AI_AGENTS",
 			"stack": "python",
@@ -61,7 +61,7 @@
 		{
 			"slug": "playwright-python",
 			"id": "playwright-python",
-			"title": "Drive a Steel Session with Playwright-python",
+			"title": "Drive a Steel Session with Playwright",
 			"accentColor": "blue",
 			"category": "BROWSER_AUTOMATION",
 			"stack": "python",
@@ -103,7 +103,7 @@
 		{
 			"slug": "reuse-auth-context-example",
 			"id": "reuse-auth-context-example",
-			"title": "Reusing Authentication Context with Steel",
+			"title": "Reusing Authentication Context",
 			"accentColor": "yellow",
 			"category": "BROWSER_AUTOMATION",
 			"stack": "nodejs",
@@ -116,7 +116,7 @@
 		{
 			"slug": "steel-claude-computer-use-node-starter",
 			"id": "steel-claude-computer-use-node-starter",
-			"title": "Using Steel with Claude's Computer Use API in Node.js",
+			"title": "Using Steel with Claude's Computer Use",
 			"accentColor": "orange",
 			"category": "AI_AUTOMATION",
 			"stack": "nodejs",
@@ -130,7 +130,7 @@
 		{
 			"slug": "steel-claude-computer-use-python-starter",
 			"id": "steel-claude-computer-use-python-starter",
-			"title": "Using Steel with Claude's Computer Use API in Python",
+			"title": "Using Steel with Claude's Computer Use",
 			"accentColor": "orange",
 			"category": "AI_AUTOMATION",
 			"stack": "python",
@@ -170,7 +170,7 @@
 		{
 			"slug": "steel-oai-computer-use-node-starter",
 			"id": "steel-oai-computer-use-node-starter",
-			"title": "Integrate Steel with OpenAI's Computer Use Assistant (Node.js)",
+			"title": "Using Steel with OpenAI's Computer Use",
 			"accentColor": "yellow",
 			"category": "AI_AGENTS",
 			"stack": "nodejs",
@@ -184,7 +184,7 @@
 		{
 			"slug": "steel-oai-computer-use-python-starter",
 			"id": "steel-oai-computer-use-python-starter",
-			"title": "Integrate Steel with OpenAI's Computer Use Assistant (Python)",
+			"title": "Using Steel with Claude's Computer Use",
 			"accentColor": "blue",
 			"category": "AI_AGENTS",
 			"stack": "python",
@@ -198,7 +198,7 @@
 		{
 			"slug": "steel-playwright-starter-js",
 			"id": "steel-playwright-starter-js",
-			"title": "Using Playwright with Steel (JavaScript)",
+			"title": "Using Playwright with Steel",
 			"accentColor": "yellow",
 			"category": "BROWSER_AUTOMATION",
 			"stack": "nodejs",
@@ -212,7 +212,7 @@
 		{
 			"slug": "steel-puppeteer-starter-js",
 			"id": "steel-puppeteer-starter-js",
-			"title": "Using Puppeteer with Steel (JavaScript)",
+			"title": "Using Puppeteer with Steel",
 			"accentColor": "yellow",
 			"category": "BROWSER_AUTOMATION",
 			"stack": "nodejs",
@@ -239,7 +239,7 @@
 		{
 			"slug": "steel-stagehand-node-starter",
 			"id": "steel-stagehand-node-starter",
-			"title": "Using Steel with Stagehand for AI-Powered Automations",
+			"title": "Using Steel with Stagehand",
 			"accentColor": "blue",
 			"category": "AI_AUTOMATION",
 			"stack": "nodejs",
@@ -253,7 +253,7 @@
 		{
 			"slug": "steel-stagehand-python-starter",
 			"id": "steel-stagehand-python-starter",
-			"title": "Using Steel with Stagehand for AI-Powered Automations in Python",
+			"title": "Using Steel with Stagehand",
 			"accentColor": "blue",
 			"category": "AI_AUTOMATION",
 			"stack": "python",

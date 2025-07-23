@@ -26,8 +26,8 @@ function TemplateItem({
 	const textColor = isSelected ? 'white' : 'gray';
 
 	// Truncate and pad strings to fixed widths
-	const paddedCommand = command.slice(0, 29).padEnd(29, ' ');
-	const paddedLabel = label.slice(0, 52).padEnd(52, ' ');
+	const paddedCommand = command.slice(0, 31).padEnd(31, ' ');
+	const paddedLabel = label.slice(0, 42).padEnd(42, ' ');
 	const paddedLanguage = language.slice(0, 6).padStart(6, ' ');
 
 	return (
@@ -49,8 +49,8 @@ export default function TemplatePicker({
 	const HeaderRow = () => (
 		<Box marginBottom={1}>
 			<Text>{'  '}</Text>
-			<Text color="dim">{'Command'.padEnd(29, ' ')}</Text>
-			<Text color="dim">{'Label'.padEnd(52, ' ')}</Text>
+			<Text color="dim">{'Command'.padEnd(31, ' ')}</Text>
+			<Text color="dim">{'Label'.padEnd(42, ' ')}</Text>
 			<Text color="dim">{'Lang.'.padStart(6, ' ')}</Text>
 		</Box>
 	);
