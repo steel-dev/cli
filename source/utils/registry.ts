@@ -11,20 +11,35 @@ const __dirname = path.dirname(__filename);
 const REGISTRY_BASE_URL = 'https://registry.steel-edge.net';
 const MANIFEST_PATH = path.resolve(__dirname, '../../manifest.json');
 
+type ManifestGroup = {
+	id: string;
+	title: string;
+	accentColor: string;
+	category: string;
+	description: string;
+	flags: string[];
+};
+
 type ManifestExample = {
 	slug: string;
 	id: string;
 	title: string;
-	language: string;
-	template: string;
-	flags: string[];
+	accentColor: string;
 	category: string;
 	stack: string;
 	description: string;
+	flags: string[];
+	directory: string;
+	language: string;
+	template: string;
+	groupId?: string;
 };
 
 type Manifest = {
+	name: string;
+	description: string;
 	version: string;
+	groups: ManifestGroup[];
 	examples: ManifestExample[];
 };
 
@@ -47,6 +62,9 @@ export function convertManifestToTemplates(manifest: Manifest): Template[] {
 				value: example.id,
 				language: mapLanguage(example.language, example.stack),
 				category: example.category,
+				accentColor: example.accentColor,
+				groupId: example.groupId,
+				command: createCommand(example.id),
 			};
 
 			template.env = getEnvironmentVariables(example);
@@ -63,6 +81,13 @@ function mapLanguage(language: string, stack: string): string {
 	if (language === 'javascript') return 'JS';
 	if (language === 'python') return 'PY';
 	return language.toUpperCase();
+}
+
+function createCommand(id: string): string {
+	return id
+		.split('-')
+		.filter(part => part !== 'steel' && part !== 'starter')
+		.join('-');
 }
 
 function getEnvironmentVariables(
@@ -180,7 +205,7 @@ export async function downloadTemplate(
 	try {
 		await runCommand(`curl -L -o "${tarPath}" "${downloadUrl}"`, tempDir);
 		await runCommand(
-			`tar -xzf "${path.basename(tarPath)}" -C "${cachedPath}" --strip-components=1`,
+			`tar -xzf "${path.basename(tarPath)}" -C "${cachedPath}"`,
 			tempDir,
 		);
 

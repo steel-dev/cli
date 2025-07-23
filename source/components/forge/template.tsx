@@ -22,7 +22,8 @@ export default function Template({args}: {args: Args}) {
 				t =>
 					t.value === templateArg ||
 					t.label === templateArg ||
-					t.alias === templateArg,
+					t.alias === templateArg ||
+					t.command === templateArg,
 			);
 			if (found) {
 				const template = found;
