@@ -14,6 +14,7 @@ export default function Runner({options}: {options: Options}) {
 	const {step, setStep, envVars, template, directory, hash, sessionId} =
 		useRunStep();
 	const [output, setOutput] = useState<string>('');
+	const [isOpen, setIsOpen] = useState(false);
 
 	useEffect(() => {
 		if (step === 'runner' && !task) {
@@ -41,8 +42,10 @@ export default function Runner({options}: {options: Options}) {
 					const text = data.toString();
 					setOutput(prev => prev + text);
 					if (
-						(output + text).includes('Steel Session created!') &&
-						options.view
+						((output + text).includes('https://app.steel.dev') ||
+							(output + text).includes('http://localhost:5173')) &&
+						options.view &&
+						!isOpen
 					) {
 						try {
 							// Determine URL based on sessionId - use local default if no sessionId provided
@@ -51,6 +54,7 @@ export default function Runner({options}: {options: Options}) {
 								: 'http://localhost:5173';
 
 							open(url);
+							setIsOpen(true);
 						} catch {
 							setError('Error opening browser');
 							setLoading(false);
