@@ -1,3 +1,0 @@
-steel-sdk>=0.7.0
-selenium>=4.34.2
-python-dotenv>=1.1.1

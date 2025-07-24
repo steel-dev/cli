@@ -11,13 +11,13 @@ interface TemplatePickerProps {
 interface TemplateItemProps {
 	label: string;
 	value: string;
-	alias: string;
+	command: string;
 	language?: string;
 	isSelected?: boolean;
 }
 
 function TemplateItem({
-	alias,
+	command,
 	label,
 	language = '',
 	isSelected = false,
@@ -26,14 +26,14 @@ function TemplateItem({
 	const textColor = isSelected ? 'white' : 'gray';
 
 	// Truncate and pad strings to fixed widths
-	const paddedAlias = alias.slice(0, 16).padEnd(16, ' ');
-	const paddedLabel = label.slice(0, 45).padEnd(45, ' ');
+	const paddedCommand = command.slice(0, 31).padEnd(31, ' ');
+	const paddedLabel = label.slice(0, 42).padEnd(42, ' ');
 	const paddedLanguage = language.slice(0, 6).padStart(6, ' ');
 
 	return (
 		<Box>
 			<Text bold color={selectedColor}>
-				{paddedAlias}
+				{paddedCommand}
 			</Text>
 			<Text color={textColor}>{paddedLabel}</Text>
 			<Text color={textColor}>{paddedLanguage}</Text>
@@ -49,8 +49,8 @@ export default function TemplatePicker({
 	const HeaderRow = () => (
 		<Box marginBottom={1}>
 			<Text>{'  '}</Text>
-			<Text color="dim">{'Command'.padEnd(16, ' ')}</Text>
-			<Text color="dim">{'Label'.padEnd(45, ' ')}</Text>
+			<Text color="dim">{'Command'.padEnd(31, ' ')}</Text>
+			<Text color="dim">{'Label'.padEnd(42, ' ')}</Text>
 			<Text color="dim">{'Lang.'.padStart(6, ' ')}</Text>
 		</Box>
 	);

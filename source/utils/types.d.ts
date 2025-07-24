@@ -4,6 +4,7 @@ export type Template = {
 	value: string;
 	label: string;
 	alias: string;
+	command: string;
 	/**
 	 * Primary language used by the starter (TS, JS, PY, etc.).
 	 */
@@ -12,6 +13,14 @@ export type Template = {
 	 * High-level grouping such as "Browser", "AI", "Files", etc.
 	 */
 	category?: string;
+	/**
+	 * Accent color for UI display (blue, yellow, orange, purple, green, etc.)
+	 */
+	accentColor?: string;
+	/**
+	 * Optional group ID that this template belongs to
+	 */
+	groupId?: string;
 	depCommands?: (options: {depsDir: string}) => string[];
 	runCommand?: (options: {depsDir: string}) => string;
 	/**

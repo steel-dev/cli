@@ -1,10 +1,10 @@
 import path from 'path';
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useState, useRef} from 'react';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
-import {spawn} from 'child_process';
+import {spawn, ChildProcess} from 'child_process';
 import {CACHE_DIR} from '../../utils/constants.js';
 import type {Options} from '../../commands/run.js';
 import open from 'open';
@@ -14,6 +14,27 @@ export default function Runner({options}: {options: Options}) {
 	const {step, setStep, envVars, template, directory, hash, sessionId} =
 		useRunStep();
 	const [output, setOutput] = useState<string>('');
+	const [isOpen, setIsOpen] = useState(false);
+	const childProcessRef = useRef<ChildProcess | null>(null);
+
+	const cleanupChildProcess = () => {
+		if (childProcessRef.current && !childProcessRef.current.killed) {
+			childProcessRef.current.kill('SIGTERM');
+
+			setTimeout(() => {
+				if (childProcessRef.current && !childProcessRef.current.killed) {
+					childProcessRef.current.kill('SIGKILL');
+				}
+				childProcessRef.current = null;
+			}, 2000);
+		}
+	};
+
+	useEffect(() => {
+		return () => {
+			cleanupChildProcess();
+		};
+	}, []);
 
 	useEffect(() => {
 		if (step === 'runner' && !task) {
@@ -25,32 +46,41 @@ export default function Runner({options}: {options: Options}) {
 				return;
 			}
 			try {
-				// Parse the command into the binary and its arguments
 				const command = template.runCommand({
 					depsDir: path.join(CACHE_DIR, hash),
 				});
+
 				const child = spawn(command, {
 					cwd: directory,
 					shell: true,
-					stdio: ['pipe', 'pipe', 'pipe'], // Capture stdout and stderr
-					env: {...envVars, ...process.env},
+					stdio: ['pipe', 'pipe', 'pipe'],
+					env: {
+						...envVars,
+						...process.env,
+						PYTHONUNBUFFERED: '1',
+					},
+					detached: false,
 				});
+
+				childProcessRef.current = child;
 
 				// Stream stdout to output state
 				child.stdout?.on('data', data => {
 					const text = data.toString();
 					setOutput(prev => prev + text);
 					if (
-						(output + text).includes('Steel Session created!') &&
-						options.view
+						((output + text).includes('https://app.steel.dev') ||
+							(output + text).includes('http://localhost:5173')) &&
+						options.view &&
+						!isOpen
 					) {
 						try {
-							// Determine URL based on sessionId - use local default if no sessionId provided
 							const url = sessionId
 								? `https://app.steel.dev/sessions/${sessionId}`
 								: 'http://localhost:5173';
 
 							open(url);
+							setIsOpen(true);
 						} catch {
 							setError('Error opening browser');
 							setLoading(false);
@@ -64,12 +94,19 @@ export default function Runner({options}: {options: Options}) {
 					setOutput(prev => prev + text);
 				});
 
-				child.on('close', code => {
+				child.on('close', (code, signal) => {
+					childProcessRef.current = null;
+
 					if (code === 0) {
-						setTask(`Command completed successfully: ${template.runCommand}`);
+						setTask(`Command completed successfully`);
 						setStep('done');
+					} else if (signal) {
+						setError(`Command terminated by signal: ${signal}`);
+						setOutput(`Command terminated by signal: ${signal}`);
+					} else if (code === null) {
+						setError('Command was terminated unexpectedly');
+						setOutput('Command was terminated unexpectedly');
 					} else {
-						console.log(output);
 						setError(`Command failed with exit code ${code}`);
 						setOutput(`Command failed with exit code ${code}`);
 					}
@@ -77,15 +114,17 @@ export default function Runner({options}: {options: Options}) {
 				});
 
 				child.on('error', error => {
+					childProcessRef.current = null;
+
 					console.error('Error running command:', error);
 					setError(`Error running command: ${error.message}`);
 					setOutput(`Error running command: ${error.message}`);
 					setLoading(false);
 				});
 
-				process.on('SIGINT', () => {
-					child.kill();
-				});
+				return () => {
+					cleanupChildProcess();
+				};
 			} catch (error) {
 				console.error('Error running command:', error);
 				setError(`Error running command: ${error.message}`);
