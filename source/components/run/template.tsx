@@ -1,17 +1,13 @@
-import path from 'path';
 import React, {useEffect} from 'react';
-import {fileURLToPath} from 'url';
 import {Task} from 'ink-task-list';
 import {TEMPLATES} from '../../utils/constants.js';
+import {loadManifest, getTemplateDirectory} from '../../utils/registry.js';
 import TemplatePicker from '../templatepicker.js';
 import {useTask} from '../../hooks/usetask.js';
 import {useRunStep} from '../../context/runstepcontext.js';
 import spinners from 'cli-spinners';
 import type {Template} from '../../utils/types.js';
 import {Args} from '../../commands/run.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export default function Template({args}: {args: Args}) {
 	const [state, task, , , setTask, setLoading] = useTask();
@@ -22,26 +18,39 @@ export default function Template({args}: {args: Args}) {
 		if (step === 'template' && args?.length > 0 && !task) {
 			setLoading(true);
 			const [templateArg] = args;
-			// Find a matching template by label/key/etc.
 			const found = TEMPLATES.find(
 				t =>
 					t.value === templateArg ||
 					t.label === templateArg ||
-					t.alias === templateArg,
+					t.alias === templateArg ||
+					t.command === templateArg,
 			);
 			if (found) {
 				const template = found;
 				setTask(true);
 				setTemplate(template);
-				setDirectory(
-					path.resolve(__dirname, `../../examples/${template.value}/`),
-				);
-				setStep('envvar');
+
+				(async () => {
+					try {
+						const manifest = loadManifest();
+						const example = manifest.examples.find(
+							e => e.id === template.value,
+						);
+						if (example) {
+							const dir = await getTemplateDirectory(example, manifest);
+							setDirectory(dir);
+						}
+						setStep('envvar');
+						setLoading(false);
+					} catch (error) {
+						console.error('Failed to set template directory:', error);
+						setLoading(false);
+					}
+				})();
 			} else if (templateArg) {
 				console.log(`Template "${templateArg}" not found.`);
-				// Optionally: fall back to selection or exit
+				setLoading(false);
 			}
-			setLoading(false);
 		}
 	}, [args, task]);
 
@@ -64,10 +73,23 @@ export default function Template({args}: {args: Args}) {
 				onSelect={template => {
 					setTask(true);
 					setTemplate(template);
-					setDirectory(
-						path.resolve(__dirname, `../../examples/${template.value}/`),
-					);
-					setStep('envvar');
+
+					(async () => {
+						try {
+							const manifest = loadManifest();
+							const example = manifest.examples.find(
+								e => e.id === template.value,
+							);
+							if (example) {
+								const dir = await getTemplateDirectory(example, manifest);
+								setDirectory(dir);
+							}
+							setStep('envvar');
+							setLoading(false);
+						} catch (error) {
+							console.error('Failed to set template directory:', error);
+						}
+					})();
 				}}
 			/>
 		</Task>
