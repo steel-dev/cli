@@ -1,7 +1,7 @@
 {
 	"name": "Steel Registry",
 	"description": "A collection of examples for using Steel",
-	"version": "00ae600",
+	"version": "eb01c3d",
 	"groups": [
 		{
 			"id": "playwright-starter",
@@ -184,7 +184,7 @@
 		{
 			"slug": "steel-oai-computer-use-python-starter",
 			"id": "steel-oai-computer-use-python-starter",
-			"title": "Using Steel with Claude's Computer Use",
+			"title": "Using Steel with OpenAI's Computer Use",
 			"accentColor": "blue",
 			"category": "AI_AGENTS",
 			"stack": "python",

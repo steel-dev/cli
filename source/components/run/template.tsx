@@ -41,6 +41,7 @@ export default function Template({args}: {args: Args}) {
 							setDirectory(dir);
 						}
 						setStep('envvar');
+						setLoading(false);
 					} catch (error) {
 						console.error('Failed to set template directory:', error);
 						setLoading(false);
@@ -84,6 +85,7 @@ export default function Template({args}: {args: Args}) {
 								setDirectory(dir);
 							}
 							setStep('envvar');
+							setLoading(false);
 						} catch (error) {
 							console.error('Failed to set template directory:', error);
 						}
