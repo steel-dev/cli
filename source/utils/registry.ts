@@ -33,6 +33,7 @@ type ManifestExample = {
 	language: string;
 	template: string;
 	groupId?: string;
+	shorthand?: string;
 };
 
 type Manifest = {
@@ -64,7 +65,7 @@ export function convertManifestToTemplates(manifest: Manifest): Template[] {
 				category: example.category,
 				accentColor: example.accentColor,
 				groupId: example.groupId,
-				command: createCommand(example.id),
+				command: example.shorthand || example.id,
 			};
 
 			template.env = getEnvironmentVariables(example);
@@ -81,13 +82,6 @@ function mapLanguage(language: string, stack: string): string {
 	if (language === 'javascript') return 'JS';
 	if (language === 'python') return 'PY';
 	return language.toUpperCase();
-}
-
-function createCommand(id: string): string {
-	return id
-		.split('-')
-		.filter(part => part !== 'steel' && part !== 'starter')
-		.join('-');
 }
 
 function getEnvironmentVariables(

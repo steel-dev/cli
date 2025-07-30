@@ -1,7 +1,7 @@
 {
 	"name": "Steel Registry",
 	"description": "A collection of examples for using Steel",
-	"version": "eb01c3d",
+	"version": "25f6095",
 	"groups": [
 		{
 			"id": "playwright-starter",
@@ -46,8 +46,22 @@
 	],
 	"examples": [
 		{
-			"slug": "browser-use-python",
-			"id": "browser-use-python",
+			"slug": "steel-auth-context-starter",
+			"id": "steel-auth-context-starter",
+			"title": "Reusing Authentication Context",
+			"accentColor": "yellow",
+			"category": "BROWSER_AUTOMATION",
+			"stack": "nodejs",
+			"description": "A starter project for reusing authentication across Steel sessions with Playwright.",
+			"flags": ["cli", "playground"],
+			"directory": "examples/steel-auth-context-starter",
+			"language": "typescript",
+			"shorthand": "auth",
+			"template": "templates/steel-auth-context-starter.tar.gz"
+		},
+		{
+			"slug": "steel-browser-use-starter",
+			"id": "steel-browser-use-starter",
 			"title": "Using Steel with Browser Use",
 			"accentColor": "purple",
 			"category": "AI_AGENTS",
@@ -56,62 +70,8 @@
 			"flags": ["guide", "playground", "cli"],
 			"directory": "examples/steel-browser-use-starter",
 			"language": "python",
-			"template": "templates/browser-use-python.tar.gz"
-		},
-		{
-			"slug": "playwright-python",
-			"id": "playwright-python",
-			"title": "Drive a Steel Session with Playwright",
-			"accentColor": "blue",
-			"category": "BROWSER_AUTOMATION",
-			"stack": "python",
-			"description": "Control Steel's managed browser infrastructure with Playwright in Python for reliable web automation without the headaches.",
-			"flags": ["guide", "playground", "cli"],
-			"directory": "examples/steel-playwright-python-starter",
-			"groupId": "playwright-starter",
-			"language": "python",
-			"template": "templates/playwright-python.tar.gz"
-		},
-		{
-			"slug": "playwright-typescript",
-			"id": "playwright-typescript",
-			"title": "Drive a Steel Session with Playwright",
-			"accentColor": "orange",
-			"category": "BROWSER_AUTOMATION",
-			"stack": "nodejs",
-			"description": "Control Steel's managed browser infrastructure with Playwright in Node.js for reliable web automation without the headaches.",
-			"flags": ["guide", "playground", "cli"],
-			"directory": "examples/steel-playwright-starter",
-			"groupId": "playwright-starter",
-			"language": "typescript",
-			"template": "templates/playwright-typescript.tar.gz"
-		},
-		{
-			"slug": "puppeteer-typescript",
-			"id": "puppeteer-typescript",
-			"title": "Drive a Steel Session with Puppeteer",
-			"accentColor": "yellow",
-			"category": "BROWSER_AUTOMATION",
-			"stack": "nodejs",
-			"description": "Control Steel's managed browser infrastructure with Puppeteer in Node.js for reliable web automation without the headaches.",
-			"flags": ["guide", "playground", "cli"],
-			"directory": "examples/steel-puppeteer-starter",
-			"groupId": "puppeteer-starter",
-			"language": "typescript",
-			"template": "templates/puppeteer-typescript.tar.gz"
-		},
-		{
-			"slug": "reuse-auth-context-example",
-			"id": "reuse-auth-context-example",
-			"title": "Reusing Authentication Context",
-			"accentColor": "yellow",
-			"category": "BROWSER_AUTOMATION",
-			"stack": "nodejs",
-			"description": "A starter project for reusing authentication across Steel sessions with Playwright.",
-			"flags": ["cli", "playground"],
-			"directory": "examples/reuse_auth_context_example",
-			"language": "typescript",
-			"template": "templates/reuse-auth-context-example.tar.gz"
+			"shorthand": "browser-use",
+			"template": "templates/steel-browser-use-starter.tar.gz"
 		},
 		{
 			"slug": "steel-claude-computer-use-node-starter",
@@ -125,6 +85,7 @@
 			"directory": "examples/steel-claude-computer-use-node-starter",
 			"groupId": "claude-computer-use",
 			"language": "typescript",
+			"shorthand": "claude-cua",
 			"template": "templates/steel-claude-computer-use-node-starter.tar.gz"
 		},
 		{
@@ -139,6 +100,7 @@
 			"directory": "examples/steel-claude-computer-use-python-starter",
 			"groupId": "claude-computer-use",
 			"language": "python",
+			"shorthand": "claude-cua-py",
 			"template": "templates/steel-claude-computer-use-python-starter.tar.gz"
 		},
 		{
@@ -152,6 +114,7 @@
 			"flags": ["cli", "playground"],
 			"directory": "examples/steel-credentials-starter",
 			"language": "typescript",
+			"shorthand": "creds",
 			"template": "templates/steel-credentials-starter.tar.gz"
 		},
 		{
@@ -165,6 +128,7 @@
 			"flags": ["cli", "playground"],
 			"directory": "examples/steel-files-api-starter",
 			"language": "typescript",
+			"shorthand": "files",
 			"template": "templates/steel-files-api-starter.tar.gz"
 		},
 		{
@@ -179,6 +143,7 @@
 			"directory": "examples/steel-oai-computer-use-node-starter",
 			"groupId": "oai-computer-use",
 			"language": "typescript",
+			"shorthand": "oai-cua",
 			"template": "templates/steel-oai-computer-use-node-starter.tar.gz"
 		},
 		{
@@ -193,7 +158,23 @@
 			"directory": "examples/steel-oai-computer-use-python-starter",
 			"groupId": "oai-computer-use",
 			"language": "python",
+			"shorthand": "oai-cua-py",
 			"template": "templates/steel-oai-computer-use-python-starter.tar.gz"
+		},
+		{
+			"slug": "steel-playwright-python-starter",
+			"id": "steel-playwright-python-starter",
+			"title": "Drive a Steel Session with Playwright",
+			"accentColor": "blue",
+			"category": "BROWSER_AUTOMATION",
+			"stack": "python",
+			"description": "Control Steel's managed browser infrastructure with Playwright in Python for reliable web automation without the headaches.",
+			"flags": ["guide", "playground", "cli"],
+			"directory": "examples/steel-playwright-python-starter",
+			"groupId": "playwright-starter",
+			"language": "python",
+			"shorthand": "playwright-py",
+			"template": "templates/steel-playwright-python-starter.tar.gz"
 		},
 		{
 			"slug": "steel-playwright-starter-js",
@@ -207,7 +188,23 @@
 			"directory": "examples/steel-playwright-starter-js",
 			"groupId": "playwright-starter",
 			"language": "javascript",
+			"shorthand": "playwright-js",
 			"template": "templates/steel-playwright-starter-js.tar.gz"
+		},
+		{
+			"slug": "steel-playwright-starter",
+			"id": "steel-playwright-starter",
+			"title": "Drive a Steel Session with Playwright",
+			"accentColor": "orange",
+			"category": "BROWSER_AUTOMATION",
+			"stack": "nodejs",
+			"description": "Control Steel's managed browser infrastructure with Playwright in Node.js for reliable web automation without the headaches.",
+			"flags": ["guide", "playground", "cli"],
+			"directory": "examples/steel-playwright-starter",
+			"groupId": "playwright-starter",
+			"language": "typescript",
+			"shorthand": "playwright",
+			"template": "templates/steel-playwright-starter.tar.gz"
 		},
 		{
 			"slug": "steel-puppeteer-starter-js",
@@ -221,7 +218,23 @@
 			"directory": "examples/steel-puppeteer-starter-js",
 			"groupId": "puppeteer-starter",
 			"language": "javascript",
+			"shorthand": "puppeteer-js",
 			"template": "templates/steel-puppeteer-starter-js.tar.gz"
+		},
+		{
+			"slug": "steel-puppeteer-starter",
+			"id": "steel-puppeteer-starter",
+			"title": "Drive a Steel Session with Puppeteer",
+			"accentColor": "yellow",
+			"category": "BROWSER_AUTOMATION",
+			"stack": "nodejs",
+			"description": "Control Steel's managed browser infrastructure with Puppeteer in Node.js for reliable web automation without the headaches.",
+			"flags": ["guide", "playground", "cli"],
+			"directory": "examples/steel-puppeteer-starter",
+			"groupId": "puppeteer-starter",
+			"language": "typescript",
+			"shorthand": "puppeteer",
+			"template": "templates/steel-puppeteer-starter.tar.gz"
 		},
 		{
 			"slug": "steel-selenium-starter",
@@ -234,6 +247,7 @@
 			"flags": ["cli", "playground"],
 			"directory": "examples/steel-selenium-starter",
 			"language": "python",
+			"shorthand": "selenium",
 			"template": "templates/steel-selenium-starter.tar.gz"
 		},
 		{
@@ -248,6 +262,7 @@
 			"directory": "examples/steel-stagehand-node-starter",
 			"groupId": "stagehand-starter",
 			"language": "typescript",
+			"shorthand": "stagehand",
 			"template": "templates/steel-stagehand-node-starter.tar.gz"
 		},
 		{
@@ -262,6 +277,7 @@
 			"directory": "examples/steel-stagehand-python-starter",
 			"groupId": "stagehand-starter",
 			"language": "python",
+			"shorthand": "stagehand-py",
 			"template": "templates/steel-stagehand-python-starter.tar.gz"
 		}
 	]
