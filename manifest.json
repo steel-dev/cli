@@ -1,7 +1,7 @@
 {
 	"name": "Steel Registry",
 	"description": "A collection of examples for using Steel",
-	"version": "25f6095",
+	"version": "c8ccb06",
 	"groups": [
 		{
 			"id": "playwright-starter",
@@ -130,6 +130,20 @@
 			"language": "typescript",
 			"shorthand": "files",
 			"template": "templates/steel-files-api-starter.tar.gz"
+		},
+		{
+			"slug": "steel-magnitude-starter",
+			"id": "steel-magnitude-starter",
+			"title": "Using Steel with Magnitude",
+			"accentColor": "blue",
+			"category": "AI_AUTOMATION",
+			"stack": "nodejs",
+			"description": "A starter project demonstrating how to use Steel with Magnitude in Node.js & TypeScript for AI-powered browser automations.",
+			"flags": ["cli", "playground"],
+			"directory": "examples/steel-magnitude-starter",
+			"language": "typescript",
+			"shorthand": "magnitude",
+			"template": "templates/steel-magnitude-starter.tar.gz"
 		},
 		{
 			"slug": "steel-oai-computer-use-node-starter",
