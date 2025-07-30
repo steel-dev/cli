@@ -83,18 +83,23 @@ steel forge [template] [options]
 
 | Alias           | Label                                              | Language | Description                                                                |
 | --------------- | -------------------------------------------------- | -------- | -------------------------------------------------------------------------- |
-| `playwright-js` | Playwright                                         | JS       | Template for Playwright automation                                         |
-| `playwright`    | Playwright + TypeScript                            | TS       | Template for Playwright + TypeScript automation                            |
-| `puppeteer-js`  | Puppeteer                                          | JS       | Template for Puppeteer automation                                          |
-| `puppeteer`     | Puppeteer + TypeScript                             | TS       | Template for Puppeteer + TypeScript automation                             |
-| `files`         | Playwright + Files API Starter in TypeScript       | TS       | Template for Playwright + Files API Starter in TypeScript automation       |
-| `creds`         | Playwright + Credentials API Starter in TypeScript | TS       | Template for Playwright + Credentials API Starter in TypeScript automation |
-| `oai-cua`       | Steel + OpenAI Computer Use + TypeScript           | TS       | Template for Steel + OpenAI Computer Use + TypeScript automation           |
-| `magnitude`     | Steel + Magnitude                                  | TS       | Template for Steel + Magnitude automation                                  |
-| `browser-use`   | (Python) Steel + Browser Use                       | PY       | Template for (Python) Steel + Browser Use automation                       |
-| `oai-cua-py`    | (Python) Steel + OpenAI Computer Use               | PY       | Template for (Python) Steel + OpenAI Computer Use automation               |
-| `playwright-py` | (Python) Steel + Playwright                        | PY       | Template for (Python) Steel + Playwright automation                        |
-| `selenium`      | (Python) Steel + Selenium                          | PY       | Template for (Python) Steel + Selenium automation                          |
+| `auth`          | Reusing Authentication Context                     | TS       | Template for Reusing Authentication Context automation                     |
+| `browser-use`   | Using Steel with Browser Use                       | PY       | Template for Using Steel with Browser Use automation                       |
+| `claude-cua`    | Using Steel with Claude's Computer Use             | TS       | Template for Using Steel with Claude's Computer Use automation             |
+| `claude-cua-py` | Using Steel with Claude's Computer Use             | PY       | Template for Using Steel with Claude's Computer Use automation             |
+| `creds`         | Using Steel Credentials with Playwright            | TS       | Template for Using Steel Credentials with Playwright automation            |
+| `files`         | Using the Steel Files API                          | TS       | Template for Using the Steel Files API automation                          |
+| `magnitude`     | Using Steel with Magnitude                         | TS       | Template for Using Steel with Magnitude automation                         |
+| `oai-cua`       | Using Steel with OpenAI's Computer Use             | TS       | Template for Using Steel with OpenAI's Computer Use automation             |
+| `oai-cua-py`    | Using Steel with OpenAI's Computer Use             | PY       | Template for Using Steel with OpenAI's Computer Use automation             |
+| `playwright-py` | Drive a Steel Session with Playwright              | PY       | Template for Drive a Steel Session with Playwright automation              |
+| `playwright-js` | Using Playwright with Steel                        | JS       | Template for Using Playwright with Steel automation                        |
+| `playwright`    | Drive a Steel Session with Playwright              | TS       | Template for Drive a Steel Session with Playwright automation              |
+| `puppeteer-js`  | Using Puppeteer with Steel                         | JS       | Template for Using Puppeteer with Steel automation                         |
+| `puppeteer`     | Drive a Steel Session with Puppeteer               | TS       | Template for Drive a Steel Session with Puppeteer automation               |
+| `selenium`      | Using Selenium with Steel                          | PY       | Template for Using Selenium with Steel automation                          |
+| `stagehand`     | Using Steel with Stagehand                         | TS       | Template for Using Steel with Stagehand automation                         |
+| `stagehand-py`  | Using Steel with Stagehand                         | PY       | Template for Using Steel with Stagehand automation                         |
 
 ### Arguments
 
