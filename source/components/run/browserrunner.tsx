@@ -91,7 +91,7 @@ export default function BrowserRunner() {
 					const folderName = path.basename(REPO_URL, '.git');
 					const child = spawn(
 						'docker-compose',
-						['-f', 'docker-compose.dev.yml', 'up', '-d'],
+						['-f', 'docker-compose.yml', 'up', '-d'],
 						{
 							cwd: path.join(CONFIG_DIR, folderName),
 							stdio: ['pipe', 'pipe', 'pipe'],

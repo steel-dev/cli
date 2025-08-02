@@ -24,6 +24,16 @@ export const options = zod.object({
 		.string()
 		.describe(option({description: 'Verify Docker is running', alias: 'dc'}))
 		.optional(),
+	build: zod
+		.boolean()
+		.describe(
+			option({
+				description: 'Build and run docker-compose in development mode',
+				alias: 'b',
+			}),
+		)
+		.default(false)
+		.optional(),
 	force: zod
 		.boolean()
 		.describe(
@@ -80,14 +90,17 @@ export default function Stop({options}: Props) {
 
 			// Build docker-compose command arguments
 			const dockerCommand = 'docker-compose';
+			const dockerComposeFile = options?.build
+				? 'docker-compose.dev.yml'
+				: 'docker-compose.yml';
 			let dockerArgs: string[];
 
 			if (options?.force) {
 				// Use kill for force stop (sends SIGKILL)
-				dockerArgs = ['-f', 'docker-compose.dev.yml', 'kill'];
+				dockerArgs = ['-f', dockerComposeFile, 'kill'];
 			} else {
 				// Use down for graceful stop
-				dockerArgs = ['-f', 'docker-compose.dev.yml', 'down'];
+				dockerArgs = ['-f', dockerComposeFile, 'down'];
 			}
 
 			const dockerCompose = spawn(dockerCommand, dockerArgs, {
@@ -123,7 +136,7 @@ export default function Stop({options}: Props) {
 					setStatus('Cleaning up containers...');
 					const cleanup = spawn(
 						'docker-compose',
-						['-f', 'docker-compose.dev.yml', 'down'],
+						['-f', dockerComposeFile, 'down'],
 						{
 							cwd: path.join(CONFIG_DIR, folderName),
 							env: {
@@ -134,18 +147,18 @@ export default function Stop({options}: Props) {
 					);
 
 					cleanup.on('close', () => {
-						setStatus('Development environment force stopped and cleaned up');
+						setStatus('Steel Browser force stopped and cleaned up');
 						setStopped(true);
 						setLoading(false);
 					});
 
 					cleanup.on('error', () => {
-						setStatus('Development environment force stopped (cleanup failed)');
+						setStatus('Steel Browser force stopped (cleanup failed)');
 						setStopped(true);
 						setLoading(false);
 					});
 				} else {
-					setStatus('Development environment stopped successfully');
+					setStatus('Steel Browser stopped successfully');
 					setStopped(true);
 					setLoading(false);
 				}
@@ -170,7 +183,7 @@ export default function Stop({options}: Props) {
 
 	if (loading) {
 		return (
-			<Callout variant="info" title="Stopping Development Environment">
+			<Callout variant="info" title="Stopping Steel Browser">
 				<Text>
 					<Spinner type="dots" /> {status + '\n'}
 				</Text>
@@ -183,7 +196,7 @@ export default function Stop({options}: Props) {
 
 	if (stopped) {
 		return (
-			<Callout variant="success" title="Development Environment Stopped">
+			<Callout variant="success" title="Steel Browser Stopped">
 				{options?.force
 					? 'All containers have been force stopped and cleaned up successfully.'
 					: 'All containers have been stopped successfully.'}
@@ -192,7 +205,7 @@ export default function Stop({options}: Props) {
 	}
 
 	return (
-		<Callout variant="info" title="Stopping Development Environment">
+		<Callout variant="info" title="Stopping Steel Browser">
 			<Text>
 				<Spinner type="dots" /> {status}
 			</Text>

@@ -22,6 +22,16 @@ export const options = zod.object({
 		)
 		.default(3000)
 		.optional(),
+	build: zod
+		.boolean()
+		.describe(
+			option({
+				description: 'Build and run docker-compose in development mode',
+				alias: 'b',
+			}),
+		)
+		.default(false)
+		.optional(),
 	verbose: zod
 		.string()
 		.describe(
@@ -87,6 +97,9 @@ export default function Start({options}: Props) {
 	useEffect(() => {
 		async function start() {
 			const port = options?.port || 3000;
+			const dockerComposeFile = options?.build
+				? 'docker-compose.dev.yml'
+				: 'docker-compose.yml';
 			setLoading(true);
 			setStatus('Cloning repository...');
 
@@ -107,7 +120,7 @@ export default function Start({options}: Props) {
 
 			const dockerCompose = spawn(
 				'docker-compose',
-				['-f', 'docker-compose.dev.yml', 'up', '-d'],
+				['-f', dockerComposeFile, 'up', '-d'],
 				{
 					cwd: path.join(CONFIG_DIR, folderName),
 					stdio: ['pipe', 'pipe', 'pipe'], // Capture stdout and stderr
@@ -176,7 +189,7 @@ export default function Start({options}: Props) {
 
 	if (loading) {
 		return (
-			<Callout variant="info" title="Starting Development Environment">
+			<Callout variant="info" title="Starting Steel Browser">
 				<Text>
 					<Spinner type="dots" /> {status + '\n'}
 				</Text>
@@ -189,14 +202,14 @@ export default function Start({options}: Props) {
 
 	if (apiReady) {
 		return (
-			<Callout variant="success" title="Development Environment Ready">
+			<Callout variant="success" title="Steel Browser is Up and Running">
 				Browser opened at http://localhost:5173
 			</Callout>
 		);
 	}
 
 	return (
-		<Callout variant="info" title="Starting Development Environment">
+		<Callout variant="info" title="Starting Steel Browser">
 			<Text>
 				<Spinner type="dots" /> {status}
 			</Text>
