@@ -12,8 +12,6 @@ function setupProcessCleanup() {
 		if (isExiting) return;
 		isExiting = true;
 
-		console.log(`\n🧹 Cleaning up ${activeProcesses.size} active processes...`);
-
 		const killPromises = Array.from(activeProcesses).map(child => {
 			return new Promise<void>(resolve => {
 				if (child.killed) {
