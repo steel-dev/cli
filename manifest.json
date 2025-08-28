@@ -1,7 +1,7 @@
 {
 	"name": "Steel Registry",
 	"description": "A collection of examples for using Steel",
-	"version": "848eafb",
+	"version": "441018c",
 	"groups": [
 		{
 			"id": "playwright-starter",
