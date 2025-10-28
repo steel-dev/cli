@@ -55,8 +55,8 @@ export default function Runner({options}: {options: Options}) {
 					shell: true,
 					stdio: ['pipe', 'pipe', 'pipe'],
 					env: {
-						...envVars,
 						...process.env,
+						...envVars,
 						PYTHONUNBUFFERED: '1',
 					},
 					detached: false,
