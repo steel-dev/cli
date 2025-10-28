@@ -53,11 +53,11 @@ function isRedundantEnvVar(
 	];
 
 	// These are conditionally redundant based on template support and command type
-	const conditionallyRedundant = [
-		'OPENAI_API_KEY', // covered by openai_key only if template supports OpenAI
-		'TASK', // covered by task only if template supports task AND it's a run command
-		'ANTHROPIC_API_KEY', // covered by anthropic_key only if template supports anthropic
-	];
+	// const conditionallyRedundant = [
+	// 	'OPENAI_API_KEY', // covered by openai_key only if template supports OpenAI
+	// 	'TASK', // covered by task only if template supports task AND it's a run command
+	// 	'ANTHROPIC_API_KEY', // covered by anthropic_key only if template supports anthropic
+	// ];
 
 	if (alwaysRedundant.includes(envVarName)) {
 		return true;
@@ -83,6 +83,10 @@ function isRedundantEnvVar(
 		return true;
 	}
 
+	if (envVarName === 'GEMINI_API_KEY' && templateSupports(template, 'gemini')) {
+		return true;
+	}
+
 	return false;
 }
 
@@ -94,6 +98,7 @@ function templateSupports(template: Template, capability: string): boolean {
 		task: 'TASK',
 		openai: 'OPENAI_API_KEY',
 		anthropic: 'ANTHROPIC_API_KEY',
+		gemini: 'GEMINI_API_KEY',
 	};
 
 	const envVarName = envVarMap[capability];
@@ -192,6 +197,13 @@ export function createTemplateCommandModule(
 		baseOptions.anthropic_key = zod
 			.string()
 			.describe(option({description: 'API Key for Anthropic'}))
+			.optional();
+	}
+
+	if (templateSupports(template, 'gemini')) {
+		baseOptions.gemini_key = zod
+			.string()
+			.describe(option({description: 'API Key for Gemini'}))
 			.optional();
 	}
 

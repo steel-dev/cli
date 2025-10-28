@@ -105,17 +105,27 @@ function getEnvironmentVariables(
 			});
 			baseEnv.push({value: 'TASK', label: 'Task for the agent'});
 		}
-		if (
-			example.id.includes('claude') ||
-			example.id.includes('anthropic') ||
-			example.id.includes('magnitude')
-		) {
+		if (example.id.includes('claude') || example.id.includes('anthropic')) {
 			baseEnv.push({
 				value: 'ANTHROPIC_API_KEY',
 				label: 'Anthropic API key',
 				required: true,
 			});
 			baseEnv.push({value: 'TASK', label: 'Task for the agent'});
+		}
+		if (example.id.includes('magnitude')) {
+			baseEnv.push({
+				value: 'ANTHROPIC_API_KEY',
+				label: 'Anthropic API key',
+				required: true,
+			});
+		}
+		if (example.id.includes('notte')) {
+			baseEnv.push({
+				value: 'GEMINI_API_KEY',
+				label: 'Gemini API key',
+				required: true,
+			});
 		}
 		if (example.id.includes('stagehand')) {
 			baseEnv.push({
