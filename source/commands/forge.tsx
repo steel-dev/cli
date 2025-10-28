@@ -53,6 +53,10 @@ export const options = zod.object({
 		.string()
 		.describe(option({description: 'API Key for OpenAI'}))
 		.optional(),
+	anthropic_key: zod
+		.string()
+		.describe(option({description: 'API Key for Anthropic'}))
+		.optional(),
 	skip_auth: zod.boolean().describe('Skip authentication').optional(),
 });
 
@@ -94,7 +98,9 @@ function ForgeContent({args, options}: Props) {
 			<CLIWelcomeMessage />
 			<TaskList>
 				{shouldShowStep('template', step) && <Template args={args} />}
-				{shouldShowStep('projectname', step) && <ProjectName args={args} />}
+				{shouldShowStep('projectname', step) && (
+					<ProjectName options={options} />
+				)}
 				{shouldShowStep('packagemanager', step) && <PackageManager />}
 				{shouldShowStep('directory', step) && <Directory />}
 				{shouldShowStep('envvar', step) && <EnvVar options={options} />}

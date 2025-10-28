@@ -1,16 +1,24 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Task} from 'ink-task-list';
 import {useTask} from '../../hooks/usetask.js';
 import {useForgeStep} from '../../context/forgestepcontext.js';
 import spinners from 'cli-spinners';
 import {toValidProjectName} from '../../utils/forge.js';
 import TextInput from 'ink-text-input';
-import {Args} from '../../commands/forge.js';
+import {Options} from '../../commands/forge.js';
 
-export default function ProjectName({args}: {args: Args}) {
-	const {step, setStep, setDirectory} = useForgeStep();
+export default function ProjectName({options}: {options: Options}) {
+	const {step, setStep, template, setDirectory} = useForgeStep();
 	const [state, task, , , setTask] = useTask();
 	const [query, setQuery] = useState('');
+
+	useEffect(() => {
+		if (step === 'projectname' && !task && options.name) {
+			setTask(toValidProjectName(options.name));
+			setDirectory(toValidProjectName(options.name));
+			setStep('packagemanager');
+		}
+	}, []);
 
 	return (
 		<Task
@@ -22,17 +30,14 @@ export default function ProjectName({args}: {args: Args}) {
 			<TextInput
 				value={query}
 				onChange={setQuery}
-				placeholder={args[0] || 'steel-starter'}
+				placeholder={toValidProjectName(template.value)}
 				onSubmit={() => {
-					if (!query && args[0]) {
-						setTask(toValidProjectName(args[0]));
-						setDirectory(toValidProjectName(args[0]));
-					} else if (query) {
+					if (query) {
 						setTask(toValidProjectName(query));
 						setDirectory(toValidProjectName(query));
 					} else {
-						setTask('steel-starter');
-						setDirectory('steel-starter');
+						setTask(toValidProjectName(template.value));
+						setDirectory(toValidProjectName(template.value));
 					}
 					setStep('packagemanager');
 				}}
