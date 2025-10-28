@@ -107,8 +107,12 @@ export default function Runner({options}: {options: Options}) {
 						setError('Command was terminated unexpectedly');
 						setOutput('Command was terminated unexpectedly');
 					} else {
-						setError(`Command failed with exit code ${code}`);
-						setOutput(`Command failed with exit code ${code}`);
+						setError(
+							`Command failed with exit code ${code} try clearing cache with 'steel cache --clean' and running again`,
+						);
+						setOutput(
+							`Command failed with exit code ${code}, try clearing cache with 'steel cache --clean' and running again`,
+						);
 					}
 					setLoading(false);
 				});
@@ -117,8 +121,12 @@ export default function Runner({options}: {options: Options}) {
 					childProcessRef.current = null;
 
 					console.error('Error running command:', error);
-					setError(`Error running command: ${error.message}`);
-					setOutput(`Error running command: ${error.message}`);
+					setError(
+						`Error running command: ${error.message}, try clearing cache with 'steel cache --clean' and running again`,
+					);
+					setOutput(
+						`Error running command: ${error.message}, try clearing cache with 'steel cache --clean' and running again`,
+					);
 					setLoading(false);
 				});
 
