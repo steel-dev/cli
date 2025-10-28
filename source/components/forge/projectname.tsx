@@ -18,7 +18,7 @@ export default function ProjectName({options}: {options: Options}) {
 			setDirectory(toValidProjectName(options.name));
 			setStep('packagemanager');
 		}
-	}, []);
+	}, [step, task]);
 
 	return (
 		<Task
