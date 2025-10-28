@@ -17,6 +17,8 @@ export const LOGIN_TIMEOUT = 1 * 60 * 1000; // 5 mins
 export const ENV_VAR_MAP = {
 	api_key: 'STEEL_API_KEY',
 	openai_key: 'OPENAI_API_KEY',
+	anthropic_key: 'ANTHROPIC_API_KEY',
+	gemini_key: 'GEMINI_API_KEY',
 	api_url: 'STEEL_API_URL',
 	task: 'TASK',
 };
