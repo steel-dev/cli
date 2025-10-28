@@ -23,7 +23,7 @@ export default function EnvVar({options}: {options: Options}) {
 	// Queue state for pending actions
 	const [pendingVars, setPendingVars] = useState([]);
 	// Derive required env vars
-	const isEnvVarRequired = (varName, env) => {
+	const isEnvVarRequired = (varName: string, env: Record<string, string>) => {
 		switch (varName) {
 			case 'STEEL_API_KEY':
 				return !env['STEEL_API_URL'];
@@ -105,7 +105,7 @@ export default function EnvVar({options}: {options: Options}) {
 		}
 	}, [step, task, isCollectingVars]);
 	// Handle submission of individual env var inputs
-	const handleInputSubmit = val => {
+	const handleInputSubmit = (val: string) => {
 		if (pendingVars.length === 0) return;
 		const currentVar = pendingVars[0];
 		const updatedEnvVars = {
