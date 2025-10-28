@@ -56,6 +56,7 @@ function isRedundantEnvVar(
 	const conditionallyRedundant = [
 		'OPENAI_API_KEY', // covered by openai_key only if template supports OpenAI
 		'TASK', // covered by task only if template supports task AND it's a run command
+		'ANTHROPIC_API_KEY', // covered by anthropic_key only if template supports anthropic
 	];
 
 	if (alwaysRedundant.includes(envVarName)) {
@@ -73,6 +74,13 @@ function isRedundantEnvVar(
 			command === 'forge' ||
 			(command === 'run' && templateSupports(template, 'task'))
 		);
+	}
+
+	if (
+		envVarName === 'ANTHROPIC_API_KEY' &&
+		templateSupports(template, 'anthropic')
+	) {
+		return true;
 	}
 
 	return false;
@@ -177,6 +185,13 @@ export function createTemplateCommandModule(
 		baseOptions.openai_key = zod
 			.string()
 			.describe(option({description: 'API Key for OpenAI'}))
+			.optional();
+	}
+
+	if (templateSupports(template, 'anthropic')) {
+		baseOptions.anthropic_key = zod
+			.string()
+			.describe(option({description: 'API Key for Anthropic'}))
 			.optional();
 	}
 

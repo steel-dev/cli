@@ -65,6 +65,10 @@ export const options = zod.object({
 		.string()
 		.describe(option({description: 'API Key for OpenAI'}))
 		.optional(),
+	anthropic_key: zod
+		.string()
+		.describe(option({description: 'API Key for Anthropic'}))
+		.optional(),
 	skip_auth: zod.boolean().describe('Skip authentication').optional(),
 	help: zod
 		.boolean()
