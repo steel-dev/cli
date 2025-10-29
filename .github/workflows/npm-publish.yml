@@ -5,7 +5,7 @@ name: Node.js Package
 
 on:
   release:
-    types: [created]
+    types: [published]
 
 jobs:
   build:
@@ -16,7 +16,7 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npm test
+      - run: npm run build
 
   publish-npm:
     needs: build
@@ -30,4 +30,4 @@ jobs:
       - run: npm ci
       - run: npm publish
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
