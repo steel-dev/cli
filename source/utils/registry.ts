@@ -11,6 +11,42 @@ const __dirname = path.dirname(__filename);
 const REGISTRY_BASE_URL = 'https://registry.steel-edge.net';
 const MANIFEST_PATH = path.resolve(__dirname, '../../manifest.json');
 
+const BASE_ENV: EnvVar[] = [
+	{value: 'STEEL_API_KEY', label: 'Steel API key'},
+	{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
+	{value: 'STEEL_API_URL', label: 'Steel API URL'},
+];
+
+// If needing to add more environment variables, add them here for specific examples
+const CATEGORY_ENV_MAP: Record<string, EnvVar[]> = {
+	openai: [
+		{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
+		{value: 'TASK', label: 'Task for the agent'},
+	],
+	claude: [
+		{value: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', required: true},
+		{value: 'TASK', label: 'Task for the agent'},
+	],
+	anthropic: [
+		{value: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', required: true},
+		{value: 'TASK', label: 'Task for the agent'},
+	],
+	magnitude: [
+		{value: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', required: true},
+	],
+	notte: [{value: 'GEMINI_API_KEY', label: 'Gemini API key', required: true}],
+	stagehand: [
+		{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
+	],
+	perplexity: [
+		{value: 'BRAVE_API_KEY', label: 'Brave API key', required: true},
+		{value: 'OPENAI_API_KEY', label: 'OpenAI API key', required: true},
+		{value: 'QUERY', label: 'Query to search for', required: true},
+	],
+};
+
+type EnvVar = {value: string; label: string; required?: boolean};
+
 type ManifestGroup = {
 	id: string;
 	title: string;
@@ -61,7 +97,7 @@ export function convertManifestToTemplates(manifest: Manifest): Template[] {
 				alias: example.slug,
 				label: example.title,
 				value: example.id,
-				language: mapLanguage(example.language, example.stack),
+				language: mapLanguage(example.language),
 				category: example.category,
 				accentColor: example.accentColor,
 				groupId: example.groupId,
@@ -77,66 +113,26 @@ export function convertManifestToTemplates(manifest: Manifest): Template[] {
 		});
 }
 
-function mapLanguage(language: string, stack: string): string {
+function mapLanguage(language: string): string {
 	if (language === 'typescript') return 'TS';
 	if (language === 'javascript') return 'JS';
 	if (language === 'python') return 'PY';
 	return language.toUpperCase();
 }
 
-function getEnvironmentVariables(
-	example: ManifestExample,
-): {value: string; label: string; required?: boolean}[] {
-	const baseEnv: {value: string; label: string; required?: boolean}[] = [
-		{value: 'STEEL_API_KEY', label: 'Steel API key'},
-		{value: 'STEEL_CONNECT_URL', label: 'Steel Connect URL'},
-		{value: 'STEEL_API_URL', label: 'Steel API URL'},
-	];
-
+function getEnvironmentVariables(example: ManifestExample): EnvVar[] {
 	if (
-		example.category === 'AI_AGENTS' ||
-		example.category === 'AI_AUTOMATION'
+		example.category !== 'AI_AGENTS' &&
+		example.category !== 'AI_AUTOMATION'
 	) {
-		if (example.id.includes('oai') || example.id.includes('openai')) {
-			baseEnv.push({
-				value: 'OPENAI_API_KEY',
-				label: 'OpenAI API key',
-				required: true,
-			});
-			baseEnv.push({value: 'TASK', label: 'Task for the agent'});
-		}
-		if (example.id.includes('claude') || example.id.includes('anthropic')) {
-			baseEnv.push({
-				value: 'ANTHROPIC_API_KEY',
-				label: 'Anthropic API key',
-				required: true,
-			});
-			baseEnv.push({value: 'TASK', label: 'Task for the agent'});
-		}
-		if (example.id.includes('magnitude')) {
-			baseEnv.push({
-				value: 'ANTHROPIC_API_KEY',
-				label: 'Anthropic API key',
-				required: true,
-			});
-		}
-		if (example.id.includes('notte')) {
-			baseEnv.push({
-				value: 'GEMINI_API_KEY',
-				label: 'Gemini API key',
-				required: true,
-			});
-		}
-		if (example.id.includes('stagehand')) {
-			baseEnv.push({
-				value: 'OPENAI_API_KEY',
-				label: 'OpenAI API key',
-				required: true,
-			});
-		}
+		return [...BASE_ENV];
 	}
 
-	return baseEnv;
+	const extraEnv = Object.entries(CATEGORY_ENV_MAP)
+		.filter(([key]) => example.id.includes(key))
+		.flatMap(([, envs]) => envs);
+
+	return [...BASE_ENV, ...extraEnv];
 }
 
 function getDependencyCommands(example: ManifestExample) {

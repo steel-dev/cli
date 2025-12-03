@@ -1,6 +1,6 @@
 import path from 'path';
 import os from 'os';
-import type {TemplateOptions, Template} from './types.js';
+import type {Template} from './types.js';
 import {loadManifest, convertManifestToTemplates} from './registry.js';
 
 export const LOGIN_URL = 'https://app.steel.dev/sign-in';
@@ -19,8 +19,10 @@ export const ENV_VAR_MAP = {
 	openai_key: 'OPENAI_API_KEY',
 	anthropic_key: 'ANTHROPIC_API_KEY',
 	gemini_key: 'GEMINI_API_KEY',
+	brave_key: 'BRAVE_API_KEY',
 	api_url: 'STEEL_API_URL',
 	task: 'TASK',
+	query: 'QUERY',
 };
 
 let _templates: Template[] | null = null;
