@@ -1,7 +1,7 @@
 {
 	"name": "Steel Registry",
 	"description": "A collection of examples for using Steel",
-	"version": "a363798",
+	"version": "48170c9",
 	"groups": [
 		{
 			"id": "playwright-starter",
@@ -10,7 +10,7 @@
 			"category": "BROWSER_AUTOMATION",
 			"description": "A starter project for using Playwright with Steel",
 			"flags": ["cli", "guide", "playground"],
-			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"id": "puppeteer-starter",
@@ -19,7 +19,7 @@
 			"category": "BROWSER_AUTOMATION",
 			"description": "A starter project for using Puppeteer with Steel",
 			"flags": ["cli", "guide", "playground"],
-			"thumbnail": "https://registry.steel-edge.net/puppeteer-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/puppeteer-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"id": "oai-computer-use",
@@ -28,7 +28,7 @@
 			"category": "AI_AUTOMATION",
 			"description": "Create a browser automation agent with Steel and OpenAI's Computer Use Assistant.",
 			"flags": ["cli", "guide", "playground"],
-			"thumbnail": "https://registry.steel-edge.net/oai-computer-use/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/oai-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"id": "claude-computer-use",
@@ -37,7 +37,7 @@
 			"category": "AI_AUTOMATION",
 			"description": "Create a browser automation agent with Steel and Claude's Computer Use API.",
 			"flags": ["cli", "guide", "playground"],
-			"thumbnail": "https://registry.steel-edge.net/claude-computer-use/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/claude-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"id": "stagehand-starter",
@@ -46,7 +46,7 @@
 			"category": "AI_AUTOMATION",
 			"description": "A starter project demonstrating how to use Steel with Stagehand for AI-powered browser automations.",
 			"flags": ["cli", "guide", "playground"],
-			"thumbnail": "https://registry.steel-edge.net/stagehand-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/stagehand-starter/thumbnail.webp?v=48170c9"
 		}
 	],
 	"examples": [
@@ -127,7 +127,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-browser-use-starter",
 			"template": "templates/steel-browser-use-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/steel-browser-use-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/steel-browser-use-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-claude-computer-use-node-starter",
@@ -147,7 +147,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-claude-computer-use-node-starter",
 			"template": "templates/steel-claude-computer-use-node-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/claude-computer-use/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/claude-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-claude-computer-use-python-starter",
@@ -167,7 +167,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-claude-computer-use-python-starter",
 			"template": "templates/steel-claude-computer-use-python-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/claude-computer-use/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/claude-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-credentials-starter",
@@ -244,7 +244,7 @@
 			"docs": "https://docs.steel.dev/overview/integrations/magnitude/quickstart",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-magnitude-starter",
 			"template": "templates/steel-magnitude-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/steel-magnitude-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/steel-magnitude-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-notte-starter",
@@ -261,7 +261,7 @@
 			"docs": "https://docs.steel.dev/overview/integrations/notte/quickstart-python",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-notte-starter",
 			"template": "templates/steel-notte-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/steel-notte-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/steel-notte-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-oai-computer-use-node-starter",
@@ -281,7 +281,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-oai-computer-use-node-starter",
 			"template": "templates/steel-oai-computer-use-node-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/oai-computer-use/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/oai-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-oai-computer-use-python-starter",
@@ -301,7 +301,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-oai-computer-use-python-starter",
 			"template": "templates/steel-oai-computer-use-python-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/oai-computer-use/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/oai-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-perplexity-clone",
@@ -340,7 +340,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-playwright-python-starter",
 			"template": "templates/steel-playwright-python-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-playwright-starter-js",
@@ -357,7 +357,7 @@
 			"shorthand": "playwright-js",
 			"docs": "https://docs.steel.dev/overview/guides/connect-with-playwright-node",
 			"template": "templates/steel-playwright-starter-js.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-playwright-starter",
@@ -377,7 +377,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-playwright-starter",
 			"template": "templates/steel-playwright-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-profiles-starter",
@@ -409,7 +409,7 @@
 			"shorthand": "puppeteer-js",
 			"docs": "https://docs.steel.dev/overview/guides/connect-with-puppeteer",
 			"template": "templates/steel-puppeteer-starter-js.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/puppeteer-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/puppeteer-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-puppeteer-starter",
@@ -429,7 +429,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-puppeteer-starter",
 			"template": "templates/steel-puppeteer-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/puppeteer-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/puppeteer-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-selenium-starter",
@@ -464,7 +464,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-stagehand-node-starter",
 			"template": "templates/steel-stagehand-node-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/stagehand-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/stagehand-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-stagehand-python-starter",
@@ -484,7 +484,7 @@
 			"replitLink": "",
 			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-stagehand-python-starter",
 			"template": "templates/steel-stagehand-python-starter.tar.gz",
-			"thumbnail": "https://registry.steel-edge.net/stagehand-starter/thumbnail.webp?v=a363798"
+			"thumbnail": "https://registry.steel-edge.net/stagehand-starter/thumbnail.webp?v=48170c9"
 		}
 	]
 }
