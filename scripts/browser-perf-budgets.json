@@ -1,0 +1,22 @@
+{
+	"schemaVersion": 1,
+	"runs": 5,
+	"scenarios": {
+		"coldOpen": {
+			"description": "Cold first action includes session bootstrap",
+			"maxMs": 2600
+		},
+		"warmSnapshot": {
+			"description": "Warm snapshot passthrough with explicit CDP endpoint",
+			"baselineMs": 1000,
+			"maxRegressionPct": 30,
+			"maxMs": 1500
+		},
+		"warmClick": {
+			"description": "Warm click passthrough with explicit CDP endpoint",
+			"baselineMs": 1000,
+			"maxRegressionPct": 30,
+			"maxMs": 1500
+		}
+	}
+}
