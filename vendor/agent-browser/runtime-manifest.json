@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"runtimeVersion": "v0.14.0",
+	"source": {
+		"repository": "https://github.com/vercel-labs/agent-browser",
+		"releaseTag": "v0.14.0",
+		"releasedAt": "2026-02-23T17:06:42Z"
+	},
+	"platforms": {
+		"darwin-arm64": {
+			"entrypoint": "runtimes/darwin-arm64/agent-browser",
+			"sha256": "3d9ab7da90d9f63e2220a5f13b43f8e5c95a7b7b01c6904c90d68675b1fd62e7"
+		},
+		"darwin-x64": {
+			"entrypoint": "runtimes/darwin-x64/agent-browser",
+			"sha256": "ee6dd57cd322c8ef15aac0a5014a797927d9d6bcbcdc3f7204ba036ea6b36ed1"
+		},
+		"linux-arm64": {
+			"entrypoint": "runtimes/linux-arm64/agent-browser",
+			"sha256": "17e204462e9bcf4e0bb0703a1f508a44483f5d45e826e62687505d4b45f90013"
+		},
+		"linux-x64": {
+			"entrypoint": "runtimes/linux-x64/agent-browser",
+			"sha256": "fc501578c24ee65f911f04b9e6c2d58641304b13b3d62a5cdade6e8165243dac"
+		},
+		"win32-x64": {
+			"entrypoint": "runtimes/win32-x64/agent-browser.exe",
+			"sha256": "a5045f5eea4ed1f8f3ff1e03c1250522074d10eb99eb73d50d98a0d539e05076"
+		}
+	}
+}

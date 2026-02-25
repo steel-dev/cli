@@ -19,8 +19,24 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-  publish-npm:
+  browser-runtime-smoke:
     needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - run: npm run browser:runtime:smoke
+
+  publish-npm:
+    needs: [build, browser-runtime-smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
