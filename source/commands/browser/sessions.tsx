@@ -1,0 +1,51 @@
+#!/usr/bin/env node
+
+import {useEffect} from 'react';
+import zod from 'zod';
+import {option} from 'pastel';
+import {listBrowserSessions} from '../../utils/browser/lifecycle.js';
+import {BrowserAdapterError} from '../../utils/browser/errors.js';
+
+export const description = 'List browser sessions as JSON';
+
+export const options = zod.object({
+	local: zod
+		.boolean()
+		.describe(
+			option({
+				description: 'List sessions from local Steel runtime',
+				alias: 'l',
+			}),
+		)
+		.optional(),
+});
+
+type Props = {
+	options: zod.infer<typeof options>;
+};
+
+export default function Sessions({options}: Props) {
+	useEffect(() => {
+		async function run() {
+			try {
+				const sessions = await listBrowserSessions({
+					local: options.local,
+				});
+				console.log(JSON.stringify({sessions}, null, 2));
+				process.exit(0);
+			} catch (error) {
+				if (error instanceof BrowserAdapterError) {
+					console.error(error.message);
+				} else if (error instanceof Error) {
+					console.error(error.message);
+				} else {
+					console.error('Failed to list browser sessions.');
+				}
+
+				process.exit(1);
+			}
+		}
+
+		run();
+	}, [options.local]);
+}
