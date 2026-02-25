@@ -367,11 +367,19 @@ function toSessionSummary(
 	}
 
 	const auth = resolveBrowserAuth(environment);
-	const resolvedConnectUrl =
+	let resolvedConnectUrl =
 		getConnectUrl(session) ||
 		(mode === 'cloud' && auth.apiKey
 			? `wss://connect.steel.dev?apiKey=${auth.apiKey}&sessionId=${sessionId}`
 			: null);
+
+	if (resolvedConnectUrl && mode === 'cloud' && auth.apiKey) {
+		const parsed = new URL(resolvedConnectUrl);
+		if (!parsed.searchParams.has('apiKey')) {
+			parsed.searchParams.set('apiKey', auth.apiKey);
+			resolvedConnectUrl = parsed.toString();
+		}
+	}
 
 	return {
 		id: sessionId,

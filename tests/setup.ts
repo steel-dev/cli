@@ -1,1 +1,1 @@
-// Jest setup placeholder.
+// Vitest setup placeholder.

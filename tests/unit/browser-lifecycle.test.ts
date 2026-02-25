@@ -1,6 +1,15 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {
+	type Mock,
+	vi,
+	describe,
+	test,
+	expect,
+	beforeEach,
+	afterEach,
+} from 'vitest';
 
 type BrowserLifecycleModule =
 	typeof import('../../source/utils/browser/lifecycle');
@@ -46,15 +55,15 @@ async function loadBrowserLifecycle(
 	configDirectory: string,
 ): Promise<BrowserLifecycleModule> {
 	process.env.STEEL_CONFIG_DIR = configDirectory;
-	jest.resetModules();
+	vi.resetModules();
 	return import('../../source/utils/browser/lifecycle');
 }
 
 const originalFetch = globalThis.fetch;
-let fetchMock: jest.MockedFunction<typeof fetch>;
+let fetchMock: Mock<typeof fetch>;
 
 beforeEach(() => {
-	fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+	fetchMock = vi.fn() as Mock<typeof fetch>;
 	globalThis.fetch = fetchMock;
 });
 
@@ -227,7 +236,8 @@ describe('browser lifecycle session contract', () => {
 				id: 'session-created',
 				mode: 'cloud',
 				live: true,
-				connectUrl: 'wss://connect.steel.dev/session-created',
+				connectUrl:
+					'wss://connect.steel.dev/session-created?apiKey=env-api-key',
 				viewerUrl: 'https://app.steel.dev/sessions/session-created',
 			});
 

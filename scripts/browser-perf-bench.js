@@ -2,7 +2,7 @@ import fsPromises from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
 const SUPPORTED_RUNTIME_TARGETS = new Set([
@@ -56,28 +56,47 @@ function formatMillis(value) {
 }
 
 function runCli(projectRoot, cliArgs, environment) {
-	const startedAt = process.hrtime.bigint();
-	const result = spawnSync(process.execPath, ['dist/steel.js', ...cliArgs], {
-		cwd: projectRoot,
-		env: environment,
-		encoding: 'utf-8',
+	return new Promise((resolve, reject) => {
+		const startedAt = process.hrtime.bigint();
+		let stdout = '';
+		let stderr = '';
+
+		const child = spawn(process.execPath, ['dist/steel.js', ...cliArgs], {
+			cwd: projectRoot,
+			env: environment,
+		});
+
+		child.stdout.on('data', chunk => {
+			stdout += chunk;
+		});
+		child.stderr.on('data', chunk => {
+			stderr += chunk;
+		});
+
+		child.once('error', reject);
+		child.once('close', code => {
+			const completedAt = process.hrtime.bigint();
+			const durationMs = Number(completedAt - startedAt) / 1_000_000;
+
+			if (code !== 0) {
+				reject(
+					new Error(
+						[
+							`Command failed: steel ${cliArgs.join(' ')}`,
+							`exit=${code}`,
+							stdout.trim() ? `stdout:\n${stdout.trim()}` : '',
+							stderr.trim() ? `stderr:\n${stderr.trim()}` : '',
+						]
+							.filter(Boolean)
+							.join('\n'),
+					),
+				);
+				return;
+			}
+
+			resolve(durationMs);
+		});
 	});
-	const completedAt = process.hrtime.bigint();
-
-	if (result.status !== 0) {
-		throw new Error(
-			[
-				`Command failed: steel ${cliArgs.join(' ')}`,
-				`exit=${result.status}`,
-				result.stdout?.trim() ? `stdout:\n${result.stdout.trim()}` : '',
-				result.stderr?.trim() ? `stderr:\n${result.stderr.trim()}` : '',
-			]
-				.filter(Boolean)
-				.join('\n'),
-		);
-	}
-
-	return Number(completedAt - startedAt) / 1_000_000;
 }
 
 async function createFixtureRuntimeScript(tempDirectory) {
@@ -287,15 +306,19 @@ async function main() {
 				);
 				await fsPromises.mkdir(runConfigDirectory, {recursive: true});
 
-				const durationMs = runCli(projectRoot, scenarioConfig.commandArgs, {
-					...process.env,
-					STEEL_CLI_SKIP_UPDATE_CHECK: 'true',
-					STEEL_API_KEY: 'perf-api-key',
-					STEEL_API_URL: mockApiServer.baseUrl,
-					STEEL_BROWSER_RUNTIME_BIN: runtimePath,
-					STEEL_CONFIG_DIR: runConfigDirectory,
-					FORCE_COLOR: '0',
-				});
+				const durationMs = await runCli(
+					projectRoot,
+					scenarioConfig.commandArgs,
+					{
+						...process.env,
+						STEEL_CLI_SKIP_UPDATE_CHECK: 'true',
+						STEEL_API_KEY: 'perf-api-key',
+						STEEL_API_URL: mockApiServer.baseUrl,
+						STEEL_BROWSER_RUNTIME_BIN: runtimePath,
+						STEEL_CONFIG_DIR: runConfigDirectory,
+						FORCE_COLOR: '0',
+					},
+				);
 				durations.push(durationMs);
 			}
 

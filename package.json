@@ -23,11 +23,10 @@
 		"browser:runtime:smoke": "node scripts/browser-runtime-smoke.js",
 		"browser:cloud:smoke": "node scripts/browser-cloud-smoke.js",
 		"docs:generate": "npm run build && node scripts/generate-docs.js",
-		"test": "npm run build && jest",
-		"test:unit": "jest --testPathPattern=tests/unit",
-		"test:integration": "npm run build && jest --testPathPattern=tests/integration",
-		"test:watch": "jest --watch --testPathPattern=tests/unit",
-		"pretest": "npm run build"
+		"test": "npm run build && vitest run",
+		"test:unit": "vitest run tests/unit",
+		"test:integration": "npm run build && vitest run tests/integration",
+		"test:watch": "vitest tests/unit"
 	},
 	"files": [
 		"dist",
@@ -90,38 +89,9 @@
 		"ink-testing-library": "^4.0.0",
 		"prettier": "^3.6.2",
 		"rimraf": "^6.0.0",
-		"ts-node": "^10.9.2",
 		"typescript": "^5.8.3",
-		"typescript-eslint": "^8.37.0"
-	},
-	"jest": {
-		"preset": "ts-jest",
-		"testEnvironment": "node",
-		"roots": [
-			"<rootDir>/tests"
-		],
-		"testMatch": [
-			"**/*.test.ts"
-		],
-		"setupFilesAfterEnv": [
-			"<rootDir>/tests/setup.ts"
-		],
-		"moduleNameMapper": {
-			"^(\\.{1,2}/.*)\\.js$": "$1"
-		},
-		"collectCoverageFrom": [
-			"source/**/*.{ts,tsx}",
-			"!source/**/*.d.ts",
-			"!source/types/**"
-		],
-		"coverageDirectory": "coverage",
-		"coverageReporters": [
-			"text",
-			"lcov",
-			"html"
-		],
-		"testTimeout": 60000,
-		"maxWorkers": 1
+		"typescript-eslint": "^8.37.0",
+		"vitest": "^3.2.4"
 	},
 	"xo": {
 		"extends": "xo-react",
