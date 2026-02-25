@@ -6,7 +6,8 @@ import {option} from 'pastel';
 import {startBrowserSession} from '../../utils/browser/lifecycle.js';
 import {BrowserAdapterError} from '../../utils/browser/errors.js';
 
-export const description = 'Create or attach a Steel browser session';
+export const description =
+	'Create or attach a Steel browser session (local Docker runtime: `steel dev start`)';
 
 export const options = zod.object({
 	local: zod

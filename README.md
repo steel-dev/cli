@@ -30,10 +30,15 @@ COMMANDS
 ⏺︎ Other Commands
 
   browser
-     └─ start          Starts Steel Browser in development mode
-     └─ stop           Stops any running dev instance of Steel Browser
+     └─ start          Create or attach a Steel browser cloud session
+     └─ stop           Stop the active Steel browser session
+     └─ sessions       List browser sessions as JSON
+     └─ live           Print current session live-view URL
   cache               Manage Steel CLI cache which is used to store files for quickly running scripts
   config              Display information about the current session
+  dev
+     └─ start          Start local Steel Browser runtime via Docker Compose
+     └─ stop           Stop local Steel Browser runtime
   docs                Navigates to Steel Docs
   login               Login to Steel CLI
   logout              Logout from Steel CLI

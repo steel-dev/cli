@@ -9,7 +9,8 @@ import {
 } from '../../utils/browser/lifecycle.js';
 import {BrowserAdapterError} from '../../utils/browser/errors.js';
 
-export const description = 'Stop the active Steel browser session';
+export const description =
+	'Stop the active Steel browser session (local Docker runtime: `steel dev stop`)';
 
 export const options = zod.object({
 	all: zod
