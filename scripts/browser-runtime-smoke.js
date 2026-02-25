@@ -54,7 +54,7 @@ function parseNpmPackOutput(output) {
 	}
 }
 
-function readManifestEntrypoint(manifestContent, runtimeTarget) {
+function readManifestRuntimeConfig(manifestContent, runtimeTarget) {
 	const parsed = JSON.parse(manifestContent);
 	const entrypoint = parsed?.platforms?.[runtimeTarget]?.entrypoint;
 
@@ -64,7 +64,60 @@ function readManifestEntrypoint(manifestContent, runtimeTarget) {
 		);
 	}
 
-	return entrypoint;
+	const shared = Array.isArray(parsed?.shared)
+		? parsed.shared.filter(
+				value => typeof value === 'string' && value.trim().length > 0,
+			)
+		: [];
+
+	return {
+		entrypoint: entrypoint.trim(),
+		shared,
+	};
+}
+
+async function listFilesRecursively(rootPath) {
+	const entries = await fsPromises.readdir(rootPath, {withFileTypes: true});
+	const files = [];
+
+	for (const entry of entries) {
+		const absoluteEntryPath = path.join(rootPath, entry.name);
+		if (entry.isDirectory()) {
+			const nestedFiles = await listFilesRecursively(absoluteEntryPath);
+			files.push(...nestedFiles);
+			continue;
+		}
+
+		if (entry.isFile()) {
+			files.push(absoluteEntryPath);
+		}
+	}
+
+	return files;
+}
+
+async function getSharedExpectedPaths(sourceRoot, sharedEntries) {
+	const expectedPaths = [];
+
+	for (const sharedEntry of sharedEntries) {
+		const absoluteSharedPath = path.join(sourceRoot, sharedEntry);
+		const sharedStats = await fsPromises.stat(absoluteSharedPath);
+
+		if (sharedStats.isDirectory()) {
+			const directoryFiles = await listFilesRecursively(absoluteSharedPath);
+			for (const filePath of directoryFiles) {
+				expectedPaths.push(
+					path.relative(sourceRoot, filePath).split(path.sep).join('/'),
+				);
+			}
+
+			continue;
+		}
+
+		expectedPaths.push(sharedEntry.split(path.sep).join('/'));
+	}
+
+	return expectedPaths;
 }
 
 async function main() {
@@ -95,6 +148,7 @@ async function main() {
 	try {
 		let sourceRoot = path.join(projectRoot, 'vendor/agent-browser');
 		let entrypointRelative;
+		let sharedEntries = [];
 		let fixtureRuntime = false;
 		const manifestPath = path.join(sourceRoot, 'runtime-manifest.json');
 		let manifestContent = null;
@@ -108,15 +162,19 @@ async function main() {
 		}
 
 		if (manifestContent) {
-			entrypointRelative = readManifestEntrypoint(
+			const runtimeConfig = readManifestRuntimeConfig(
 				manifestContent,
 				runtimeTarget,
 			);
+			entrypointRelative = runtimeConfig.entrypoint;
+			sharedEntries = runtimeConfig.shared;
 		} else {
 			fixtureRuntime = true;
 			sourceRoot = path.join(tempRoot, 'vendor/agent-browser');
 			entrypointRelative = `runtimes/${runtimeTarget}/cli.js`;
 			const entrypointPath = path.join(sourceRoot, entrypointRelative);
+			const daemonPath = path.join(sourceRoot, 'dist/daemon.js');
+			sharedEntries = ['dist'];
 
 			await fsPromises.mkdir(path.dirname(entrypointPath), {recursive: true});
 			await fsPromises.writeFile(
@@ -124,6 +182,17 @@ async function main() {
 				[
 					'const args = process.argv.slice(2);',
 					`console.log('${SMOKE_MARKER} ' + args.join(' '));`,
+					'process.exit(0);',
+					'',
+				].join('\n'),
+				'utf-8',
+			);
+			await fsPromises.mkdir(path.dirname(daemonPath), {recursive: true});
+			await fsPromises.writeFile(
+				daemonPath,
+				[
+					'process.stdout.write("");',
+					'process.stderr.write("");',
 					'process.exit(0);',
 					'',
 				].join('\n'),
@@ -141,6 +210,7 @@ async function main() {
 								entrypoint: entrypointRelative,
 							},
 						},
+						shared: sharedEntries,
 					},
 					null,
 					2,
@@ -204,6 +274,10 @@ async function main() {
 		const expectedManifestPath =
 			'dist/vendor/agent-browser/runtime-manifest.json';
 		const expectedEntrypointPath = `dist/vendor/agent-browser/${entrypointRelative}`;
+		const sharedExpectedPaths = await getSharedExpectedPaths(
+			sourceRoot,
+			sharedEntries,
+		);
 
 		if (!packedFiles.has(expectedManifestPath)) {
 			throw new Error(`npm pack output missing ${expectedManifestPath}.`);
@@ -211,6 +285,13 @@ async function main() {
 
 		if (!packedFiles.has(expectedEntrypointPath)) {
 			throw new Error(`npm pack output missing ${expectedEntrypointPath}.`);
+		}
+
+		for (const sharedPath of sharedExpectedPaths) {
+			const expectedSharedPath = `dist/vendor/agent-browser/${sharedPath}`;
+			if (!packedFiles.has(expectedSharedPath)) {
+				throw new Error(`npm pack output missing ${expectedSharedPath}.`);
+			}
 		}
 
 		console.log(

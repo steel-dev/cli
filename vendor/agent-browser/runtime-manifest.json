@@ -6,6 +6,7 @@
 		"releaseTag": "v0.14.0",
 		"releasedAt": "2026-02-23T17:06:42Z"
 	},
+	"shared": ["dist"],
 	"platforms": {
 		"darwin-arm64": {
 			"entrypoint": "runtimes/darwin-arm64/agent-browser",

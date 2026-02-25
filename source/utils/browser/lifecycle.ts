@@ -29,7 +29,8 @@ type ParsedBootstrapOptions = {
 	sessionName: string | null;
 	stealth: boolean;
 	proxyUrl: string | null;
-	autoConnectUrl: string | null;
+	autoConnect: boolean;
+	cdpTarget: string | null;
 };
 
 export type BrowserSessionSummary = {
@@ -598,7 +599,8 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		sessionName: null,
 		stealth: false,
 		proxyUrl: null,
-		autoConnectUrl: null,
+		autoConnect: false,
+		cdpTarget: null,
 	};
 	const passthroughArgv: string[] = [];
 
@@ -659,26 +661,44 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 			continue;
 		}
 
-		if (
-			argument === '--auto-connect' ||
-			argument.startsWith('--auto-connect=')
-		) {
+		if (argument === '--auto-connect') {
+			const potentialValue = browserArgv[index + 1];
+			if (potentialValue && !potentialValue.startsWith('-')) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'`--auto-connect` does not accept a value. Use `--cdp <url|port>` for explicit endpoints.',
+				);
+			}
+
+			options.autoConnect = true;
+			passthroughArgv.push('--auto-connect');
+			continue;
+		}
+
+		if (argument.startsWith('--auto-connect=')) {
+			throw new BrowserAdapterError(
+				'INVALID_BROWSER_ARGS',
+				'`--auto-connect` does not accept a value. Use `--cdp <url|port>` for explicit endpoints.',
+			);
+		}
+
+		if (argument === '--cdp' || argument.startsWith('--cdp=')) {
 			const value =
-				argument === '--auto-connect'
+				argument === '--cdp'
 					? browserArgv[index + 1]
-					: argument.slice('--auto-connect='.length);
+					: argument.slice('--cdp='.length);
 
 			if (!value) {
 				throw new BrowserAdapterError(
 					'INVALID_BROWSER_ARGS',
-					'Missing value for --auto-connect.',
+					'Missing value for --cdp.',
 				);
 			}
 
-			options.autoConnectUrl = value.trim();
-			passthroughArgv.push('--auto-connect', value.trim());
+			options.cdpTarget = value.trim();
+			passthroughArgv.push('--cdp', value.trim());
 
-			if (argument === '--auto-connect') {
+			if (argument === '--cdp') {
 				index++;
 			}
 
@@ -686,6 +706,13 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		}
 
 		passthroughArgv.push(argument);
+	}
+
+	if (options.autoConnect && options.cdpTarget) {
+		throw new BrowserAdapterError(
+			'INVALID_BROWSER_ARGS',
+			'Cannot combine `--auto-connect` with `--cdp`.',
+		);
 	}
 
 	return {
@@ -870,7 +897,7 @@ export async function bootstrapBrowserPassthroughArgv(
 ): Promise<string[]> {
 	const parsed = parseBrowserPassthroughBootstrapFlags(browserArgv);
 
-	if (parsed.options.autoConnectUrl) {
+	if (parsed.options.autoConnect || parsed.options.cdpTarget) {
 		return parsed.passthroughArgv;
 	}
 
@@ -896,5 +923,5 @@ export async function bootstrapBrowserPassthroughArgv(
 		);
 	}
 
-	return [...parsed.passthroughArgv, '--auto-connect', session.connectUrl];
+	return [...parsed.passthroughArgv, '--cdp', session.connectUrl];
 }

@@ -1,6 +1,7 @@
 # Vendored Agent Browser Runtime
 
-This directory contains vendored upstream `agent-browser` runtime binaries.
+This directory contains vendored upstream `agent-browser` runtime binaries and
+daemon assets.
 
 `npm run browser:runtime:package` copies artifacts from this directory into
 `dist/vendor/agent-browser` using `runtime-manifest.json`.
@@ -14,6 +15,10 @@ Layout:
 
 ```
 vendor/agent-browser/
+  dist/
+    daemon.js
+    browser.js
+    ...
   runtime-manifest.json
   runtimes/
     darwin-arm64/
@@ -28,4 +33,6 @@ vendor/agent-browser/
       agent-browser.exe
 ```
 
-`runtime-manifest.json` maps each platform target to its runtime entrypoint.
+`runtime-manifest.json` maps each platform target to its runtime entrypoint and
+declares shared daemon assets (`dist/`) that are packaged into
+`dist/vendor/agent-browser` for npm releases.

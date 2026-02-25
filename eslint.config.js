@@ -8,7 +8,7 @@ import css from '@eslint/css';
 import {defineConfig, globalIgnores} from 'eslint/config';
 
 export default defineConfig([
-	globalIgnores(['dist', 'node_modules', 'examples']),
+	globalIgnores(['dist', 'node_modules', 'examples', 'vendor/agent-browser']),
 	{
 		files: ['**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
 		plugins: {js},

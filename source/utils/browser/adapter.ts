@@ -1,4 +1,6 @@
 import {spawn} from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {resolveBrowserAuth} from './auth.js';
 import {BrowserAdapterError} from './errors.js';
 import {bootstrapBrowserPassthroughArgv} from './lifecycle.js';
@@ -12,6 +14,17 @@ export type BrowserRuntimeCommand = {
 	args: string[];
 	source: 'env' | 'vendored' | 'path';
 };
+
+function hasBrowserAttachFlag(browserArgv: string[]): boolean {
+	return browserArgv.some(argument => {
+		return (
+			argument === '--auto-connect' ||
+			argument.startsWith('--auto-connect=') ||
+			argument === '--cdp' ||
+			argument.startsWith('--cdp=')
+		);
+	});
+}
 
 function isNodeScript(binaryPath: string): boolean {
 	return (
@@ -49,7 +62,7 @@ export function requiresBrowserAuth(browserArgv: string[]): boolean {
 		return false;
 	}
 
-	return !browserArgv.includes('--auto-connect');
+	return !hasBrowserAttachFlag(browserArgv);
 }
 
 export function resolveBrowserRuntime(
@@ -115,6 +128,31 @@ function runRuntime(
 	});
 }
 
+function resolveVendoredRuntimeHome(
+	runtime: BrowserRuntimeCommand,
+): string | null {
+	if (runtime.source !== 'vendored') {
+		return null;
+	}
+
+	const runtimeEntrypoint = path.resolve(runtime.args[0] || runtime.command);
+	let cursor = path.dirname(runtimeEntrypoint);
+
+	while (true) {
+		if (path.basename(cursor) === 'agent-browser') {
+			const daemonEntrypoint = path.join(cursor, 'dist', 'daemon.js');
+			return fs.existsSync(daemonEntrypoint) ? cursor : null;
+		}
+
+		const parent = path.dirname(cursor);
+		if (parent === cursor) {
+			return null;
+		}
+
+		cursor = parent;
+	}
+}
+
 export async function runBrowserPassthrough(
 	browserArgv: string[],
 	environment: NodeJS.ProcessEnv = process.env,
@@ -137,6 +175,13 @@ export async function runBrowserPassthrough(
 
 	if (!runtimeEnvironment.STEEL_API_KEY && auth.apiKey) {
 		runtimeEnvironment.STEEL_API_KEY = auth.apiKey;
+	}
+
+	if (!runtimeEnvironment.AGENT_BROWSER_HOME) {
+		const vendoredRuntimeHome = resolveVendoredRuntimeHome(runtime);
+		if (vendoredRuntimeHome) {
+			runtimeEnvironment.AGENT_BROWSER_HOME = vendoredRuntimeHome;
+		}
 	}
 
 	return runRuntime(runtime, passthroughArgv, runtimeEnvironment);

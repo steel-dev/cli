@@ -4,7 +4,7 @@ overview: Implement `steel browser` using a performance-first upstream subtree +
 todos:
   - id: import-hybrid-runtime
     content: Vendor agent-browser into a pristine subtree and wire `steel browser` through a thin adapter boundary using vendored runtime assets (no external `@agent-browser/cli` npm dependency and no in-place upstream edits by default).
-    status: in_progress
+    status: completed
     workstream: core-routing-contract
     blockedBy: []
   - id: add-browser-predispatch
@@ -46,14 +46,14 @@ todos:
       - add-session-bootstrap
   - id: perf-budgets-and-bench
     content: Set cold/warm latency budgets and add regression benchmarks for adapter overhead and bootstrap cost.
-    status: pending
+    status: in_progress
     workstream: compat-and-perf
     blockedBy:
       - add-browser-predispatch
       - add-session-bootstrap
   - id: move-local-dev-surface
     content: Relocate old local Docker browser orchestration UX to a dedicated dev command namespace and update help text.
-    status: pending
+    status: in_progress
     workstream: lifecycle-bootstrap
     blockedBy:
       - replace-browser-commands
@@ -64,13 +64,34 @@ todos:
     blockedBy: []
   - id: compat-test-suite
     content: Add compatibility and lifecycle tests covering inherited agent-browser commands and Steel session semantics.
-    status: in_progress
+    status: completed
     workstream: compat-and-perf
     blockedBy:
       - add-browser-predispatch
       - replace-browser-commands
       - add-session-bootstrap
       - add-observability-commands
+  - id: fix-cdp-passthrough-flag-mapping
+    content: Align adapter bootstrap flag mapping with upstream runtime semantics by injecting `--cdp <url>` for Steel session endpoints, preserving bare `--auto-connect` discovery behavior, and preventing conflicting mixed flags.
+    status: completed
+    workstream: core-routing-contract
+    blockedBy:
+      - add-session-bootstrap
+      - compat-test-suite
+  - id: bundle-daemon-assets-with-runtime
+    content: Package required Node daemon assets with the vendored runtime so inherited commands run without external `AGENT_BROWSER_HOME` setup.
+    status: completed
+    workstream: packaging-and-ci
+    blockedBy:
+      - ci-packaging-runtime
+      - import-hybrid-runtime
+  - id: authenticated-cloud-e2e-smoke
+    content: Add authenticated cloud smoke validation for `start -> open -> snapshot -i -> stop` using an agent-browser example flow and assert exit-code/output parity.
+    status: in_progress
+    workstream: compat-and-perf
+    blockedBy:
+      - fix-cdp-passthrough-flag-mapping
+      - bundle-daemon-assets-with-runtime
   - id: docs-migration-upstream-sync
     content: Ship migration doc, add simple static browser compatibility docs, keep generated docs focused on Steel-owned commands, and add upstream merge strategy documentation.
     status: pending
@@ -110,7 +131,8 @@ isProject: false
 - Default behavior:
   - no flag: auto-create or attach Steel cloud session, then execute command.
   - `--local`: connect to local Steel runtime (same command semantics).
-  - `--auto-connect <url>`: preserved power-user escape hatch to direct CDP endpoint.
+  - `--cdp <url|port>`: preserved power-user escape hatch to direct CDP endpoint.
+  - `--auto-connect`: preserved local Chrome auto-discovery behavior.
   - `steel browser <inherited-command> --help`: delegated to vendored runtime help output.
 
 ### User-facing command contract
@@ -178,6 +200,15 @@ export const description = 'Starts Steel Browser in development mode';
 - Steel currently routes through Pastel file-based command modules and dynamic docs/help discovery, so inherited command compatibility requires pre-dispatch passthrough instead of trying to mirror every upstream command in `source/commands`: [source/steel.tsx](source/steel.tsx), [source/components/help.tsx](source/components/help.tsx), [scripts/generate-docs.js](scripts/generate-docs.js).
 - Steel auto-update checks run before most commands today; browser command paths need an explicit skip to protect cold-path performance: [source/steel.tsx](source/steel.tsx).
 
+## E2E Smoke Findings (February 25, 2026)
+
+- Auth and Steel cloud lifecycle path is confirmed: `steel browser start --session <name>` successfully created sessions and returned ids/live URLs.
+- Resolved gaps:
+  - adapter bootstrap now injects `--cdp <url>` for Steel session endpoints, preserves bare `--auto-connect` discovery mode, and rejects mixed explicit attach flags.
+  - vendored runtime package now includes upstream daemon JS assets (`dist/`) and auto-sets `AGENT_BROWSER_HOME` for vendored runtime execution.
+- Added authenticated smoke harness: `npm run browser:cloud:smoke` validates `start -> open -> snapshot -i -> stop` plus direct-runtime parity checks when `STEEL_API_KEY` is set.
+- Remaining release gate: run `browser:cloud:smoke` in a credentialed environment and capture pass output before final migration sign-off.
+
 ## Target Architecture (Performance-First)
 
 ```mermaid
@@ -232,11 +263,13 @@ daemon --> actions[unchanged interaction and snapshot actions]
 - Add a Steel bootstrap module (new utility under `source/utils`) that:
   - resolves auth in one place: `STEEL_API_KEY` first, then config file (`steel login` output).
   - calls Steel API session endpoints (create/list/stop, attach by name).
-  - resolves CDP URL and injects launch path once before first interaction command.
+  - resolves CDP URL and injects upstream-compatible launch flags once before first interaction command.
 - Behavior rules:
   - default: auto-create session on first browser action if none active.
   - `--session <name>`: create-or-attach named persistent session.
   - `--local`: resolve local Steel endpoint from running local instance.
+  - inject `--cdp <url>` for Steel-resolved remote endpoints; reserve bare `--auto-connect` for discovery mode.
+  - if caller already provides `--cdp` or `--auto-connect`, do not inject a conflicting attach flag.
   - no per-command API calls in steady state (unless lifecycle command).
   - lock-safe local active-session state to avoid duplicate create calls in concurrent invocations.
 
@@ -315,6 +348,7 @@ daemon --> actions[unchanged interaction and snapshot actions]
   - verify browser commands bypass auto-update check path.
 - End-interface checks:
   - smoke migration test: `agent-browser` sample script works with `steel browser` after command-prefix swap.
+  - authenticated smoke test: `start -> open -> snapshot -i -> stop` passes using Steel cloud with no external runtime env hacks.
   - Steel-specific UX test: `start/stop/sessions/live` match documented contract and output schemas.
   - packaged runtime smoke tests on Linux/macOS/Windows for key commands.
 - Docs/help validation:
