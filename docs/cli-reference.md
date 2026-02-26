@@ -133,6 +133,12 @@ Login to Steel CLI
 steel login
 ```
 
+### Options
+
+- **--token** (`-t`): JWT token (or full callback URL with jwt parameter) from login redirect.
+
+You can also use `STEEL_LOGIN_TOKEN` environment variable when running in automation/non-interactive flows.
+
 ## steel logout
 
 Logout from Steel CLI

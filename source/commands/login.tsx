@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import React, {ReactElement} from 'react';
+import React from 'react';
 import {Box} from 'ink';
 import fs from 'fs/promises';
 import * as http from 'http';
@@ -8,6 +8,8 @@ import * as url from 'url';
 import * as crypto from 'crypto';
 import type {AddressInfo} from 'net';
 import open from 'open';
+import zod from 'zod';
+import {option} from 'pastel';
 import Callout from '../components/callout.js';
 import UpdateNotification from '../components/updatenotification.js';
 import {
@@ -26,13 +28,32 @@ type AuthState = {
 	apiKey?: string;
 };
 
+export const options = zod.object({
+	token: zod
+		.string()
+		.describe(
+			option({
+				description:
+					'JWT token (or full callback URL with jwt parameter) from login redirect.',
+				alias: 't',
+			}),
+		)
+		.optional(),
+});
+
+export type Options = zod.infer<typeof options>;
+
+type Props = {
+	options: Options;
+};
+
 const LOGIN_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
 export const description = 'Login to Steel CLI';
 
 export const alias = 'auth';
 
-export default function Login(): ReactElement {
+export default function Login({options}: Props): React.ReactElement {
 	const [state, setState] = React.useState<AuthState>({
 		status: 'idle',
 		message: 'Starting authentication...',
@@ -49,13 +70,22 @@ export default function Login(): ReactElement {
 				return;
 			}
 
+			const tokenFromOption = extractJwtFromValue(
+				options?.token ??
+					process.env.STEEL_LOGIN_TOKEN ??
+					process.env.STEEL_LOGIN_JWT,
+			);
 			setState({
 				status: 'pending',
-				message: 'Launching browser for authentication...',
+				message: tokenFromOption
+					? 'Exchanging provided token for authentication...'
+					: 'Launching browser for authentication...',
 			});
 
 			try {
-				const auth = await loginFlow();
+				const auth = tokenFromOption
+					? await createApiKeyUsingJWT(tokenFromOption)
+					: await loginFlow();
 
 				if (auth && auth.apiKey && auth.name) {
 					await saveApiKey(auth.apiKey, auth.name);
@@ -167,13 +197,18 @@ async function loginFlow(): Promise<{
 			console.log('Opening your browser for authentication...');
 			console.log('If it does not open automatically, please click:');
 			console.log(authUrl.toString());
+			console.log(
+				'If you are on a remote machine, complete sign-in and paste the callback URL with jwt.',
+			);
+			console.log(
+				'For example: steel login --token "<jwt-from-callback-url-or-token>"',
+			);
 
 			try {
 				await open(authUrl.toString());
 			} catch {
-				server.close();
-				clearTimeout(timeout);
-				reject(new Error('Failed to open browser'));
+				// Browser launch is unavailable in headless/remote environments.
+				// Keep the callback server running so manual completion can still work.
 			}
 		});
 
@@ -182,6 +217,29 @@ async function loginFlow(): Promise<{
 			reject(err);
 		});
 	});
+}
+
+function extractJwtFromValue(value: string | undefined): string | null {
+	if (!value) {
+		return null;
+	}
+
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return null;
+	}
+
+	try {
+		const parsed = new URL(trimmed);
+		const jwt = parsed.searchParams.get('jwt');
+		if (jwt) {
+			return jwt;
+		}
+	} catch {
+		// If this isn't a URL, treat it as a raw JWT value.
+	}
+
+	return trimmed;
 }
 
 async function createApiKeyUsingJWT(jwt: string): Promise<{
