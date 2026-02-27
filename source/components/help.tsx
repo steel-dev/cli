@@ -40,6 +40,36 @@ interface ZodSchema {
 	shape?: Record<string, ZodSchema>;
 }
 
+const BROWSER_LIFECYCLE_COMMANDS = [
+	{
+		usage: 'steel browser start [options]',
+		description: 'Create or attach a managed Steel browser session.',
+	},
+	{
+		usage: 'steel browser stop [--all]',
+		description: 'Stop the active session or all mapped sessions.',
+	},
+	{
+		usage: 'steel browser sessions',
+		description: 'List active sessions from the Steel Sessions API.',
+	},
+	{
+		usage: 'steel browser live',
+		description: 'Print the live viewer URL for the active session.',
+	},
+];
+
+const BROWSER_PASSTHROUGH_EXAMPLES = [
+	'steel browser open https://example.com',
+	'steel browser snapshot -i',
+	'steel browser tab new hackernews.com',
+	'steel browser find text "Sign in" click',
+	'steel browser click @e1',
+];
+
+const BROWSER_COMMAND_REFERENCE_PATH =
+	'docs/references/steel-browser-commands.md';
+
 // Function to scan command directory and get all available commands
 async function getAvailableCommands(baseDir = 'commands') {
 	try {
@@ -112,30 +142,35 @@ async function getCommandModule(commandPath: string) {
 	const __filename = fileURLToPath(import.meta.url);
 	const __dirname = dirname(__filename);
 	const projectRoot = path.resolve(__dirname, '../../');
+	const parts = commandPath.split(' ');
+	const candidatePaths = Array.from(
+		new Set([
+			path.join(projectRoot, 'dist/commands', `${commandPath}.js`),
+			`${path.join(projectRoot, 'dist/commands', ...parts)}.js`,
+			path.join(projectRoot, 'dist/commands', ...parts, 'index.js'),
+		]),
+	);
 
-	// Try to load command directly
-	const fullPath = path.join(projectRoot, 'dist/commands', `${commandPath}.js`);
+	let lastNotFoundError: unknown;
 
-	try {
-		const commandModule = (await import(`file://${fullPath}`)) as CommandModule;
-		return commandModule;
-	} catch (directErr) {
-		// Try to handle subcommands (e.g. "browser start")
-		const parts = commandPath.split(' ');
-		if (parts.length > 1) {
-			const subcommandPath = path.join(
-				projectRoot,
-				'dist/commands',
-				...parts.slice(0, -1),
-				`${parts[parts.length - 1]}.js`,
-			);
-			const commandModule = (await import(
-				`file://${subcommandPath}`
-			)) as CommandModule;
-			return commandModule;
+	for (const candidatePath of candidatePaths) {
+		try {
+			return (await import(`file://${candidatePath}`)) as CommandModule;
+		} catch (error) {
+			const moduleError = error as {code?: string};
+			if (moduleError.code !== 'ERR_MODULE_NOT_FOUND') {
+				throw error;
+			}
+
+			lastNotFoundError = error;
 		}
-		throw directErr;
 	}
+
+	if (lastNotFoundError) {
+		throw lastNotFoundError;
+	}
+
+	throw new Error(`Command module not found for '${commandPath}'.`);
 }
 
 // Function to extract option information in a formatted way
@@ -262,47 +297,76 @@ function extractArgumentInfo(argsSchema: ZodSchema, argsLabels: string[]) {
 export default function Help({command}: Props) {
 	const [commands, setCommands] = useState([]);
 	const [error, setError] = useState('');
-	const [commandInfo, setCommandInfo] = useState(null);
+	const [commandInfo, setCommandInfo] = useState(
+		command === 'browser'
+			? {
+					name: 'browser',
+					description:
+						'Manage Steel Browser cloud sessions and agent-browser compatible passthrough commands',
+					options: [],
+					args: [],
+					usage: 'steel browser',
+					template: undefined,
+				}
+			: null,
+	);
+	const [commandLookupComplete, setCommandLookupComplete] = useState(
+		command === undefined || command === 'browser',
+	);
+	const isBrowserHelp = command === 'browser';
 
 	// Load commands and potentially specific command help
 	useEffect(() => {
+		if (command === 'browser') {
+			return;
+		}
+
 		async function load() {
+			setError('');
+
+			if (command) {
+				setCommandLookupComplete(false);
+				setCommandInfo(null);
+			}
+
 			try {
-				// Load all commands for the main help menu
-				const cmds = await getAvailableCommands();
-				setCommands(cmds);
+				if (!command) {
+					// Load all commands for the main help menu
+					const cmds = await getAvailableCommands();
+					setCommands(cmds);
+					return;
+				}
 
-				// If a specific command was requested, get its module info
-				if (command) {
-					try {
-						const commandModule = await getCommandModule(command);
+				try {
+					const commandModule = await getCommandModule(command);
 
-						if (commandModule) {
-							// Extract command information
-							setCommandInfo({
-								name: command,
-								description: commandModule.description || '',
-								options: extractOptionInfo(commandModule.options as ZodSchema),
-								args: extractArgumentInfo(
-									commandModule.args as ZodSchema,
-									commandModule.argsLabels || [],
-								),
-								usage: `steel ${command}${commandModule.args ? ' [arguments]' : ''}${commandModule.options ? ' [options]' : ''}`,
-								template: commandModule.template, // Include template info if available
-							});
-						} else {
-							setError(`Command '${command}' not found.`);
-						}
-					} catch {
-						// If command doesn't exist or fails
-						setError(
-							`Command '${command}' not found or help is not available.`,
-						);
+					if (commandModule) {
+						// Extract command information
+						setCommandInfo({
+							name: command,
+							description: commandModule.description || '',
+							options: extractOptionInfo(commandModule.options as ZodSchema),
+							args: extractArgumentInfo(
+								commandModule.args as ZodSchema,
+								commandModule.argsLabels || [],
+							),
+							usage: `steel ${command}${commandModule.args ? ' [arguments]' : ''}${commandModule.options ? ' [options]' : ''}`,
+							template: commandModule.template, // Include template info if available
+						});
+					} else {
+						setError(`Command '${command}' not found.`);
 					}
+				} catch {
+					// If command doesn't exist or fails
+					setError(`Command '${command}' not found or help is not available.`);
 				}
 			} catch {
 				// Handle error
 				setError('Failed to load help information.');
+			} finally {
+				if (command) {
+					setCommandLookupComplete(true);
+				}
 			}
 		}
 
@@ -336,6 +400,16 @@ export default function Help({command}: Props) {
 							{commandInfo.description && (
 								<Box marginBottom={1}>
 									<Text>{commandInfo.description}</Text>
+								</Box>
+							)}
+
+							{isBrowserHelp && (
+								<Box marginBottom={1} flexDirection="column">
+									<Text>
+										`steel browser` includes Steel lifecycle commands and passes
+										all other commands through to the vendored agent-browser
+										runtime.
+									</Text>
 								</Box>
 							)}
 
@@ -397,19 +471,61 @@ export default function Help({command}: Props) {
 										</Box>
 									</>
 								)}
+
+							{isBrowserHelp && (
+								<>
+									<Box marginBottom={1} marginTop={1}>
+										<Text bold>LIFECYCLE COMMANDS</Text>
+									</Box>
+									{BROWSER_LIFECYCLE_COMMANDS.map((lifecycleCommand, index) => (
+										<Box key={index} paddingLeft={2} marginBottom={0}>
+											<Box width={40}>
+												<Text color="yellow">{lifecycleCommand.usage}</Text>
+											</Box>
+											<Text>{lifecycleCommand.description}</Text>
+										</Box>
+									))}
+
+									<Box marginBottom={1} marginTop={1}>
+										<Text bold>PASSTHROUGH EXAMPLES</Text>
+									</Box>
+									{BROWSER_PASSTHROUGH_EXAMPLES.map((example, index) => (
+										<Box key={index} paddingLeft={2}>
+											<Text color="cyan">{example}</Text>
+										</Box>
+									))}
+
+									<Box marginBottom={1} marginTop={1}>
+										<Text bold>FULL REFERENCE</Text>
+									</Box>
+									<Box paddingLeft={2} marginBottom={0}>
+										<Text>{BROWSER_COMMAND_REFERENCE_PATH}</Text>
+									</Box>
+									<Box paddingLeft={2} marginBottom={1}>
+										<Text dimColor>
+											Use `steel browser &lt;command&gt; --help` for detailed
+											runtime help on specific passthrough commands.
+										</Text>
+									</Box>
+								</>
+							)}
 						</>
-					) : (
+					) : commandLookupComplete ? (
 						<Box marginBottom={1} flexDirection="column">
 							<Text>No help information available for this command.</Text>
 						</Box>
-					)}
+					) : null}
 
-					<Box marginTop={1}>
-						<Text dimColor>For the main help menu, run:</Text>
-					</Box>
-					<Box marginBottom={1} paddingLeft={2}>
-						<Text>$ steel</Text>
-					</Box>
+					{commandLookupComplete && (
+						<>
+							<Box marginTop={1}>
+								<Text dimColor>For the main help menu, run:</Text>
+							</Box>
+							<Box marginBottom={1} paddingLeft={2}>
+								<Text>$ steel</Text>
+							</Box>
+						</>
+					)}
 				</Box>
 			</Box>
 		);
@@ -425,6 +541,15 @@ export default function Help({command}: Props) {
 				</Box>
 				<Box marginBottom={1} paddingLeft={2}>
 					<Text>$ steel [command] [options]</Text>
+				</Box>
+				<Box marginBottom={1} paddingLeft={2} flexDirection="column">
+					<Text>
+						`steel browser` wraps Steel session lifecycle commands and forwards
+						other browser commands to the vendored agent-browser runtime.
+					</Text>
+					<Text dimColor>
+						Run `steel browser --help` for lifecycle and passthrough examples.
+					</Text>
 				</Box>
 
 				<Box>

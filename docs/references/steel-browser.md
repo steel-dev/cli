@@ -109,10 +109,13 @@ Main flags:
 
 - `--local`
 - `--api-url <url>`
+- `--raw`
 
 Output note:
 
 - `connectUrl` values in JSON are display-safe and redact sensitive query values.
+- Default output is compact and omits each session's full raw payload.
+- Use `--raw` when you need the full underlying API payload.
 
 ### `steel browser live`
 

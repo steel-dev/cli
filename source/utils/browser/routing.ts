@@ -21,6 +21,15 @@ export function isBrowserCommand(argv: string[]): boolean {
 	return commandTokens[0] === 'browser';
 }
 
+export function isBrowserHelpAlias(argv: string[]): boolean {
+	const filteredArgv = filterSteelGlobalFlags(argv);
+	return (
+		filteredArgv.length === 2 &&
+		filteredArgv[0] === 'browser' &&
+		filteredArgv[1] === 'help'
+	);
+}
+
 export function resolveBrowserDispatchTarget(
 	argv: string[],
 ): BrowserDispatchTarget {

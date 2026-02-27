@@ -97,6 +97,10 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				sessionName: 'daily',
 				stealth: true,
 				proxyUrl: 'http://proxy.local:8080',
+				timeoutMs: null,
+				headless: false,
+				region: null,
+				solveCaptcha: false,
 				autoConnect: false,
 				cdpTarget: null,
 			});
@@ -124,6 +128,39 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				lifecycle.parseBrowserPassthroughBootstrapFlags(['open', '--proxy']),
 			).toThrow('Missing value for --proxy.');
 			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags([
+					'open',
+					'--session-timeout',
+				]),
+			).toThrow('Missing value for --session-timeout.');
+			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags([
+					'open',
+					'--session-timeout',
+					'nope',
+				]),
+			).toThrow('Invalid value for --session-timeout');
+			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags([
+					'open',
+					'--session-headless',
+					'true',
+				]),
+			).toThrow('`--session-headless` does not accept a value.');
+			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags([
+					'open',
+					'--session-region',
+				]),
+			).toThrow('Missing value for --session-region.');
+			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags([
+					'open',
+					'--session-solve-captcha',
+					'true',
+				]),
+			).toThrow('`--session-solve-captcha` does not accept a value.');
+			expect(() =>
 				lifecycle.parseBrowserPassthroughBootstrapFlags(['open', '--cdp']),
 			).toThrow('Missing value for --cdp.');
 			expect(() =>
@@ -148,7 +185,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 		}
 	});
 
-	test('parses explicit api-url and runs local bootstrap mode', async () => {
+	test('parses explicit api-url without forcing local bootstrap mode', async () => {
 		const configDirectory = createTempConfigDirectory();
 
 		try {
@@ -163,15 +200,61 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 			]);
 
 			expect(parsed.options).toEqual({
-				local: true,
+				local: false,
 				apiUrl: 'https://steel.local.dev/v1',
 				sessionName: 'daily',
 				stealth: false,
 				proxyUrl: null,
+				timeoutMs: null,
+				headless: false,
+				region: null,
+				solveCaptcha: false,
 				autoConnect: false,
 				cdpTarget: null,
 			});
 			expect(parsed.passthroughArgv).toEqual(['open', 'https://steel.dev']);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('parses session create config flags for bootstrap', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'https://steel.dev',
+				'--session-timeout',
+				'60000',
+				'--session-headless',
+				'--session-region',
+				'us-west-2',
+				'--session-solve-captcha',
+				'--wait-for',
+				'load',
+			]);
+
+			expect(parsed.options).toEqual({
+				local: false,
+				apiUrl: null,
+				sessionName: null,
+				stealth: false,
+				proxyUrl: null,
+				timeoutMs: 60000,
+				headless: true,
+				region: 'us-west-2',
+				solveCaptcha: true,
+				autoConnect: false,
+				cdpTarget: null,
+			});
+			expect(parsed.passthroughArgv).toEqual([
+				'open',
+				'https://steel.dev',
+				'--wait-for',
+				'load',
+			]);
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}
@@ -304,6 +387,93 @@ describe('browser lifecycle session contract', () => {
 		}
 	});
 
+	test('maps session config fields into create payload', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-configured',
+					status: 'live',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			await lifecycle.startBrowserSession({
+				timeoutMs: 45_000,
+				headless: true,
+				region: 'us-east-1',
+				solveCaptcha: true,
+				environment: {STEEL_API_KEY: 'env-api-key'},
+			});
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions',
+			);
+			expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+				method: 'POST',
+				body: JSON.stringify({
+					timeout: 45000,
+					headless: true,
+					region: 'us-east-1',
+					solveCaptcha: true,
+				}),
+			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('does not hold the state lock while waiting for start-session API', async () => {
+		const configDirectory = createTempConfigDirectory();
+		const lockPath = path.join(
+			configDirectory,
+			'browser-session-state.json.lock',
+		);
+		let resolveFetch: ((value: Response) => void) | null = null;
+
+		try {
+			fetchMock.mockImplementationOnce(
+				() =>
+					new Promise<Response>(resolve => {
+						resolveFetch = resolve;
+					}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const sessionPromise = lifecycle.startBrowserSession({
+				environment: {STEEL_API_KEY: 'env-api-key'},
+			});
+
+			for (let attempt = 0; attempt < 20; attempt++) {
+				if (fetchMock.mock.calls.length > 0) {
+					break;
+				}
+				await new Promise(resolve => {
+					setTimeout(resolve, 5);
+				});
+			}
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fs.existsSync(lockPath)).toBe(false);
+			expect(resolveFetch).not.toBeNull();
+
+			resolveFetch?.(
+				createJsonResponse(201, {
+					id: 'session-slow',
+					status: 'live',
+					websocketUrl: 'wss://connect.steel.dev/session-slow',
+				}),
+			);
+
+			const session = await sessionPromise;
+			expect(session.id).toBe('session-slow');
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
 	test('creates local session when explicit api-url is provided', async () => {
 		const configDirectory = createTempConfigDirectory();
 
@@ -328,6 +498,39 @@ describe('browser lifecycle session contract', () => {
 			expect(fetchMock).toHaveBeenCalledTimes(1);
 			expect(fetchMock.mock.calls[0]?.[0]).toBe(
 				'https://steel.self-hosted.dev/v1/sessions',
+			);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('treats explicit cloud api-url as cloud mode', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-cloud-explicit-url',
+					status: 'live',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const session = await lifecycle.startBrowserSession({
+				apiUrl: 'https://api.steel.dev/v1/',
+				environment: {
+					STEEL_API_KEY: 'env-api-key',
+				},
+			});
+
+			expect(session.mode).toBe('cloud');
+			expect(session.connectUrl).toBe(
+				'wss://connect.steel.dev?apiKey=env-api-key&sessionId=session-cloud-explicit-url',
+			);
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions',
 			);
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
@@ -501,6 +704,212 @@ describe('browser lifecycle session contract', () => {
 					solveCaptcha: true,
 				}),
 			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('injects cloud cdp URL when explicit cloud api-url is provided', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-bootstrap-cloud-url',
+					status: 'live',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const passthroughArgv = await lifecycle.bootstrapBrowserPassthroughArgv(
+				[
+					'open',
+					'https://steel.dev',
+					'--api-url',
+					'https://api.steel.dev/v1',
+					'--session',
+					'daily',
+				],
+				{
+					STEEL_API_KEY: 'env-api-key',
+				},
+			);
+
+			expect(passthroughArgv).toEqual([
+				'open',
+				'https://steel.dev',
+				'--cdp',
+				'wss://connect.steel.dev?apiKey=env-api-key&sessionId=session-bootstrap-cloud-url',
+			]);
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions',
+			);
+
+			const state = readSessionState(configDirectory);
+			expect(state.activeSessionMode).toBe('cloud');
+			expect(state.activeSessionId).toBe('session-bootstrap-cloud-url');
+			expect(state.activeSessionName).toBe('daily');
+			expect(state.namedSessions.cloud).toEqual({
+				daily: 'session-bootstrap-cloud-url',
+			});
+			expect(state.namedSessions.local).toEqual({});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('injects cdp URL and maps session config bootstrap flags', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-bootstrap-config',
+					status: 'live',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const passthroughArgv = await lifecycle.bootstrapBrowserPassthroughArgv(
+				[
+					'open',
+					'https://steel.dev',
+					'--session-timeout',
+					'120000',
+					'--session-headless',
+					'--session-region',
+					'us-west-2',
+					'--session-solve-captcha',
+				],
+				{
+					STEEL_API_KEY: 'env-api-key',
+				},
+			);
+
+			expect(passthroughArgv).toEqual([
+				'open',
+				'https://steel.dev',
+				'--cdp',
+				'wss://connect.steel.dev?apiKey=env-api-key&sessionId=session-bootstrap-config',
+			]);
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions',
+			);
+			expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+				method: 'POST',
+				body: JSON.stringify({
+					timeout: 120000,
+					headless: true,
+					region: 'us-west-2',
+					solveCaptcha: true,
+				}),
+			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('fails bootstrap when mapped named session is dead', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			writeSessionState(configDirectory, {
+				activeSessionId: null,
+				activeSessionMode: null,
+				activeSessionName: null,
+				namedSessions: {
+					cloud: {
+						daily: 'session-dead',
+					},
+					local: {},
+				},
+				updatedAt: null,
+			});
+
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(200, {
+					id: 'session-dead',
+					status: 'terminated',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			await expect(
+				lifecycle.bootstrapBrowserPassthroughArgv(
+					['open', 'https://steel.dev', '--session', 'daily'],
+					{
+						STEEL_API_KEY: 'env-api-key',
+					},
+				),
+			).rejects.toMatchObject({
+				code: 'SESSION_NOT_FOUND',
+				message: expect.stringContaining(
+					'Run `steel browser start --session daily`',
+				),
+			});
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions/session-dead',
+			);
+			expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('GET');
+
+			const state = readSessionState(configDirectory);
+			expect(state.namedSessions.cloud).toEqual({
+				daily: 'session-dead',
+			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('fails bootstrap when active session is dead', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			writeSessionState(configDirectory, {
+				activeSessionId: 'session-dead',
+				activeSessionMode: 'cloud',
+				activeSessionName: null,
+				namedSessions: {
+					cloud: {},
+					local: {},
+				},
+				updatedAt: null,
+			});
+
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(200, {
+					id: 'session-dead',
+					status: 'terminated',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			await expect(
+				lifecycle.bootstrapBrowserPassthroughArgv(
+					['open', 'https://steel.dev'],
+					{
+						STEEL_API_KEY: 'env-api-key',
+					},
+				),
+			).rejects.toMatchObject({
+				code: 'SESSION_NOT_FOUND',
+				message: expect.stringContaining('Run `steel browser start`'),
+			});
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions/session-dead',
+			);
+			expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('GET');
+
+			const state = readSessionState(configDirectory);
+			expect(state.activeSessionMode).toBe('cloud');
+			expect(state.activeSessionId).toBe('session-dead');
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}

@@ -15,6 +15,77 @@ export type BrowserRuntimeCommand = {
 	source: 'env' | 'vendored' | 'path';
 };
 
+function hasExplicitNavigationProtocol(url: string): boolean {
+	const normalized = url.toLowerCase();
+	return (
+		normalized.includes('://') ||
+		normalized.startsWith('about:') ||
+		normalized.startsWith('data:') ||
+		normalized.startsWith('file:') ||
+		normalized.startsWith('blob:') ||
+		normalized.startsWith('javascript:')
+	);
+}
+
+function looksLikeHostWithoutProtocol(url: string): boolean {
+	const hostCandidate = url.split('/')[0] || '';
+	const normalizedHostCandidate = hostCandidate.toLowerCase();
+
+	return (
+		normalizedHostCandidate === 'localhost' ||
+		normalizedHostCandidate.startsWith('localhost:') ||
+		(normalizedHostCandidate.startsWith('[') &&
+			normalizedHostCandidate.includes(']')) ||
+		/^\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?$/.test(normalizedHostCandidate) ||
+		hostCandidate.includes('.')
+	);
+}
+
+function normalizeUrlWithHttpsFallback(url: string): string {
+	const trimmedUrl = url.trim();
+	if (
+		!trimmedUrl ||
+		hasExplicitNavigationProtocol(trimmedUrl) ||
+		!looksLikeHostWithoutProtocol(trimmedUrl)
+	) {
+		return url;
+	}
+
+	const normalizedUrl = `https://${trimmedUrl}`;
+	try {
+		new URL(normalizedUrl);
+		return normalizedUrl;
+	} catch {
+		return url;
+	}
+}
+
+function normalizeTabNewUrlArgv(browserArgv: string[]): string[] {
+	const tabNewIndex = browserArgv.findIndex(
+		(argument, index) => argument === 'tab' && browserArgv[index + 1] === 'new',
+	);
+
+	if (tabNewIndex === -1) {
+		return browserArgv;
+	}
+
+	const urlIndex = tabNewIndex + 2;
+	const urlCandidate = browserArgv[urlIndex];
+
+	if (!urlCandidate || urlCandidate.startsWith('-')) {
+		return browserArgv;
+	}
+
+	const normalizedUrl = normalizeUrlWithHttpsFallback(urlCandidate);
+	if (normalizedUrl === urlCandidate) {
+		return browserArgv;
+	}
+
+	const normalizedArgv = [...browserArgv];
+	normalizedArgv[urlIndex] = normalizedUrl;
+	return normalizedArgv;
+}
+
 function hasBrowserAttachFlag(browserArgv: string[]): boolean {
 	return browserArgv.some(argument => {
 		return (
@@ -172,6 +243,7 @@ export async function runBrowserPassthrough(
 		browserArgv,
 		environment,
 	);
+	const normalizedPassthroughArgv = normalizeTabNewUrlArgv(passthroughArgv);
 	const auth = resolveBrowserAuth(environment);
 
 	const runtime = resolveBrowserRuntime(environment);
@@ -188,5 +260,5 @@ export async function runBrowserPassthrough(
 		}
 	}
 
-	return runRuntime(runtime, passthroughArgv, runtimeEnvironment);
+	return runRuntime(runtime, normalizedPassthroughArgv, runtimeEnvironment);
 }

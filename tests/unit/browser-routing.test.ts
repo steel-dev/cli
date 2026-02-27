@@ -1,6 +1,7 @@
 import {
 	filterSteelGlobalFlags,
 	getBrowserPassthroughArgv,
+	isBrowserHelpAlias,
 	isBrowserCommand,
 	resolveBrowserDispatchTarget,
 } from '../../source/utils/browser/routing';
@@ -27,6 +28,15 @@ describe('browser routing', () => {
 		expect(resolveBrowserDispatchTarget(['browser', 'snapshot', '-i'])).toBe(
 			'passthrough',
 		);
+	});
+
+	test('detects browser help alias without affecting passthrough help flags', () => {
+		expect(isBrowserHelpAlias(['browser', 'help'])).toBe(true);
+		expect(isBrowserHelpAlias(['--no-update-check', 'browser', 'help'])).toBe(
+			true,
+		);
+		expect(isBrowserHelpAlias(['browser', 'help', 'open'])).toBe(false);
+		expect(isBrowserHelpAlias(['browser', 'open', '--help'])).toBe(false);
 	});
 
 	test('filters steel global flags before routing', () => {

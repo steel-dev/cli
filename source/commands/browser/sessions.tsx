@@ -5,7 +5,7 @@ import zod from 'zod';
 import {option} from 'pastel';
 import {listBrowserSessions} from '../../utils/browser/lifecycle.js';
 import {BrowserAdapterError} from '../../utils/browser/errors.js';
-import {sanitizeConnectUrlForDisplay} from '../../utils/browser/display.js';
+import {formatBrowserSessionsForOutput} from '../../utils/browser/display.js';
 
 export const description = 'List browser sessions as JSON';
 
@@ -27,6 +27,14 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	raw: zod
+		.boolean()
+		.describe(
+			option({
+				description: 'Include full raw API payload for each session',
+			}),
+		)
+		.optional(),
 });
 
 type Props = {
@@ -41,15 +49,11 @@ export default function Sessions({options}: Props) {
 					local: options.local,
 					apiUrl: options.apiUrl,
 				});
-				const displaySessions = sessions.map(session => ({
-					...session,
-					connectUrl:
-						typeof session.connectUrl === 'string'
-							? sanitizeConnectUrlForDisplay(session.connectUrl)
-							: session.connectUrl,
-				}));
+				const output = formatBrowserSessionsForOutput(sessions, {
+					raw: options.raw,
+				});
 
-				console.log(JSON.stringify({sessions: displaySessions}, null, 2));
+				console.log(JSON.stringify(output, null, 2));
 				process.exit(0);
 			} catch (error) {
 				if (error instanceof BrowserAdapterError) {
@@ -65,5 +69,5 @@ export default function Sessions({options}: Props) {
 		}
 
 		run();
-	}, [options.apiUrl, options.local]);
+	}, [options.apiUrl, options.local, options.raw]);
 }

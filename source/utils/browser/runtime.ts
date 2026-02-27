@@ -90,7 +90,15 @@ export function getVendoredRuntimeSearchRoots(
 	const searchRoots = new Set<string>([cwd]);
 
 	if (processArgv1) {
-		searchRoots.add(path.resolve(path.dirname(processArgv1), '..'));
+		const argvPath = path.resolve(processArgv1);
+		searchRoots.add(path.resolve(path.dirname(argvPath), '..'));
+
+		try {
+			const realArgvPath = fs.realpathSync(argvPath);
+			searchRoots.add(path.resolve(path.dirname(realArgvPath), '..'));
+		} catch {
+			// Ignore realpath failures and keep best-effort search roots.
+		}
 	}
 
 	return [...searchRoots];

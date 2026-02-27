@@ -10,7 +10,10 @@ This is an auto-generated reference for the Steel CLI. The Steel CLI helps you c
 - [steel forge](#steel-forge)
 - [steel login](#steel-login)
 - [steel logout](#steel-logout)
+- [steel pdf](#steel-pdf)
 - [steel run](#steel-run)
+- [steel scrape](#steel-scrape)
+- [steel screenshot](#steel-screenshot)
 - [steel settings](#steel-settings)
 - [steel star](#steel-star)
 - [steel support](#steel-support)
@@ -129,6 +132,29 @@ Logout from Steel CLI
 steel logout
 ```
 
+## steel pdf
+
+Generate a webpage PDF through the Steel API
+
+### Usage
+
+```
+steel pdf [url] [options]
+```
+
+### Arguments
+
+- **url** (optional): Target URL to convert
+
+### Options
+
+- -u, **--url**: Target URL to convert
+- -d, **--delay**: Delay before PDF generation in milliseconds
+- **--use-proxy**: Use a Steel-managed residential proxy
+- -r, **--region**: Region identifier for request execution
+- -l, **--local**: Send request to local Steel runtime mode
+- **--api-url**: Explicit self-hosted API endpoint URL
+
 ## steel run
 
 Run a Steel Cookbook automation instantly from the CLI — no setup, no files.
@@ -176,6 +202,57 @@ steel run [template] [options]
 - **--gemini_key**: API Key for Gemini
 - **--skip_auth**: Skip authentication
 - -h, **--help**: Show help
+
+## steel scrape
+
+Scrape webpage content through the Steel API (markdown output by default)
+
+### Usage
+
+```
+steel scrape [url] [options]
+```
+
+### Arguments
+
+- **url** (optional): Target URL to scrape
+
+### Options
+
+- -u, **--url**: Target URL to scrape
+- **--format**: Comma-separated output formats: html, readability, cleaned_html, markdown
+- **--raw**: Print full JSON response payload
+- -d, **--delay**: Delay before scraping in milliseconds
+- **--pdf**: Include a generated PDF in the scrape response
+- **--screenshot**: Include a generated screenshot in the scrape response
+- **--use-proxy**: Use a Steel-managed residential proxy
+- -r, **--region**: Region identifier for request execution
+- -l, **--local**: Send request to local Steel runtime mode
+- **--api-url**: Explicit self-hosted API endpoint URL
+
+## steel screenshot
+
+Capture a webpage screenshot through the Steel API
+
+### Usage
+
+```
+steel screenshot [url] [options]
+```
+
+### Arguments
+
+- **url** (optional): Target URL to capture
+
+### Options
+
+- -u, **--url**: Target URL to capture
+- -d, **--delay**: Delay before capture in milliseconds
+- -f, **--full-page**: Capture the full page (not only the viewport)
+- **--use-proxy**: Use a Steel-managed residential proxy
+- -r, **--region**: Region identifier for request execution
+- -l, **--local**: Send request to local Steel runtime mode
+- **--api-url**: Explicit self-hosted API endpoint URL
 
 ## steel settings
 
@@ -251,6 +328,7 @@ steel browser sessions [options]
 
 - -l, **--local**: List sessions from local Steel runtime
 - **--api-url**: Explicit self-hosted API endpoint URL
+- **--raw**: Include full raw API payload for each session
 
 ## steel browser start
 
@@ -269,6 +347,10 @@ steel browser start [options]
 - -s, **--session**: Named session key for create-or-attach behavior
 - **--stealth**: Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving)
 - -p, **--proxy**: Proxy URL for new sessions (for example, http://user:pass@host:port)
+- **--session-timeout**: Session timeout in milliseconds (create-time only)
+- **--session-headless**: Create new sessions in headless mode (create-time only)
+- **--session-region**: Preferred session region (create-time only)
+- **--session-solve-captcha**: Enable CAPTCHA solving on new sessions (create-time only)
 
 ## steel browser stop
 

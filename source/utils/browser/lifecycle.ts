@@ -7,6 +7,7 @@ import {resolveBrowserAuth} from './auth.js';
 import {BrowserAdapterError} from './errors.js';
 
 export type BrowserSessionMode = 'cloud' | 'local';
+type DeadSessionBehavior = 'recreate' | 'error';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -24,6 +25,10 @@ type BrowserSessionState = {
 type StartSessionRequestOptions = {
 	stealth?: boolean;
 	proxyUrl?: string;
+	timeoutMs?: number;
+	headless?: boolean;
+	region?: string;
+	solveCaptcha?: boolean;
 };
 
 type ParsedBootstrapOptions = {
@@ -32,6 +37,10 @@ type ParsedBootstrapOptions = {
 	sessionName: string | null;
 	stealth: boolean;
 	proxyUrl: string | null;
+	timeoutMs: number | null;
+	headless: boolean;
+	region: string | null;
+	solveCaptcha: boolean;
 	autoConnect: boolean;
 	cdpTarget: string | null;
 };
@@ -53,6 +62,11 @@ export type StartBrowserSessionOptions = {
 	sessionName?: string;
 	stealth?: boolean;
 	proxyUrl?: string;
+	timeoutMs?: number;
+	headless?: boolean;
+	region?: string;
+	solveCaptcha?: boolean;
+	deadSessionBehavior?: DeadSessionBehavior;
 	environment?: NodeJS.ProcessEnv;
 };
 
@@ -217,6 +231,7 @@ async function acquireLock(): Promise<void> {
 
 async function withSessionStateLock<T>(
 	operation: (state: BrowserSessionState) => Promise<T>,
+	options?: {write?: boolean},
 ): Promise<T> {
 	await fs.mkdir(CONFIG_DIR, {recursive: true});
 	await acquireLock();
@@ -224,7 +239,9 @@ async function withSessionStateLock<T>(
 	try {
 		const state = await readSessionState();
 		const result = await operation(state);
-		await writeSessionState(state);
+		if (options?.write !== false) {
+			await writeSessionState(state);
+		}
 		return result;
 	} finally {
 		await releaseLock();
@@ -335,17 +352,32 @@ function resolveExplicitApiUrl(apiUrl?: string | null): string | null {
 	return validateApiUrl(trimmedApiUrl);
 }
 
+function parsePositiveIntegerFlagValue(
+	value: string,
+	flagName: string,
+): number {
+	const parsed = Number.parseInt(value, 10);
+	if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+		throw new BrowserAdapterError(
+			'INVALID_BROWSER_ARGS',
+			`Invalid value for ${flagName}: ${value}. Expected a positive integer.`,
+		);
+	}
+
+	return parsed;
+}
+
 async function getApiBaseUrl(
 	mode: BrowserSessionMode,
 	environment: NodeJS.ProcessEnv,
 	apiUrl?: string | null,
 ): Promise<string> {
-	if (mode === 'local') {
-		const explicitApiUrl = resolveExplicitApiUrl(apiUrl);
-		if (explicitApiUrl) {
-			return explicitApiUrl;
-		}
+	const explicitApiUrl = resolveExplicitApiUrl(apiUrl);
+	if (explicitApiUrl) {
+		return explicitApiUrl;
+	}
 
+	if (mode === 'local') {
 		const envApiUrl =
 			environment.STEEL_BROWSER_API_URL?.trim() ||
 			environment.STEEL_LOCAL_API_URL?.trim();
@@ -682,11 +714,27 @@ async function createSessionFromApi(
 		payload['proxyUrl'] = options.proxyUrl.trim();
 	}
 
+	if (typeof options.timeoutMs === 'number') {
+		payload['timeout'] = options.timeoutMs;
+	}
+
+	if (typeof options.headless === 'boolean') {
+		payload['headless'] = options.headless;
+	}
+
+	if (options.region?.trim()) {
+		payload['region'] = options.region.trim();
+	}
+
 	if (options.stealth) {
 		payload['stealthConfig'] = {
 			humanizeInteractions: true,
 			autoCaptchaSolving: true,
 		};
+		payload['solveCaptcha'] = true;
+	}
+
+	if (options.solveCaptcha) {
 		payload['solveCaptcha'] = true;
 	}
 
@@ -740,6 +788,54 @@ async function tryGetLiveSession(
 	}
 }
 
+function resolveCandidateSessionId(
+	state: BrowserSessionState,
+	mode: BrowserSessionMode,
+	sessionName: string | null,
+): string | null {
+	if (sessionName) {
+		return state.namedSessions[mode][sessionName] || null;
+	}
+
+	if (state.activeSessionMode === mode && state.activeSessionId) {
+		return state.activeSessionId;
+	}
+
+	return null;
+}
+
+function resolveSessionMode(
+	localOption: boolean | undefined,
+	apiUrl: string | null,
+	activeSessionMode: BrowserSessionMode | null,
+	environment: NodeJS.ProcessEnv,
+): BrowserSessionMode {
+	if (localOption) {
+		return 'local';
+	}
+
+	if (apiUrl) {
+		return isCloudApiUrl(apiUrl, environment) ? 'cloud' : 'local';
+	}
+
+	return activeSessionMode === 'local' ? 'local' : 'cloud';
+}
+
+function isCloudApiUrl(
+	apiUrl: string,
+	environment: NodeJS.ProcessEnv,
+): boolean {
+	try {
+		const explicitUrl = new URL(apiUrl);
+		const configuredCloudApiUrl = new URL(
+			environment.STEEL_API_URL?.trim() || DEFAULT_API_PATH,
+		);
+		return explicitUrl.origin === configuredCloudApiUrl.origin;
+	} catch {
+		return false;
+	}
+}
+
 function resolveNameFromState(
 	state: BrowserSessionState,
 	mode: BrowserSessionMode,
@@ -764,6 +860,73 @@ function resolveNameFromState(
 	return null;
 }
 
+function formatCliArgument(value: string): string {
+	return /^[a-zA-Z0-9_./:=-]+$/.test(value) ? value : JSON.stringify(value);
+}
+
+function buildSessionRestartCommand(
+	options: Pick<
+		StartBrowserSessionOptions,
+		| 'local'
+		| 'apiUrl'
+		| 'sessionName'
+		| 'timeoutMs'
+		| 'headless'
+		| 'region'
+		| 'solveCaptcha'
+	> & {apiUrl: string | null; sessionName: string | null},
+): string {
+	const args = ['steel browser start'];
+
+	if (options.apiUrl) {
+		args.push(`--api-url ${formatCliArgument(options.apiUrl)}`);
+	} else if (options.local) {
+		args.push('--local');
+	}
+
+	if (options.sessionName) {
+		args.push(`--session ${formatCliArgument(options.sessionName)}`);
+	}
+
+	if (typeof options.timeoutMs === 'number') {
+		args.push(`--session-timeout ${String(options.timeoutMs)}`);
+	}
+
+	if (options.headless) {
+		args.push('--session-headless');
+	}
+
+	if (options.region) {
+		args.push(`--session-region ${formatCliArgument(options.region)}`);
+	}
+
+	if (options.solveCaptcha) {
+		args.push('--session-solve-captcha');
+	}
+
+	return args.join(' ');
+}
+
+function buildDeadSessionMessage(
+	sessionId: string,
+	options: Pick<
+		StartBrowserSessionOptions,
+		| 'local'
+		| 'apiUrl'
+		| 'sessionName'
+		| 'timeoutMs'
+		| 'headless'
+		| 'region'
+		| 'solveCaptcha'
+	> & {apiUrl: string | null; sessionName: string | null},
+): string {
+	const sessionLabel = options.sessionName
+		? `Mapped session "${options.sessionName}" (${sessionId})`
+		: `Active session ${sessionId}`;
+	const restartCommand = buildSessionRestartCommand(options);
+	return `${sessionLabel} is no longer live. Run \`${restartCommand}\` to create a new session.`;
+}
+
 export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 	options: ParsedBootstrapOptions;
 	passthroughArgv: string[];
@@ -774,6 +937,10 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		sessionName: null,
 		stealth: false,
 		proxyUrl: null,
+		timeoutMs: null,
+		headless: false,
+		region: null,
+		solveCaptcha: false,
 		autoConnect: false,
 		cdpTarget: null,
 	};
@@ -806,7 +973,6 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 			}
 
 			options.apiUrl = resolveExplicitApiUrl(value);
-			options.local = true;
 
 			if (argument === '--api-url') {
 				index++;
@@ -857,6 +1023,107 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 			}
 
 			continue;
+		}
+
+		if (
+			argument === '--session-timeout' ||
+			argument.startsWith('--session-timeout=')
+		) {
+			const value =
+				argument === '--session-timeout'
+					? browserArgv[index + 1]
+					: argument.slice('--session-timeout='.length);
+
+			if (!value) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'Missing value for --session-timeout.',
+				);
+			}
+
+			options.timeoutMs = parsePositiveIntegerFlagValue(
+				value,
+				'--session-timeout',
+			);
+
+			if (argument === '--session-timeout') {
+				index++;
+			}
+
+			continue;
+		}
+
+		if (argument === '--session-headless') {
+			const potentialValue = browserArgv[index + 1];
+			if (potentialValue && !potentialValue.startsWith('-')) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'`--session-headless` does not accept a value.',
+				);
+			}
+
+			options.headless = true;
+			continue;
+		}
+
+		if (argument.startsWith('--session-headless=')) {
+			throw new BrowserAdapterError(
+				'INVALID_BROWSER_ARGS',
+				'`--session-headless` does not accept a value.',
+			);
+		}
+
+		if (
+			argument === '--session-region' ||
+			argument.startsWith('--session-region=')
+		) {
+			const value =
+				argument === '--session-region'
+					? browserArgv[index + 1]
+					: argument.slice('--session-region='.length);
+
+			if (!value) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'Missing value for --session-region.',
+				);
+			}
+
+			const normalizedRegion = value.trim();
+			if (!normalizedRegion) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'Missing value for --session-region.',
+				);
+			}
+
+			options.region = normalizedRegion;
+
+			if (argument === '--session-region') {
+				index++;
+			}
+
+			continue;
+		}
+
+		if (argument === '--session-solve-captcha') {
+			const potentialValue = browserArgv[index + 1];
+			if (potentialValue && !potentialValue.startsWith('-')) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'`--session-solve-captcha` does not accept a value.',
+				);
+			}
+
+			options.solveCaptcha = true;
+			continue;
+		}
+
+		if (argument.startsWith('--session-solve-captcha=')) {
+			throw new BrowserAdapterError(
+				'INVALID_BROWSER_ARGS',
+				'`--session-solve-captcha` does not accept a value.',
+			);
 		}
 
 		if (argument === '--auto-connect') {
@@ -924,17 +1191,15 @@ export async function startBrowserSession(
 ): Promise<BrowserSessionSummary> {
 	const environment = options.environment || process.env;
 	const apiUrl = resolveExplicitApiUrl(options.apiUrl);
-	const mode: BrowserSessionMode = options.local || apiUrl ? 'local' : 'cloud';
+	const mode = resolveSessionMode(options.local, apiUrl, null, environment);
 	const sessionName = options.sessionName?.trim() || null;
+	const deadSessionBehavior = options.deadSessionBehavior || 'recreate';
 
-	return withSessionStateLock(async state => {
-		let candidateSessionId: string | null = null;
-
-		if (sessionName) {
-			candidateSessionId = state.namedSessions[mode][sessionName] || null;
-		} else if (state.activeSessionMode === mode && state.activeSessionId) {
-			candidateSessionId = state.activeSessionId;
-		}
+	while (true) {
+		const candidateSessionId = await withSessionStateLock(
+			async state => resolveCandidateSessionId(state, mode, sessionName),
+			{write: false},
+		);
 
 		if (candidateSessionId) {
 			const existingSession = await tryGetLiveSession(
@@ -945,16 +1210,60 @@ export async function startBrowserSession(
 			);
 
 			if (existingSession) {
-				setActiveSessionState(state, mode, candidateSessionId, sessionName);
-				return toSessionSummary(
-					existingSession,
-					mode,
-					sessionName,
-					environment,
+				const claimedExistingSession = await withSessionStateLock(
+					async state => {
+						const latestCandidateSessionId = resolveCandidateSessionId(
+							state,
+							mode,
+							sessionName,
+						);
+						if (latestCandidateSessionId !== candidateSessionId) {
+							return false;
+						}
+
+						setActiveSessionState(state, mode, candidateSessionId, sessionName);
+						return true;
+					},
+				);
+
+				if (claimedExistingSession) {
+					return toSessionSummary(
+						existingSession,
+						mode,
+						sessionName,
+						environment,
+					);
+				}
+
+				continue;
+			}
+
+			if (deadSessionBehavior === 'error') {
+				throw new BrowserAdapterError(
+					'SESSION_NOT_FOUND',
+					buildDeadSessionMessage(candidateSessionId, {
+						local: options.local,
+						apiUrl,
+						sessionName,
+						timeoutMs: options.timeoutMs,
+						headless: options.headless,
+						region: options.region,
+						solveCaptcha: options.solveCaptcha,
+					}),
 				);
 			}
 
-			clearActiveSessionState(state, mode, candidateSessionId);
+			await withSessionStateLock(async state => {
+				const latestCandidateSessionId = resolveCandidateSessionId(
+					state,
+					mode,
+					sessionName,
+				);
+				if (latestCandidateSessionId === candidateSessionId) {
+					clearActiveSessionState(state, mode, candidateSessionId);
+				}
+			});
+			continue;
 		}
 
 		const createdSession = await createSessionFromApi(
@@ -962,6 +1271,10 @@ export async function startBrowserSession(
 			{
 				stealth: options.stealth,
 				proxyUrl: options.proxyUrl,
+				timeoutMs: options.timeoutMs,
+				headless: options.headless,
+				region: options.region,
+				solveCaptcha: options.solveCaptcha,
 			},
 			environment,
 			apiUrl,
@@ -975,13 +1288,33 @@ export async function startBrowserSession(
 			);
 		}
 
-		if (sessionName) {
-			state.namedSessions[mode][sessionName] = createdSessionId;
+		const claimedCreatedSession = await withSessionStateLock(async state => {
+			const latestCandidateSessionId = resolveCandidateSessionId(
+				state,
+				mode,
+				sessionName,
+			);
+			if (latestCandidateSessionId) {
+				return false;
+			}
+
+			if (sessionName) {
+				state.namedSessions[mode][sessionName] = createdSessionId;
+			}
+			setActiveSessionState(state, mode, createdSessionId, sessionName);
+			return true;
+		});
+
+		if (claimedCreatedSession) {
+			return toSessionSummary(createdSession, mode, sessionName, environment);
 		}
 
-		setActiveSessionState(state, mode, createdSessionId, sessionName);
-		return toSessionSummary(createdSession, mode, sessionName, environment);
-	});
+		try {
+			await releaseSession(mode, createdSessionId, environment, apiUrl);
+		} catch {
+			// Continue with the state-selected session if cleanup fails.
+		}
+	}
 }
 
 export async function listBrowserSessions(
@@ -989,7 +1322,7 @@ export async function listBrowserSessions(
 ): Promise<BrowserSessionSummary[]> {
 	const environment = options?.environment || process.env;
 	const apiUrl = resolveExplicitApiUrl(options?.apiUrl);
-	const mode: BrowserSessionMode = options?.local || apiUrl ? 'local' : 'cloud';
+	const mode = resolveSessionMode(options?.local, apiUrl, null, environment);
 	const state = await readSessionState();
 	const sessions = await listSessionsFromApi(mode, environment, apiUrl);
 
@@ -1008,12 +1341,12 @@ export async function getActiveBrowserLiveUrl(
 	const environment = options?.environment || process.env;
 	const apiUrl = resolveExplicitApiUrl(options?.apiUrl);
 	const state = await readSessionState();
-	const mode: BrowserSessionMode =
-		options?.local ||
-		apiUrl ||
-		(!options?.local && !apiUrl && state.activeSessionMode === 'local')
-			? 'local'
-			: 'cloud';
+	const mode = resolveSessionMode(
+		options?.local,
+		apiUrl,
+		state.activeSessionMode,
+		environment,
+	);
 
 	if (state.activeSessionMode !== mode || !state.activeSessionId) {
 		return null;
@@ -1043,59 +1376,72 @@ export async function stopBrowserSession(
 ): Promise<StopBrowserSessionResult> {
 	const environment = options.environment || process.env;
 	const apiUrl = resolveExplicitApiUrl(options.apiUrl);
+	const initialState = await withSessionStateLock(
+		async state => {
+			const mode = resolveSessionMode(
+				options.local,
+				apiUrl,
+				state.activeSessionMode,
+				environment,
+			);
 
-	return withSessionStateLock(async state => {
-		const mode: BrowserSessionMode =
-			options.local ||
-			apiUrl ||
-			(!options.local && !apiUrl && state.activeSessionMode === 'local')
-				? 'local'
-				: 'cloud';
+			return {
+				mode,
+				targetSessionId:
+					state.activeSessionMode === mode ? state.activeSessionId : null,
+			};
+		},
+		{write: false},
+	);
+	const mode = initialState.mode;
 
-		if (options.all) {
-			const sessions = await listSessionsFromApi(mode, environment, apiUrl);
-			const liveSessionIds = sessions
-				.filter(session => isSessionLive(session))
-				.map(session => getSessionId(session))
-				.filter((sessionId): sessionId is string => Boolean(sessionId));
+	if (options.all) {
+		const sessions = await listSessionsFromApi(mode, environment, apiUrl);
+		const liveSessionIds = sessions
+			.filter(session => isSessionLive(session))
+			.map(session => getSessionId(session))
+			.filter((sessionId): sessionId is string => Boolean(sessionId));
 
+		for (const sessionId of liveSessionIds) {
+			try {
+				await releaseSession(mode, sessionId, environment, apiUrl);
+			} catch {
+				// Continue best-effort release for all sessions.
+			}
+		}
+
+		await withSessionStateLock(async state => {
 			for (const sessionId of liveSessionIds) {
-				try {
-					await releaseSession(mode, sessionId, environment, apiUrl);
-				} catch {
-					// Continue best-effort release for all sessions.
-				}
-
 				clearActiveSessionState(state, mode, sessionId);
 			}
-
-			return {
-				mode,
-				all: true,
-				stoppedSessionIds: liveSessionIds,
-			};
-		}
-
-		const targetSessionId =
-			state.activeSessionMode === mode ? state.activeSessionId : null;
-
-		if (!targetSessionId) {
-			return {
-				mode,
-				all: false,
-				stoppedSessionIds: [],
-			};
-		}
-
-		await releaseSession(mode, targetSessionId, environment, apiUrl);
-		clearActiveSessionState(state, mode, targetSessionId);
+		});
 
 		return {
 			mode,
-			all: false,
-			stoppedSessionIds: [targetSessionId],
+			all: true,
+			stoppedSessionIds: liveSessionIds,
 		};
+	}
+
+	const targetSessionId = initialState.targetSessionId;
+	if (!targetSessionId) {
+		return {
+			mode,
+			all: false,
+			stoppedSessionIds: [],
+		};
+	}
+
+	await releaseSession(mode, targetSessionId, environment, apiUrl);
+	await withSessionStateLock(async state => {
+		clearActiveSessionState(state, mode, targetSessionId);
 	});
+
+	return {
+		mode,
+		all: false,
+		stoppedSessionIds: [targetSessionId],
+	};
 }
 
 export async function bootstrapBrowserPassthroughArgv(
@@ -1121,6 +1467,11 @@ export async function bootstrapBrowserPassthroughArgv(
 		sessionName: parsed.options.sessionName || undefined,
 		stealth: parsed.options.stealth,
 		proxyUrl: parsed.options.proxyUrl || undefined,
+		timeoutMs: parsed.options.timeoutMs || undefined,
+		headless: parsed.options.headless || undefined,
+		region: parsed.options.region || undefined,
+		solveCaptcha: parsed.options.solveCaptcha || undefined,
+		deadSessionBehavior: 'error',
 		environment,
 	});
 

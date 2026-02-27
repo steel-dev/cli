@@ -32,6 +32,7 @@ From `steel browser start` output:
 
 Do not assume `connect_url` contains usable raw credentials.
 Likewise, `steel browser sessions` returns display-safe `connectUrl` fields.
+It emits compact metadata by default; add `--raw` for full session payloads.
 
 ## Building a Full CDP URL Safely
 

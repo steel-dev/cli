@@ -56,6 +56,41 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	sessionTimeout: zod.coerce
+		.number()
+		.int()
+		.positive()
+		.describe(
+			option({
+				description: 'Session timeout in milliseconds (create-time only)',
+			}),
+		)
+		.optional(),
+	sessionHeadless: zod
+		.boolean()
+		.describe(
+			option({
+				description: 'Create new sessions in headless mode (create-time only)',
+			}),
+		)
+		.optional(),
+	sessionRegion: zod
+		.string()
+		.describe(
+			option({
+				description: 'Preferred session region (create-time only)',
+			}),
+		)
+		.optional(),
+	sessionSolveCaptcha: zod
+		.boolean()
+		.describe(
+			option({
+				description:
+					'Enable CAPTCHA solving on new sessions (create-time only)',
+			}),
+		)
+		.optional(),
 });
 
 type Props = {
@@ -72,6 +107,10 @@ export default function Start({options}: Props) {
 					sessionName: options.session,
 					stealth: options.stealth,
 					proxyUrl: options.proxy,
+					timeoutMs: options.sessionTimeout,
+					headless: options.sessionHeadless,
+					region: options.sessionRegion,
+					solveCaptcha: options.sessionSolveCaptcha,
 				});
 
 				console.log(`id: ${session.id}`);
@@ -111,6 +150,10 @@ export default function Start({options}: Props) {
 		options.apiUrl,
 		options.local,
 		options.proxy,
+		options.sessionHeadless,
+		options.sessionRegion,
+		options.sessionSolveCaptcha,
+		options.sessionTimeout,
 		options.session,
 		options.stealth,
 	]);

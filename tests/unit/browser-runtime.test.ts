@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
 	getBrowserRuntimeTarget,
+	getVendoredRuntimeSearchRoots,
 	resolveVendoredRuntimeFromManifest,
 	resolveVendoredRuntimePath,
 } from '../../source/utils/browser/runtime';
@@ -106,5 +107,41 @@ describe('vendored browser runtime lookup', () => {
 		expect(resolveVendoredRuntimePath([temporaryRoot], 'linux', 'x64')).toBe(
 			legacyPath,
 		);
+	});
+
+	test('includes realpath-derived root for symlinked executable paths', () => {
+		const workingDirectory = path.join(temporaryRoot, 'workspace');
+		const installRoot = path.join(
+			temporaryRoot,
+			'node_modules',
+			'@steel-dev',
+			'cli',
+		);
+		const symlinkPath = path.join(temporaryRoot, 'bin', 'steel');
+		const resolvedEntrypoint = path.join(installRoot, 'dist', 'steel.js');
+
+		fs.mkdirSync(workingDirectory, {recursive: true});
+		fs.mkdirSync(path.dirname(resolvedEntrypoint), {recursive: true});
+		fs.mkdirSync(path.dirname(symlinkPath), {recursive: true});
+		fs.writeFileSync(resolvedEntrypoint, '#!/usr/bin/env node\n', 'utf-8');
+
+		try {
+			fs.symlinkSync(resolvedEntrypoint, symlinkPath);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === 'EPERM') {
+				return;
+			}
+
+			throw error;
+		}
+
+		const searchRoots = getVendoredRuntimeSearchRoots(
+			workingDirectory,
+			symlinkPath,
+		);
+
+		expect(searchRoots).toContain(workingDirectory);
+		expect(searchRoots).toContain(path.resolve(temporaryRoot));
+		expect(searchRoots).toContain(fs.realpathSync(installRoot));
 	});
 });

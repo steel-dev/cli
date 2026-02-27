@@ -19,6 +19,12 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - `steel browser live`: print the active session live-view URL.
 - `steel browser <inherited-command>`: pass through to vendored `agent-browser` runtime.
 
+### API Tool Commands
+
+- `steel scrape`: scrape webpage content and metadata.
+- `steel screenshot`: capture a webpage screenshot URL.
+- `steel pdf`: generate a webpage PDF URL.
+
 ### Local Runtime Commands
 
 - `steel dev install`: install local runtime assets only.
@@ -44,6 +50,10 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - Command help for inherited browser commands is delegated to the vendored browser runtime.
 - `steel browser start` and `steel browser sessions` emit display-safe connect
   URLs with sensitive query keys redacted.
+- `steel scrape`, `steel screenshot`, and `steel pdf` share local/cloud endpoint
+  resolution conventions with browser lifecycle commands.
+- `steel scrape` defaults to markdown-first output for token efficiency; use
+  `--raw` to print the full API JSON payload.
 
 ## Core Config Paths
 

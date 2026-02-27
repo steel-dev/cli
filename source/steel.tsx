@@ -15,6 +15,7 @@ import Spinner from 'ink-spinner';
 import {
 	filterSteelGlobalFlags,
 	getBrowserPassthroughArgv,
+	isBrowserHelpAlias,
 	isBrowserCommand,
 	resolveBrowserDispatchTarget,
 } from './utils/browser/routing.js';
@@ -29,6 +30,12 @@ const cliArgv = process.argv.slice(2);
 const versionFlag = cliArgv.includes('--version') || cliArgv.includes('-v');
 if (versionFlag) {
 	console.log(getCurrentVersion());
+	process.exit(0);
+}
+
+if (isBrowserHelpAlias(cliArgv)) {
+	const {waitUntilExit} = render(<Help command="browser" />);
+	await waitUntilExit();
 	process.exit(0);
 }
 

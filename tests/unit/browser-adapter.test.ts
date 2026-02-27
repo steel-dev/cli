@@ -263,6 +263,76 @@ describe('browser passthrough execution contract', () => {
 		}
 	});
 
+	test('normalizes bare domain for tab new passthrough URL', async () => {
+		const temporaryRoot = createTempDirectory(
+			'steel-browser-passthrough-tab-new-normalize-',
+		);
+		const {runtimePath, capturePath} = writeProbeRuntimeScript(temporaryRoot);
+
+		try {
+			const exitCode = await runBrowserPassthrough(
+				['tab', 'new', 'hackernews.com', '--cdp', 'ws://localhost:9222'],
+				{
+					STEEL_BROWSER_RUNTIME_BIN: runtimePath,
+					STEEL_RUNTIME_CAPTURE_PATH: capturePath,
+				},
+			);
+			const runtimePayload = JSON.parse(
+				fs.readFileSync(capturePath, 'utf-8'),
+			) as {
+				argv: string[];
+				apiKey: string | null;
+				agentBrowserHome: string | null;
+			};
+
+			expect(exitCode).toBe(0);
+			expect(runtimePayload.argv).toEqual([
+				'tab',
+				'new',
+				'https://hackernews.com',
+				'--cdp',
+				'ws://localhost:9222',
+			]);
+		} finally {
+			fs.rmSync(temporaryRoot, {recursive: true, force: true});
+		}
+	});
+
+	test('keeps explicit protocol URL unchanged for tab new passthrough', async () => {
+		const temporaryRoot = createTempDirectory(
+			'steel-browser-passthrough-tab-new-explicit-',
+		);
+		const {runtimePath, capturePath} = writeProbeRuntimeScript(temporaryRoot);
+
+		try {
+			const exitCode = await runBrowserPassthrough(
+				['tab', 'new', 'https://example.com', '--cdp', 'ws://localhost:9222'],
+				{
+					STEEL_BROWSER_RUNTIME_BIN: runtimePath,
+					STEEL_RUNTIME_CAPTURE_PATH: capturePath,
+				},
+			);
+			const runtimePayload = JSON.parse(
+				fs.readFileSync(capturePath, 'utf-8'),
+			) as {
+				argv: string[];
+				apiKey: string | null;
+				agentBrowserHome: string | null;
+			};
+
+			expect(exitCode).toBe(0);
+			expect(runtimePayload.argv).toEqual([
+				'tab',
+				'new',
+				'https://example.com',
+				'--cdp',
+				'ws://localhost:9222',
+			]);
+		} finally {
+			fs.rmSync(temporaryRoot, {recursive: true, force: true});
+		}
+	});
+
 	test('keeps environment api key precedence when spawning passthrough runtime', async () => {
 		const temporaryRoot = createTempDirectory(
 			'steel-browser-passthrough-auth-',

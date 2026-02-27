@@ -1,3 +1,5 @@
+import type {BrowserSessionSummary} from './lifecycle.js';
+
 const REDACTED_QUERY_VALUE = 'REDACTED';
 const SENSITIVE_CONNECT_QUERY_KEYS = [
 	'apiKey',
@@ -5,6 +7,13 @@ const SENSITIVE_CONNECT_QUERY_KEYS = [
 	'token',
 	'access_token',
 ];
+
+export type BrowserSessionsOutputSession = Omit<
+	BrowserSessionSummary,
+	'raw'
+> & {
+	raw?: BrowserSessionSummary['raw'];
+};
 
 export function sanitizeConnectUrlForDisplay(connectUrl: string): string {
 	if (!connectUrl.trim()) {
@@ -29,4 +38,32 @@ export function sanitizeConnectUrlForDisplay(connectUrl: string): string {
 			`$1${REDACTED_QUERY_VALUE}`,
 		);
 	}
+}
+
+export function formatBrowserSessionsForOutput(
+	sessions: BrowserSessionSummary[],
+	options: {raw?: boolean} = {},
+): {sessions: BrowserSessionsOutputSession[]} {
+	return {
+		sessions: sessions.map(session => {
+			const summary: BrowserSessionsOutputSession = {
+				id: session.id,
+				mode: session.mode,
+				name: session.name,
+				live: session.live,
+				status: session.status,
+				connectUrl:
+					typeof session.connectUrl === 'string'
+						? sanitizeConnectUrlForDisplay(session.connectUrl)
+						: session.connectUrl,
+				viewerUrl: session.viewerUrl,
+			};
+
+			if (options.raw) {
+				summary.raw = session.raw;
+			}
+
+			return summary;
+		}),
+	};
 }
