@@ -12,18 +12,23 @@
 	"scripts": {
 		"prepare": "husky",
 		"clean": "rm -rf dist",
-		"build": "npm run clean && tsc",
+		"build": "npm run browser:runtime:deps:check && npm run clean && tsc && npm run browser:runtime:package",
 		"dev": "tsc --watch",
 		"lint": "eslint . --ext .ts,.tsx",
 		"lint:fix": "eslint . --ext .ts,.tsx --fix",
 		"format": "prettier --check .",
 		"format:fix": "prettier --write .",
+		"browser:runtime:deps:check": "node scripts/browser-runtime-deps-check.js",
+		"browser:runtime:package": "node scripts/package-browser-runtime.js",
+		"browser:runtime:smoke": "node scripts/browser-runtime-smoke.js",
+		"browser:cloud:smoke": "node scripts/browser-cloud-smoke.js",
+		"references:sync:agent-browser": "node scripts/sync-agent-browser-commands-reference.js",
 		"docs:generate": "npm run build && node scripts/generate-docs.js",
-		"test": "npm run build && jest",
-		"test:unit": "jest --testPathPattern=tests/unit",
-		"test:integration": "npm run build && jest --testPathPattern=tests/integration",
-		"test:watch": "jest --watch --testPathPattern=tests/unit",
-		"pretest": "npm run build"
+		"test": "npm run build && node scripts/test-integration-table.js",
+		"test:unit": "vitest run tests/unit",
+		"test:integration": "npm run build && node scripts/test-integration-table.js tests/integration",
+		"test:integration:raw": "npm run build && vitest run tests/integration",
+		"test:watch": "vitest tests/unit"
 	},
 	"files": [
 		"dist",
@@ -31,7 +36,6 @@
 	],
 	"dependencies": {
 		"@babel/parser": "^7.27.2",
-		"ast-types": "^0.14.2",
 		"figures": "^6.1.0",
 		"ink": "^5.2.1",
 		"ink-big-text": "^2.0.0",
@@ -43,13 +47,15 @@
 		"ink-syntax-highlight": "^2.0.2",
 		"ink-task-list": "^2.0.0",
 		"ink-text-input": "^6.0.0",
-		"octokit": "^5.0.3",
+		"node-simctl": "^7.4.0",
 		"open": "^10.1.2",
 		"pastel": "^3.0.0",
+		"playwright-core": "^1.57.0",
 		"react": "^18.2.0",
-		"recast": "^0.23.11",
 		"tar-stream": "^3.1.7",
 		"uuid": "^11.1.0",
+		"webdriverio": "^9.15.0",
+		"ws": "^8.19.0",
 		"zod": "^3.24.3"
 	},
 	"overrides": {
@@ -82,35 +88,9 @@
 		"ink-testing-library": "^4.0.0",
 		"prettier": "^3.6.2",
 		"rimraf": "^6.0.0",
-		"ts-node": "^10.9.2",
 		"typescript": "^5.8.3",
-		"typescript-eslint": "^8.37.0"
-	},
-	"jest": {
-		"preset": "ts-jest",
-		"testEnvironment": "node",
-		"roots": [
-			"<rootDir>/tests"
-		],
-		"testMatch": [
-			"**/*.test.ts"
-		],
-		"setupFilesAfterEnv": [
-			"<rootDir>/tests/setup.ts"
-		],
-		"collectCoverageFrom": [
-			"source/**/*.{ts,tsx}",
-			"!source/**/*.d.ts",
-			"!source/types/**"
-		],
-		"coverageDirectory": "coverage",
-		"coverageReporters": [
-			"text",
-			"lcov",
-			"html"
-		],
-		"testTimeout": 60000,
-		"maxWorkers": 1
+		"typescript-eslint": "^8.37.0",
+		"vitest": "^3.2.4"
 	},
 	"xo": {
 		"extends": "xo-react",

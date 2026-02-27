@@ -12,18 +12,56 @@ import {
 	type UpdateState,
 } from './utils/update.js';
 import Spinner from 'ink-spinner';
+import {
+	filterSteelGlobalFlags,
+	getBrowserPassthroughArgv,
+	isBrowserHelpAlias,
+	isBrowserCommand,
+	resolveBrowserDispatchTarget,
+} from './utils/browser/routing.js';
+import {
+	BrowserAdapterError,
+	runBrowserPassthrough,
+} from './utils/browser/adapter.js';
+
+const cliArgv = process.argv.slice(2);
 
 // Check for version flag first
-const versionFlag =
-	process.argv.includes('--version') || process.argv.includes('-v');
+const versionFlag = cliArgv.includes('--version') || cliArgv.includes('-v');
 if (versionFlag) {
 	console.log(getCurrentVersion());
 	process.exit(0);
 }
 
+if (isBrowserHelpAlias(cliArgv)) {
+	const {waitUntilExit} = render(<Help command="browser" />);
+	await waitUntilExit();
+	process.exit(0);
+}
+
+const browserDispatchTarget = resolveBrowserDispatchTarget(cliArgv);
+
+if (browserDispatchTarget === 'passthrough') {
+	try {
+		const passthroughArgv = getBrowserPassthroughArgv(cliArgv);
+		const exitCode = await runBrowserPassthrough(passthroughArgv);
+		process.exit(exitCode);
+	} catch (error) {
+		if (error instanceof BrowserAdapterError) {
+			console.error(error.message);
+		} else {
+			console.error('Failed to execute browser passthrough command.');
+		}
+
+		process.exit(1);
+	}
+}
+
 // Check if help flag is provided
-const helpFlag = process.argv.includes('--help') || process.argv.includes('-h');
-const args = process.argv.slice(2).filter(arg => !arg.startsWith('-'));
+const helpFlag = cliArgv.includes('--help') || cliArgv.includes('-h');
+const args = filterSteelGlobalFlags(cliArgv).filter(
+	arg => !arg.startsWith('-'),
+);
 const command = args.length > 0 ? args.join(' ') : '';
 
 // Skip update check for certain commands or flags
@@ -31,7 +69,8 @@ const skipUpdateCommands = ['update', 'help'];
 const skipUpdateCheck =
 	helpFlag ||
 	skipUpdateCommands.includes(command) ||
-	process.argv.includes('--no-update-check') ||
+	isBrowserCommand(cliArgv) ||
+	cliArgv.includes('--no-update-check') ||
 	process.env.STEEL_CLI_SKIP_UPDATE_CHECK === 'true' ||
 	process.env.CI === 'true' || // Skip in CI environments
 	process.env.NODE_ENV === 'test'; // Skip in test environments
@@ -136,7 +175,7 @@ function PastelApp() {
 			process.argv = [
 				process.argv[0],
 				process.argv[1],
-				...filterGlobalFlags(process.argv.slice(2)),
+				...filterSteelGlobalFlags(process.argv.slice(2)),
 			];
 
 			const app = new Pastel({
@@ -157,11 +196,6 @@ function PastelApp() {
 	return null;
 }
 
-// Filter out update flags before passing to Pastel
-function filterGlobalFlags(argv: string[]): string[] {
-	return argv.filter(arg => arg !== '--no-update-check');
-}
-
 // Main execution
 if (!skipUpdateCheck) {
 	// Render the update progress component which will handle the flow
@@ -173,7 +207,7 @@ if (!skipUpdateCheck) {
 	process.argv = [
 		process.argv[0],
 		process.argv[1],
-		...filterGlobalFlags(process.argv.slice(2)),
+		...filterSteelGlobalFlags(process.argv.slice(2)),
 	];
 
 	const app = new Pastel({

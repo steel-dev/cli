@@ -1,49 +1,95 @@
-import React, {useEffect, useState} from 'react';
-import {spawn} from 'child_process';
-import open from 'open';
-import {CONFIG_DIR, REPO_URL} from '../../utils/constants.js';
-import path from 'path';
+#!/usr/bin/env node
+
+import {useEffect} from 'react';
 import zod from 'zod';
 import {option} from 'pastel';
-import Spinner from 'ink-spinner';
-import {Text} from 'ink';
-import Callout from '../../components/callout.js';
+import {startBrowserSession} from '../../utils/browser/lifecycle.js';
+import {BrowserAdapterError} from '../../utils/browser/errors.js';
+import {sanitizeConnectUrlForDisplay} from '../../utils/browser/display.js';
 
-export const description = 'Starts Steel Browser in development mode';
+export const description =
+	'Create or attach a Steel browser session (cloud by default)';
 
 export const options = zod.object({
-	port: zod
-		.number()
-		.describe(
-			option({
-				description: 'Port number',
-				alias: 'p',
-			}),
-		)
-		.default(3000)
-		.optional(),
-	build: zod
+	local: zod
 		.boolean()
 		.describe(
 			option({
-				description: 'Build and run docker-compose in development mode',
-				alias: 'b',
+				description: 'Start or attach a local Steel browser session',
+				alias: 'l',
 			}),
 		)
-		.default(false)
 		.optional(),
-	verbose: zod
+	apiUrl: zod
 		.string()
 		.describe(
 			option({
-				description: 'Enable verbose logging',
-				alias: 'v',
+				description: 'Explicit self-hosted API endpoint URL',
 			}),
 		)
 		.optional(),
-	docker_check: zod
+	session: zod
 		.string()
-		.describe(option({description: 'Verify Docker is running', alias: 'dc'}))
+		.describe(
+			option({
+				description: 'Named session key for create-or-attach behavior',
+				alias: 's',
+			}),
+		)
+		.optional(),
+	stealth: zod
+		.boolean()
+		.describe(
+			option({
+				description:
+					'Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving)',
+			}),
+		)
+		.optional(),
+	proxy: zod
+		.string()
+		.describe(
+			option({
+				description:
+					'Proxy URL for new sessions (for example, http://user:pass@host:port)',
+				alias: 'p',
+			}),
+		)
+		.optional(),
+	sessionTimeout: zod.coerce
+		.number()
+		.int()
+		.positive()
+		.describe(
+			option({
+				description: 'Session timeout in milliseconds (create-time only)',
+			}),
+		)
+		.optional(),
+	sessionHeadless: zod
+		.boolean()
+		.describe(
+			option({
+				description: 'Create new sessions in headless mode (create-time only)',
+			}),
+		)
+		.optional(),
+	sessionRegion: zod
+		.string()
+		.describe(
+			option({
+				description: 'Preferred session region (create-time only)',
+			}),
+		)
+		.optional(),
+	sessionSolveCaptcha: zod
+		.boolean()
+		.describe(
+			option({
+				description:
+					'Enable CAPTCHA solving on new sessions (create-time only)',
+			}),
+		)
 		.optional(),
 });
 
@@ -51,168 +97,64 @@ type Props = {
 	options: zod.infer<typeof options>;
 };
 
-function isDockerRunning(): Promise<boolean> {
-	return new Promise(resolve => {
-		const isRunning = spawn('docker', ['info']);
-		isRunning.on('close', code => {
-			resolve(code === 0);
-		});
-		isRunning.on('error', () => {
-			resolve(false);
-		});
-	});
-}
-
-async function waitForApiHealth(
-	port: number,
-	maxRetries = 30,
-	retryDelay = 500,
-): Promise<boolean> {
-	const healthUrl = `http://localhost:${port}/v1/health`;
-
-	for (let attempt = 1; attempt <= maxRetries; attempt++) {
-		try {
-			const response = await fetch(healthUrl);
-			if (response.ok) {
-				return true;
-			}
-		} catch {
-			// API not ready yet, continue polling
-		}
-
-		// Wait before next attempt
-		await new Promise(resolve => setTimeout(resolve, retryDelay));
-	}
-
-	return false;
-}
-
 export default function Start({options}: Props) {
-	const [loading, setLoading] = useState(false);
-	const [dockerError, setDockerError] = useState(false);
-	const [status, setStatus] = useState('');
-	const [output, setOutput] = useState<string>('');
-	const [apiReady, setApiReady] = useState(false);
-
 	useEffect(() => {
-		async function start() {
-			const port = options?.port || 3000;
-			const dockerComposeFile = options?.build
-				? 'docker-compose.dev.yml'
-				: 'docker-compose.yml';
-			setLoading(true);
-			setStatus('Cloning repository...');
+		async function run() {
+			try {
+				const session = await startBrowserSession({
+					local: options.local,
+					apiUrl: options.apiUrl,
+					sessionName: options.session,
+					stealth: options.stealth,
+					proxyUrl: options.proxy,
+					timeoutMs: options.sessionTimeout,
+					headless: options.sessionHeadless,
+					region: options.sessionRegion,
+					solveCaptcha: options.sessionSolveCaptcha,
+				});
 
-			spawn('git', ['clone', REPO_URL], {
-				cwd: CONFIG_DIR,
-			});
+				console.log(`id: ${session.id}`);
+				console.log(`mode: ${session.mode}`);
+				if (session.name) {
+					console.log(`name: ${session.name}`);
+				}
 
-			const dockerRunning = await isDockerRunning();
-			if (!dockerRunning) {
-				setDockerError(true);
-				setLoading(false);
-				return;
+				if (session.viewerUrl) {
+					console.log(`live_url: ${session.viewerUrl}`);
+				}
+
+				if (session.connectUrl) {
+					console.log(
+						`connect_url: ${sanitizeConnectUrlForDisplay(session.connectUrl)}`,
+					);
+				}
+
+				process.exit(0);
+			} catch (error) {
+				if (error instanceof BrowserAdapterError) {
+					console.error(error.message);
+				} else if (error instanceof Error) {
+					console.error(error.message);
+				} else {
+					console.error(
+						'Failed to start browser session. Check your network/auth and try again.',
+					);
+				}
+
+				process.exit(1);
 			}
-
-			setStatus('Starting Docker Compose...');
-
-			const folderName = path.basename(REPO_URL, '.git');
-
-			const dockerCompose = spawn(
-				'docker-compose',
-				['-f', dockerComposeFile, 'up', '-d'],
-				{
-					cwd: path.join(CONFIG_DIR, folderName),
-					stdio: ['pipe', 'pipe', 'pipe'], // Capture stdout and stderr
-					env: {
-						...process.env,
-						API_PORT: String(port),
-						ENABLE_VERBOSE_LOGGING: options?.verbose || 'false',
-					},
-				},
-			);
-
-			// Stream stdout to output state
-			dockerCompose.stdout?.on('data', data => {
-				const text = data.toString();
-				setOutput(prev => prev + text);
-			});
-
-			// Stream stderr to output state
-			dockerCompose.stderr?.on('data', data => {
-				const text = data.toString();
-				setOutput(prev => prev + text);
-			});
-
-			dockerCompose.on('close', async code => {
-				if (code !== 0) {
-					setDockerError(true);
-					setLoading(false);
-					return;
-				}
-
-				setStatus('Waiting for API to be ready...');
-				setOutput(''); // Clear docker output for cleaner display
-
-				const isApiHealthy = await waitForApiHealth(port);
-				if (!isApiHealthy) {
-					setDockerError(true);
-					setStatus('API failed to start within expected time');
-					setLoading(false);
-					return;
-				}
-
-				setStatus('Opening browser...');
-				setApiReady(true);
-				setLoading(false);
-				await open('http://localhost:5173');
-			});
-
-			dockerCompose.on('error', error => {
-				console.error('Error starting Docker Compose:', error);
-				setDockerError(true);
-				setLoading(false);
-			});
 		}
-		start();
-	}, []);
 
-	if (dockerError) {
-		return (
-			<Callout variant="failed" title="Startup Failed">
-				{status.includes('API failed')
-					? status
-					: 'Docker is not running. Please start Docker and try again.'}
-			</Callout>
-		);
-	}
-
-	if (loading) {
-		return (
-			<Callout variant="info" title="Starting Steel Browser">
-				<Text>
-					<Spinner type="dots" /> {status + '\n'}
-				</Text>
-				{output && (
-					<Text dimColor>{output.split('\n').slice(-5).join('\n')}</Text>
-				)}
-			</Callout>
-		);
-	}
-
-	if (apiReady) {
-		return (
-			<Callout variant="success" title="Steel Browser is Up and Running">
-				Browser opened at http://localhost:5173
-			</Callout>
-		);
-	}
-
-	return (
-		<Callout variant="info" title="Starting Steel Browser">
-			<Text>
-				<Spinner type="dots" /> {status}
-			</Text>
-		</Callout>
-	);
+		run();
+	}, [
+		options.apiUrl,
+		options.local,
+		options.proxy,
+		options.sessionHeadless,
+		options.sessionRegion,
+		options.sessionSolveCaptcha,
+		options.sessionTimeout,
+		options.session,
+		options.stealth,
+	]);
 }

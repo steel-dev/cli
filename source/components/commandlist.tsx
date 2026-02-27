@@ -14,7 +14,14 @@ type Props = {
 export default function CommandList({commands}: Props) {
 	// Define command categories
 	const quickstartCommands = ['forge', 'run'];
-	const apiEndpoints = ['sessions', 'files', 'tools'];
+	const apiEndpoints = [
+		'sessions',
+		'files',
+		'tools',
+		'scrape',
+		'screenshot',
+		'pdf',
+	];
 
 	// First, let's build a proper hierarchy
 	const buildHierarchy = commandList => {

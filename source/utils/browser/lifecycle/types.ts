@@ -1,0 +1,82 @@
+export type BrowserSessionMode = 'cloud' | 'local';
+export type DeadSessionBehavior = 'recreate' | 'error';
+
+export type UnknownRecord = Record<string, unknown>;
+
+export type BrowserSessionState = {
+	activeSessionId: string | null;
+	activeSessionMode: BrowserSessionMode | null;
+	activeSessionName: string | null;
+	namedSessions: {
+		cloud: Record<string, string>;
+		local: Record<string, string>;
+	};
+	updatedAt: string | null;
+};
+
+export type StartSessionRequestOptions = {
+	stealth?: boolean;
+	proxyUrl?: string;
+	timeoutMs?: number;
+	headless?: boolean;
+	region?: string;
+	solveCaptcha?: boolean;
+};
+
+export type ParsedBootstrapOptions = {
+	local: boolean;
+	apiUrl: string | null;
+	sessionName: string | null;
+	stealth: boolean;
+	proxyUrl: string | null;
+	timeoutMs: number | null;
+	headless: boolean;
+	region: string | null;
+	solveCaptcha: boolean;
+	autoConnect: boolean;
+	cdpTarget: string | null;
+};
+
+export type BrowserSessionSummary = {
+	id: string;
+	mode: BrowserSessionMode;
+	name: string | null;
+	live: boolean;
+	status: string | null;
+	connectUrl: string | null;
+	viewerUrl: string | null;
+	raw: UnknownRecord;
+};
+
+export type StartBrowserSessionOptions = {
+	local?: boolean;
+	apiUrl?: string;
+	sessionName?: string;
+	stealth?: boolean;
+	proxyUrl?: string;
+	timeoutMs?: number;
+	headless?: boolean;
+	region?: string;
+	solveCaptcha?: boolean;
+	deadSessionBehavior?: DeadSessionBehavior;
+	environment?: NodeJS.ProcessEnv;
+};
+
+export type StopBrowserSessionOptions = {
+	all?: boolean;
+	local?: boolean;
+	apiUrl?: string;
+	environment?: NodeJS.ProcessEnv;
+};
+
+export type BrowserSessionEndpointOptions = {
+	local?: boolean;
+	apiUrl?: string;
+	environment?: NodeJS.ProcessEnv;
+};
+
+export type StopBrowserSessionResult = {
+	mode: BrowserSessionMode;
+	all: boolean;
+	stoppedSessionIds: string[];
+};

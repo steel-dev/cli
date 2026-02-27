@@ -2,7 +2,8 @@
 node_modules/
 
 # Build outputs
-dist/
+/dist/
+*.tgz
 
 # Environment files
 .env
@@ -32,3 +33,10 @@ Thumbs.db
 # Temp directories for testing
 tmp-*
 test-tmp-*
+
+# Local planning/report artifacts
+AGENTS.md
+CLAUDE.md
+browser-feedback-working-plan.md
+browser-agent-ux-findings-*.md
+plan.md/
