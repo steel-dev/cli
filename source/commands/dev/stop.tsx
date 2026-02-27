@@ -13,7 +13,7 @@ export const options = zod.object({
 		.describe(
 			option({
 				description: 'Enable verbose Docker command output',
-				alias: 'v',
+				alias: 'V',
 			}),
 		)
 		.optional(),

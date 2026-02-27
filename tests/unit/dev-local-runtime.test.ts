@@ -39,6 +39,14 @@ describe('local runtime port derivation', () => {
 		expect(deriveLocalApiPort({})).toBe('3000');
 		expect(deriveLocalApiPort({STEEL_LOCAL_API_URL: 'not-a-url'})).toBe('3000');
 	});
+
+	test('ignores cloud API URL env var when deriving local runtime port', () => {
+		expect(
+			deriveLocalApiPort({
+				STEEL_API_URL: 'https://api.steel.dev/v1',
+			}),
+		).toBe('3000');
+	});
 });
 
 describe('local runtime compose detection', () => {

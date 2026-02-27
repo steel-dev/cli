@@ -88,8 +88,7 @@ export function deriveLocalApiPort(
 
 	const configuredApiUrl =
 		environment.STEEL_BROWSER_API_URL?.trim() ||
-		environment.STEEL_LOCAL_API_URL?.trim() ||
-		environment.STEEL_API_URL?.trim();
+		environment.STEEL_LOCAL_API_URL?.trim();
 	if (!configuredApiUrl) {
 		return '3000';
 	}

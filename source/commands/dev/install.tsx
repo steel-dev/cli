@@ -22,7 +22,7 @@ export const options = zod.object({
 		.describe(
 			option({
 				description: 'Enable verbose git command output',
-				alias: 'v',
+				alias: 'V',
 			}),
 		)
 		.optional(),

@@ -381,7 +381,7 @@ steel dev install [options]
 ### Options
 
 - **--repo-url**: Git repository URL for local Steel Browser runtime
-- -v, **--verbose**: Enable verbose git command output
+- -V, **--verbose**: Enable verbose git command output
 
 ## steel dev start
 
@@ -396,7 +396,7 @@ steel dev start [options]
 ### Options
 
 - -p, **--port**: API port for local Steel Browser runtime
-- -v, **--verbose**: Enable verbose Docker command output
+- -V, **--verbose**: Enable verbose Docker command output
 - -d, **--docker_check**: Only verify Docker availability and exit
 
 ## steel dev stop
@@ -411,7 +411,7 @@ steel dev stop [options]
 
 ### Options
 
-- -v, **--verbose**: Enable verbose Docker command output
+- -V, **--verbose**: Enable verbose Docker command output
 
 ---
 

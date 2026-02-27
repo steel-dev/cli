@@ -663,6 +663,10 @@ async function requestApi(
 		throw new BrowserAdapterError(
 			'API_ERROR',
 			`Steel session API request failed (${response.status}): ${message}`,
+			{
+				status: response.status,
+				responseData,
+			},
 		);
 	}
 
@@ -780,12 +784,38 @@ async function tryGetLiveSession(
 		);
 		return isSessionLive(session) ? session : null;
 	} catch (error) {
-		if (error instanceof BrowserAdapterError && error.code === 'API_ERROR') {
+		if (isNotFoundApiError(error)) {
 			return null;
 		}
 
 		throw error;
 	}
+}
+
+function getApiErrorStatusCode(error: BrowserAdapterError): number | null {
+	if (error.cause && typeof error.cause === 'object') {
+		const status = (error.cause as UnknownRecord)['status'];
+		if (typeof status === 'number' && Number.isInteger(status)) {
+			return status;
+		}
+	}
+
+	const statusCodeMatch = error.message.match(/\((\d{3})\)/);
+	if (!statusCodeMatch?.[1]) {
+		return null;
+	}
+
+	const parsedStatusCode = Number.parseInt(statusCodeMatch[1], 10);
+	return Number.isInteger(parsedStatusCode) ? parsedStatusCode : null;
+}
+
+function isNotFoundApiError(error: unknown): boolean {
+	if (!(error instanceof BrowserAdapterError) || error.code !== 'API_ERROR') {
+		return false;
+	}
+
+	const statusCode = getApiErrorStatusCode(error);
+	return statusCode === 404 || statusCode === 410;
 }
 
 function resolveCandidateSessionId(
@@ -1054,14 +1084,6 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		}
 
 		if (argument === '--session-headless') {
-			const potentialValue = browserArgv[index + 1];
-			if (potentialValue && !potentialValue.startsWith('-')) {
-				throw new BrowserAdapterError(
-					'INVALID_BROWSER_ARGS',
-					'`--session-headless` does not accept a value.',
-				);
-			}
-
 			options.headless = true;
 			continue;
 		}
@@ -1107,14 +1129,6 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		}
 
 		if (argument === '--session-solve-captcha') {
-			const potentialValue = browserArgv[index + 1];
-			if (potentialValue && !potentialValue.startsWith('-')) {
-				throw new BrowserAdapterError(
-					'INVALID_BROWSER_ARGS',
-					'`--session-solve-captcha` does not accept a value.',
-				);
-			}
-
 			options.solveCaptcha = true;
 			continue;
 		}
@@ -1127,14 +1141,6 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		}
 
 		if (argument === '--auto-connect') {
-			const potentialValue = browserArgv[index + 1];
-			if (potentialValue && !potentialValue.startsWith('-')) {
-				throw new BrowserAdapterError(
-					'INVALID_BROWSER_ARGS',
-					'`--auto-connect` does not accept a value. Use `--cdp <url|port>` for explicit endpoints.',
-				);
-			}
-
 			options.autoConnect = true;
 			passthroughArgv.push('--auto-connect');
 			continue;
