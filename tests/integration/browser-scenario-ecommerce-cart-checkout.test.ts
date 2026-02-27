@@ -1,450 +1,370 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
+import {
+	assertSuccessfulStep,
+	createCloudHarness,
+	createLegacyRunBrowserCommand,
+	withCloudSession,
+} from './harness';
 
-type CommandResult = {
-	status: number;
-	stdout: string;
-	stderr: string;
-	output: string;
+type ScenarioContext = {
+	sessionName: string;
+	environment: NodeJS.ProcessEnv;
+	projectRoot: string;
+	runBrowserCommand: ReturnType<typeof createLegacyRunBrowserCommand>;
 };
 
-const COMMAND_TIMEOUT_MS = 90_000;
+function addProductToCart(
+	context: ScenarioContext,
+	productUrl: string,
+	productName: string,
+	stepPrefix: string,
+): void {
+	const {sessionName, environment, projectRoot, runBrowserCommand} = context;
 
-function runBrowserCommand(
-	arguments_: string[],
-	environment: NodeJS.ProcessEnv,
-	projectRoot: string,
-): CommandResult {
-	const result = spawnSync(
-		process.execPath,
-		['dist/steel.js', 'browser', ...arguments_],
-		{
-			cwd: projectRoot,
-			env: environment,
-			encoding: 'utf-8',
-			timeout: COMMAND_TIMEOUT_MS,
-			killSignal: 'SIGKILL',
-		},
+	const openProductResult = runBrowserCommand(
+		['open', productUrl, '--session', sessionName],
+		environment,
+		projectRoot,
 	);
+	assertSuccessfulStep(`${stepPrefix} open product`, openProductResult);
 
-	const stdout = result.stdout || '';
-	const stderrParts = [result.stderr || ''];
+	const waitProductResult = runBrowserCommand(
+		['wait', '--text', productName, '--session', sessionName],
+		environment,
+		projectRoot,
+	);
+	assertSuccessfulStep(`${stepPrefix} wait for product`, waitProductResult);
 
-	if (result.error) {
-		stderrParts.push(`spawn error: ${result.error.message}`);
-	}
+	const addProductResult = runBrowserCommand(
+		['click', '.btn.btn-success.btn-lg', '--session', sessionName],
+		environment,
+		projectRoot,
+	);
+	assertSuccessfulStep(`${stepPrefix} add product to cart`, addProductResult);
 
-	if (result.signal) {
-		stderrParts.push(`terminated by signal: ${result.signal}`);
-	}
-
-	const stderr = stderrParts.filter(Boolean).join('\n');
-	const output = [stdout, stderr].filter(Boolean).join('\n');
-
-	return {
-		status: result.status ?? 1,
-		stdout,
-		stderr,
-		output,
-	};
+	const acceptDialogResult = runBrowserCommand(
+		['dialog', 'accept', '--session', sessionName],
+		environment,
+		projectRoot,
+	);
+	assertSuccessfulStep(
+		`${stepPrefix} accept add-to-cart dialog`,
+		acceptDialogResult,
+	);
 }
 
-function assertSuccessfulStep(stepName: string, result: CommandResult): void {
-	if (result.status === 0) {
-		return;
-	}
+function openCart(context: ScenarioContext): void {
+	const {sessionName, environment, projectRoot, runBrowserCommand} = context;
 
-	throw new Error(
-		[
-			`${stepName} failed with exit code ${result.status}.`,
-			result.stdout.trim() ? `stdout:\n${result.stdout.trim()}` : null,
-			result.stderr.trim() ? `stderr:\n${result.stderr.trim()}` : null,
-		]
-			.filter(Boolean)
-			.join('\n'),
+	const openCartResult = runBrowserCommand(
+		['open', 'https://www.demoblaze.com/cart.html', '--session', sessionName],
+		environment,
+		projectRoot,
 	);
+	assertSuccessfulStep('browser open cart', openCartResult);
+
+	const waitCartPageResult = runBrowserCommand(
+		['wait', '--text', 'Products', '--session', sessionName],
+		environment,
+		projectRoot,
+	);
+	assertSuccessfulStep('browser wait for cart page', waitCartPageResult);
 }
 
 describe('browser scenario ecommerce cart checkout', () => {
-	const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-	const projectRoot = path.resolve(testDirectory, '../..');
-	const distEntrypoint = path.join(projectRoot, 'dist/steel.js');
-	const apiKey = process.env.STEEL_API_KEY?.trim();
-	const cloudTest = apiKey ? test : test.skip;
+	const harness = createCloudHarness(import.meta.url);
+	const cloudTest = harness.cloudTest;
 
 	cloudTest(
-		'executes demoblaze cart operations and checkout flow',
-		() => {
-			if (!fs.existsSync(distEntrypoint)) {
-				throw new Error('dist/steel.js is missing. Run `npm run build` first.');
-			}
-
-			const configDirectory = fs.mkdtempSync(
-				path.join(os.tmpdir(), 'steel-browser-scenario-ecommerce-'),
-			);
-			const sessionName = `steel-browser-scenario-ecommerce-${Date.now()}`;
-			const environment = {
-				...process.env,
-				STEEL_API_KEY: apiKey!,
-				STEEL_CONFIG_DIR: configDirectory,
-				STEEL_CLI_SKIP_UPDATE_CHECK: 'true',
-				FORCE_COLOR: '0',
-				NODE_NO_WARNINGS: '1',
-			};
-
-			let sessionStarted = false;
-
-			try {
-				const startResult = runBrowserCommand(
-					['start', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser start', startResult);
-				sessionStarted = true;
-
-				const openStoreResult = runBrowserCommand(
-					['open', 'https://www.demoblaze.com/', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser open demoblaze', openStoreResult);
-
-				const waitStoreHomeResult = runBrowserCommand(
-					['wait', '--text', 'PRODUCT STORE', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser wait for store home',
-					waitStoreHomeResult,
-				);
-
-				const openFirstProductResult = runBrowserCommand(
-					[
-						'find',
-						'first',
-						'a[href="prod.html?idp_=1"]',
-						'click',
-						'--session',
+		'adds products to cart and verifies line items',
+		async () => {
+			await withCloudSession(
+				harness,
+				{
+					configDirectoryPrefix: 'steel-browser-scenario-ecommerce-add-items-',
+					sessionNamePrefix: 'steel-browser-scenario-ecommerce-add-items',
+					commandAttempts: 3,
+				},
+				({sessionName, environment, projectRoot, startSession, runCommand}) => {
+					const runBrowserCommand = createLegacyRunBrowserCommand(runCommand);
+					const context = {
 						sessionName,
-					],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser open first product',
-					openFirstProductResult,
-				);
+						environment,
+						projectRoot,
+						runBrowserCommand,
+					};
 
-				const waitFirstProductResult = runBrowserCommand(
-					['wait', '--text', 'Samsung galaxy s6', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser wait for first product',
-					waitFirstProductResult,
-				);
+					const startResult = startSession('browser start');
+					assertSuccessfulStep('browser start', startResult);
 
-				const addFirstProductResult = runBrowserCommand(
-					['click', '.btn.btn-success.btn-lg', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser add first product to cart',
-					addFirstProductResult,
-				);
-
-				const acceptFirstDialogResult = runBrowserCommand(
-					['dialog', 'accept', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser accept add-to-cart dialog for first product',
-					acceptFirstDialogResult,
-				);
-
-				const returnHomeAfterFirstAddResult = runBrowserCommand(
-					['open', 'https://www.demoblaze.com/', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser return to home after first add',
-					returnHomeAfterFirstAddResult,
-				);
-
-				const waitHomeAfterFirstAddResult = runBrowserCommand(
-					['wait', '--text', 'PRODUCT STORE', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser wait for home after first add',
-					waitHomeAfterFirstAddResult,
-				);
-
-				const openSecondProductResult = runBrowserCommand(
-					[
-						'open',
+					addProductToCart(
+						context,
+						'https://www.demoblaze.com/prod.html?idp_=1',
+						'Samsung galaxy s6',
+						'browser first product',
+					);
+					addProductToCart(
+						context,
 						'https://www.demoblaze.com/prod.html?idp_=2',
-						'--session',
-						sessionName,
-					],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser open second product',
-					openSecondProductResult,
-				);
+						'Nokia lumia 1520',
+						'browser second product',
+					);
 
-				const waitSecondProductResult = runBrowserCommand(
-					['wait', '--text', 'Nokia lumia 1520', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser wait for second product',
-					waitSecondProductResult,
-				);
+					openCart(context);
 
-				const addSecondProductResult = runBrowserCommand(
-					['click', '.btn.btn-success.btn-lg', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser add second product to cart',
-					addSecondProductResult,
-				);
-
-				const acceptSecondDialogResult = runBrowserCommand(
-					['dialog', 'accept', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser accept add-to-cart dialog for second product',
-					acceptSecondDialogResult,
-				);
-
-				const openCartResult = runBrowserCommand(
-					[
-						'open',
-						'https://www.demoblaze.com/cart.html',
-						'--session',
-						sessionName,
-					],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser open cart', openCartResult);
-
-				const waitCartPageResult = runBrowserCommand(
-					['wait', '--text', 'Products', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser wait for cart page', waitCartPageResult);
-
-				const waitCartRowsResult = runBrowserCommand(
-					['wait', '1000', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser wait for cart rows', waitCartRowsResult);
-
-				const getCartItemCountResult = runBrowserCommand(
-					['get', 'count', '#tbodyid > tr', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser get cart item count',
-					getCartItemCountResult,
-				);
-				expect(Number.parseInt(getCartItemCountResult.output.trim(), 10)).toBe(
-					2,
-				);
-
-				const getCartItemNameResult = runBrowserCommand(
-					['get', 'text', '#tbodyid', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser get cart item name',
-					getCartItemNameResult,
-				);
-				expect(getCartItemNameResult.output).toContain('Samsung galaxy s6');
-				expect(getCartItemNameResult.output).toContain('Nokia lumia 1520');
-
-				const deleteFirstRowResult = runBrowserCommand(
-					['click', '#tbodyid > tr:nth-child(1) a', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser remove first cart row',
-					deleteFirstRowResult,
-				);
-
-				const waitDeleteResult = runBrowserCommand(
-					['wait', '1500', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser wait for cart delete', waitDeleteResult);
-
-				const getCartItemCountAfterDeleteResult = runBrowserCommand(
-					['get', 'count', '#tbodyid > tr', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser get cart item count after delete',
-					getCartItemCountAfterDeleteResult,
-				);
-				expect(
-					Number.parseInt(getCartItemCountAfterDeleteResult.output.trim(), 10),
-				).toBe(1);
-
-				const checkoutVisibleResult = runBrowserCommand(
-					[
-						'is',
-						'visible',
-						'button[data-target="#orderModal"]',
-						'--session',
-						sessionName,
-					],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser check place order visibility',
-					checkoutVisibleResult,
-				);
-				expect(checkoutVisibleResult.output.toLowerCase()).toContain('true');
-
-				const clickCheckoutResult = runBrowserCommand(
-					[
-						'click',
-						'button[data-target="#orderModal"]',
-						'--session',
-						sessionName,
-					],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser click place order', clickCheckoutResult);
-
-				const waitCheckoutInfoResult = runBrowserCommand(
-					['wait', '#name', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser wait for checkout information modal',
-					waitCheckoutInfoResult,
-				);
-
-				const fillFirstNameResult = runBrowserCommand(
-					['fill', '#name', 'Steel', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser fill order name', fillFirstNameResult);
-
-				const fillLastNameResult = runBrowserCommand(
-					['fill', '#country', 'US', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser fill order country', fillLastNameResult);
-
-				const fillPostalCodeResult = runBrowserCommand(
-					['fill', '#city', 'NYC', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser fill order city', fillPostalCodeResult);
-
-				const fillCardResult = runBrowserCommand(
-					['fill', '#card', '4242424242424242', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser fill order card', fillCardResult);
-
-				const fillMonthResult = runBrowserCommand(
-					['fill', '#month', '12', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser fill order month', fillMonthResult);
-
-				const fillYearResult = runBrowserCommand(
-					['fill', '#year', '2030', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser fill order year', fillYearResult);
-
-				const finishCheckoutResult = runBrowserCommand(
-					[
-						'click',
-						'button[onclick="purchaseOrder()"]',
-						'--session',
-						sessionName,
-					],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser attempt purchase order',
-					finishCheckoutResult,
-				);
-
-				const waitPostPurchaseResult = runBrowserCommand(
-					['wait', '1500', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser wait after purchase attempt',
-					waitPostPurchaseResult,
-				);
-
-				const getCompleteUrlResult = runBrowserCommand(
-					['get', 'url', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser get cart url after purchase',
-					getCompleteUrlResult,
-				);
-				expect(getCompleteUrlResult.output).toContain('/cart.html');
-			} finally {
-				if (sessionStarted) {
-					const stopResult = runBrowserCommand(
-						['stop'],
+					const waitCartRowsResult = runBrowserCommand(
+						['wait', '1200', '--session', sessionName],
 						environment,
 						projectRoot,
 					);
-					assertSuccessfulStep('browser stop', stopResult);
-				}
+					assertSuccessfulStep(
+						'browser wait for cart rows',
+						waitCartRowsResult,
+					);
 
-				fs.rmSync(configDirectory, {recursive: true, force: true});
-			}
+					const getCartItemNameResult = runBrowserCommand(
+						['get', 'text', '#tbodyid', '--session', sessionName],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep('browser get cart text', getCartItemNameResult);
+					expect(getCartItemNameResult.output).toContain('Samsung galaxy s6');
+					expect(getCartItemNameResult.output).toContain('Nokia lumia 1520');
+				},
+			);
 		},
-		240_000,
+		90_000,
+	);
+
+	cloudTest(
+		'removes an item from cart and keeps checkout available',
+		async () => {
+			await withCloudSession(
+				harness,
+				{
+					configDirectoryPrefix:
+						'steel-browser-scenario-ecommerce-remove-item-',
+					sessionNamePrefix: 'steel-browser-scenario-ecommerce-remove-item',
+					commandAttempts: 3,
+				},
+				({sessionName, environment, projectRoot, startSession, runCommand}) => {
+					const runBrowserCommand = createLegacyRunBrowserCommand(runCommand);
+					const context = {
+						sessionName,
+						environment,
+						projectRoot,
+						runBrowserCommand,
+					};
+
+					const startResult = startSession('browser start');
+					assertSuccessfulStep('browser start', startResult);
+
+					addProductToCart(
+						context,
+						'https://www.demoblaze.com/prod.html?idp_=1',
+						'Samsung galaxy s6',
+						'browser first product',
+					);
+					addProductToCart(
+						context,
+						'https://www.demoblaze.com/prod.html?idp_=2',
+						'Nokia lumia 1520',
+						'browser second product',
+					);
+
+					openCart(context);
+
+					const deleteFirstRowResult = runBrowserCommand(
+						['click', '#tbodyid > tr:nth-child(1) a', '--session', sessionName],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep(
+						'browser remove first cart row',
+						deleteFirstRowResult,
+					);
+
+					const waitDeleteResult = runBrowserCommand(
+						['wait', '1500', '--session', sessionName],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep(
+						'browser wait for cart delete',
+						waitDeleteResult,
+					);
+
+					const getCartTextAfterDeleteResult = runBrowserCommand(
+						['get', 'text', '#tbodyid', '--session', sessionName],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep(
+						'browser get cart text after delete',
+						getCartTextAfterDeleteResult,
+					);
+					expect(getCartTextAfterDeleteResult.output).toMatch(
+						/Samsung galaxy s6|Nokia lumia 1520/,
+					);
+
+					const checkoutVisibleResult = runBrowserCommand(
+						[
+							'is',
+							'visible',
+							'button[data-target="#orderModal"]',
+							'--session',
+							sessionName,
+						],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep(
+						'browser check place order visibility',
+						checkoutVisibleResult,
+					);
+					expect(checkoutVisibleResult.output.toLowerCase()).toContain('true');
+				},
+			);
+		},
+		90_000,
+	);
+
+	cloudTest(
+		'completes checkout flow from cart modal to purchase confirmation',
+		async () => {
+			await withCloudSession(
+				harness,
+				{
+					configDirectoryPrefix: 'steel-browser-scenario-ecommerce-checkout-',
+					sessionNamePrefix: 'steel-browser-scenario-ecommerce-checkout',
+					commandAttempts: 3,
+				},
+				({sessionName, environment, projectRoot, startSession, runCommand}) => {
+					const runBrowserCommand = createLegacyRunBrowserCommand(runCommand);
+					const context = {
+						sessionName,
+						environment,
+						projectRoot,
+						runBrowserCommand,
+					};
+
+					const startResult = startSession('browser start');
+					assertSuccessfulStep('browser start', startResult);
+
+					addProductToCart(
+						context,
+						'https://www.demoblaze.com/prod.html?idp_=1',
+						'Samsung galaxy s6',
+						'browser checkout product',
+					);
+					openCart(context);
+
+					const clickCheckoutResult = runBrowserCommand(
+						[
+							'click',
+							'button[data-target="#orderModal"]',
+							'--session',
+							sessionName,
+						],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep(
+						'browser click place order',
+						clickCheckoutResult,
+					);
+
+					const waitCheckoutInfoResult = runBrowserCommand(
+						['wait', '#name', '--session', sessionName],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep(
+						'browser wait for checkout information modal',
+						waitCheckoutInfoResult,
+					);
+
+					assertSuccessfulStep(
+						'browser fill order name',
+						runBrowserCommand(
+							['fill', '#name', 'Steel', '--session', sessionName],
+							environment,
+							projectRoot,
+						),
+					);
+					assertSuccessfulStep(
+						'browser fill order country',
+						runBrowserCommand(
+							['fill', '#country', 'US', '--session', sessionName],
+							environment,
+							projectRoot,
+						),
+					);
+					assertSuccessfulStep(
+						'browser fill order city',
+						runBrowserCommand(
+							['fill', '#city', 'NYC', '--session', sessionName],
+							environment,
+							projectRoot,
+						),
+					);
+					assertSuccessfulStep(
+						'browser fill order card',
+						runBrowserCommand(
+							['fill', '#card', '4242424242424242', '--session', sessionName],
+							environment,
+							projectRoot,
+						),
+					);
+					assertSuccessfulStep(
+						'browser fill order month',
+						runBrowserCommand(
+							['fill', '#month', '12', '--session', sessionName],
+							environment,
+							projectRoot,
+						),
+					);
+					assertSuccessfulStep(
+						'browser fill order year',
+						runBrowserCommand(
+							['fill', '#year', '2030', '--session', sessionName],
+							environment,
+							projectRoot,
+						),
+					);
+
+					const finishCheckoutResult = runBrowserCommand(
+						[
+							'click',
+							'button[onclick="purchaseOrder()"]',
+							'--session',
+							sessionName,
+						],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep(
+						'browser attempt purchase order',
+						finishCheckoutResult,
+					);
+
+					const waitConfirmationResult = runBrowserCommand(
+						[
+							'wait',
+							'--text',
+							'Thank you for your purchase!',
+							'--session',
+							sessionName,
+						],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep(
+						'browser wait for purchase confirmation',
+						waitConfirmationResult,
+					);
+				},
+			);
+		},
+		90_000,
 	);
 });

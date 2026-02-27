@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -9,6 +9,7 @@ const projectRoot = path.resolve(scriptDirectory, '..');
 
 const DEFAULT_FILTERS = [];
 const DEFAULT_RUNNER_TIMEOUT_MS = 45 * 60 * 1000;
+const DEFAULT_MAX_TEST_DURATION_MS = 90_000;
 const ANSI_ESCAPE_PATTERN = new RegExp(
 	`${String.fromCharCode(27)}\\[[0-9;]*m`,
 	'g',
@@ -276,10 +277,89 @@ function resolveRunnerTimeoutMs() {
 	return parsedTimeout;
 }
 
-function main() {
+function resolveMaxTestDurationMs() {
+	const rawMaxDuration = process.env.STEEL_INTEGRATION_MAX_TEST_MS;
+	if (!rawMaxDuration) {
+		return DEFAULT_MAX_TEST_DURATION_MS;
+	}
+
+	const parsedMaxDuration = Number.parseInt(rawMaxDuration, 10);
+	if (!Number.isFinite(parsedMaxDuration) || parsedMaxDuration <= 0) {
+		return DEFAULT_MAX_TEST_DURATION_MS;
+	}
+
+	return parsedMaxDuration;
+}
+
+function getOverBudgetRows(rows, maxTestDurationMs) {
+	return rows.filter(
+		row =>
+			Number.isFinite(row.durationMs) &&
+			row.durationMs > maxTestDurationMs &&
+			row.status !== 'SKIP' &&
+			row.status !== 'TODO',
+	);
+}
+
+function runCommand(args, {cwd, env, timeoutMs}) {
+	return new Promise(resolve => {
+		const child = spawn('npm', args, {
+			cwd,
+			env,
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+		let stdout = '';
+		let stderr = '';
+		let timedOut = false;
+
+		const timeoutHandle = setTimeout(() => {
+			timedOut = true;
+			child.kill('SIGKILL');
+		}, timeoutMs);
+
+		child.stdout?.on('data', chunk => {
+			const value = chunk.toString();
+			stdout += value;
+			process.stdout.write(value);
+		});
+
+		child.stderr?.on('data', chunk => {
+			const value = chunk.toString();
+			stderr += value;
+			process.stderr.write(value);
+		});
+
+		child.on('error', error => {
+			clearTimeout(timeoutHandle);
+			resolve({
+				error,
+				signal: null,
+				status: null,
+				stderr,
+				stdout,
+				timedOut,
+			});
+		});
+
+		child.on('close', (status, signal) => {
+			clearTimeout(timeoutHandle);
+			resolve({
+				error: null,
+				signal,
+				status,
+				stderr,
+				stdout,
+				timedOut,
+			});
+		});
+	});
+}
+
+async function main() {
 	const filters = process.argv.slice(2);
 	const testFilters = filters.length > 0 ? filters : DEFAULT_FILTERS;
 	const runnerTimeoutMs = resolveRunnerTimeoutMs();
+	const maxTestDurationMs = resolveMaxTestDurationMs();
 	const outputFile = path.join(
 		os.tmpdir(),
 		`vitest-integration-results-${process.pid}-${Date.now()}.json`,
@@ -291,20 +371,19 @@ function main() {
 		'vitest',
 		'run',
 		...testFilters,
+		'--reporter=verbose',
 		'--reporter=json',
 		'--outputFile',
 		outputFile,
 	];
 
-	const commandResult = spawnSync('npm', vitestArgs, {
+	const commandResult = await runCommand(vitestArgs, {
 		cwd: projectRoot,
 		env: {
 			...process.env,
 			FORCE_COLOR: '0',
 		},
-		encoding: 'utf-8',
-		timeout: runnerTimeoutMs,
-		killSignal: 'SIGKILL',
+		timeoutMs: runnerTimeoutMs,
 	});
 
 	const commandStderrParts = [commandResult.stderr || ''];
@@ -322,7 +401,7 @@ function main() {
 		.join('\n')
 		.trim();
 
-	if (commandResult.error?.code === 'ETIMEDOUT') {
+	if (commandResult.timedOut) {
 		console.error(
 			[
 				`Vitest run timed out after ${formatDuration(runnerTimeoutMs)}.`,
@@ -331,8 +410,9 @@ function main() {
 		);
 	}
 
-	if (commandResult.status !== 0 && combinedOutput) {
-		console.log(combinedOutput);
+	if (commandResult.error) {
+		console.error(combinedOutput || 'Vitest runner failed to start.');
+		process.exit(commandResult.status ?? 1);
 	}
 
 	if (!fs.existsSync(outputFile)) {
@@ -352,11 +432,25 @@ function main() {
 	}
 
 	const rows = toRows(parsedResults);
+	const overBudgetRows = getOverBudgetRows(rows, maxTestDurationMs);
 	console.log('');
 	console.log('Test Result Table');
 	console.log(renderAsciiTable(rows));
 	printSummary(parsedResults, rows);
 	printFailureDetails(rows);
+
+	if (overBudgetRows.length > 0) {
+		console.log('');
+		console.log(
+			`Duration budget violations (> ${formatDuration(maxTestDurationMs)}):`,
+		);
+		for (const [index, row] of overBudgetRows.entries()) {
+			console.log(`${index + 1}. ${row.description}`);
+			console.log(`   duration: ${row.duration}`);
+			console.log(`   file: ${row.file}`);
+			console.log(`   suite: ${row.suite}`);
+		}
+	}
 
 	try {
 		fs.unlinkSync(outputFile);
@@ -364,9 +458,16 @@ function main() {
 		// Ignore temporary file cleanup errors.
 	}
 
-	if (commandResult.status !== 0 || parsedResults.success === false) {
+	if (
+		commandResult.status !== 0 ||
+		parsedResults.success === false ||
+		overBudgetRows.length > 0
+	) {
 		process.exit(commandResult.status ?? 1);
 	}
 }
 
-main();
+main().catch(error => {
+	console.error(error instanceof Error ? error.message : String(error));
+	process.exit(1);
+});

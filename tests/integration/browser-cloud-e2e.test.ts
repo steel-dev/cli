@@ -1,146 +1,46 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
-
-type CommandResult = {
-	status: number;
-	stdout: string;
-	stderr: string;
-	output: string;
-};
-
-const COMMAND_TIMEOUT_MS = 90_000;
-
-function runBrowserCommand(
-	arguments_: string[],
-	environment: NodeJS.ProcessEnv,
-	projectRoot: string,
-): CommandResult {
-	const result = spawnSync(
-		process.execPath,
-		['dist/steel.js', 'browser', ...arguments_],
-		{
-			cwd: projectRoot,
-			env: environment,
-			encoding: 'utf-8',
-			timeout: COMMAND_TIMEOUT_MS,
-			killSignal: 'SIGKILL',
-		},
-	);
-
-	const stdout = result.stdout || '';
-	const stderrParts = [result.stderr || ''];
-
-	if (result.error) {
-		stderrParts.push(`spawn error: ${result.error.message}`);
-	}
-
-	if (result.signal) {
-		stderrParts.push(`terminated by signal: ${result.signal}`);
-	}
-
-	const stderr = stderrParts.filter(Boolean).join('\n');
-	const output = [stdout, stderr].filter(Boolean).join('\n');
-
-	return {
-		status: result.status ?? 1,
-		stdout,
-		stderr,
-		output,
-	};
-}
-
-function assertSuccessfulStep(stepName: string, result: CommandResult): void {
-	if (result.status === 0) {
-		return;
-	}
-
-	throw new Error(
-		[
-			`${stepName} failed with exit code ${result.status}.`,
-			result.stdout.trim() ? `stdout:\n${result.stdout.trim()}` : null,
-			result.stderr.trim() ? `stderr:\n${result.stderr.trim()}` : null,
-		]
-			.filter(Boolean)
-			.join('\n'),
-	);
-}
+import {createCloudHarness, withCloudSession} from './harness';
 
 describe('browser cloud e2e', () => {
-	const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-	const projectRoot = path.resolve(testDirectory, '../..');
-	const distEntrypoint = path.join(projectRoot, 'dist/steel.js');
-	const apiKey = process.env.STEEL_API_KEY?.trim();
-	const cloudTest = apiKey ? test : test.skip;
+	const harness = createCloudHarness(import.meta.url);
+	const cloudTest = harness.cloudTest;
 
 	cloudTest(
 		'controls a real cloud browser session end-to-end',
-		() => {
-			if (!fs.existsSync(distEntrypoint)) {
-				throw new Error('dist/steel.js is missing. Run `npm run build` first.');
-			}
+		async () => {
+			await withCloudSession(
+				harness,
+				{
+					configDirectoryPrefix: 'steel-browser-cloud-e2e-',
+					sessionNamePrefix: 'steel-browser-e2e',
+				},
+				({sessionName, startSession, runStep}) => {
+					startSession();
 
-			const configDirectory = fs.mkdtempSync(
-				path.join(os.tmpdir(), 'steel-browser-cloud-e2e-'),
+					runStep('browser open', [
+						'open',
+						'https://example.com',
+						'--session',
+						sessionName,
+					]);
+
+					const getTitleResult = runStep('browser get title', [
+						'get',
+						'title',
+						'--session',
+						sessionName,
+					]);
+					expect(getTitleResult.output).toContain('Example Domain');
+
+					const snapshotResult = runStep('browser snapshot -i', [
+						'snapshot',
+						'-i',
+						'--session',
+						sessionName,
+					]);
+					expect(snapshotResult.output).toMatch(/ref=e\d+/);
+				},
 			);
-			const sessionName = `steel-browser-e2e-${Date.now()}`;
-			const environment = {
-				...process.env,
-				STEEL_API_KEY: apiKey!,
-				STEEL_CONFIG_DIR: configDirectory,
-				STEEL_CLI_SKIP_UPDATE_CHECK: 'true',
-				FORCE_COLOR: '0',
-				NODE_NO_WARNINGS: '1',
-			};
-
-			let sessionStarted = false;
-
-			try {
-				const startResult = runBrowserCommand(
-					['start', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser start', startResult);
-				sessionStarted = true;
-
-				const openResult = runBrowserCommand(
-					['open', 'https://example.com', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser open', openResult);
-
-				const getTitleResult = runBrowserCommand(
-					['get', 'title', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser get title', getTitleResult);
-				expect(getTitleResult.output).toContain('Example Domain');
-
-				const snapshotResult = runBrowserCommand(
-					['snapshot', '-i', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser snapshot -i', snapshotResult);
-				expect(snapshotResult.output).toMatch(/ref=e\d+/);
-			} finally {
-				if (sessionStarted) {
-					const stopResult = runBrowserCommand(
-						['stop'],
-						environment,
-						projectRoot,
-					);
-					assertSuccessfulStep('browser stop', stopResult);
-				}
-
-				fs.rmSync(configDirectory, {recursive: true, force: true});
-			}
 		},
-		120_000,
+		90_000,
 	);
 });

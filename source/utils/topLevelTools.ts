@@ -1,7 +1,4 @@
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import {API_PATH, LOCAL_API_PATH} from './constants.js';
+import {resolveApiBaseUrl, resolveExplicitApiUrl} from './browser/apiConfig.js';
 import {resolveBrowserAuth} from './browser/auth.js';
 import {BrowserAdapterError} from './browser/errors.js';
 
@@ -26,10 +23,6 @@ const SCRAPE_FORMAT_SET = new Set<string>(SCRAPE_FORMAT_VALUES);
 
 export type ScrapeFormat = (typeof SCRAPE_FORMAT_VALUES)[number];
 type ScrapeContentKey = 'markdown' | 'cleaned_html' | 'html' | 'readability';
-
-function normalizeApiBaseUrl(url: string): string {
-	return url.replace(/\/+$/, '');
-}
 
 function hasExplicitNavigationProtocol(url: string): boolean {
 	const normalized = url.toLowerCase();
@@ -74,100 +67,6 @@ function normalizeUrlWithHttpsFallback(url: string): string {
 	} catch {
 		return trimmedUrl;
 	}
-}
-
-function resolveExplicitApiUrl(apiUrl?: string | null): string | null {
-	if (apiUrl === undefined || apiUrl === null) {
-		return null;
-	}
-
-	const trimmedApiUrl = apiUrl.trim();
-	if (!trimmedApiUrl) {
-		throw new BrowserAdapterError(
-			'INVALID_BROWSER_ARGS',
-			'Missing value for --api-url.',
-		);
-	}
-
-	try {
-		return normalizeApiBaseUrl(new URL(trimmedApiUrl).toString());
-	} catch {
-		throw new BrowserAdapterError(
-			'INVALID_BROWSER_ARGS',
-			`Invalid value for --api-url: ${apiUrl}`,
-		);
-	}
-}
-
-function getConfigDirectory(environment: NodeJS.ProcessEnv): string {
-	return (
-		environment.STEEL_CONFIG_DIR?.trim() ||
-		path.join(os.homedir(), '.config', 'steel')
-	);
-}
-
-function getConfigPath(environment: NodeJS.ProcessEnv): string {
-	return path.join(getConfigDirectory(environment), 'config.json');
-}
-
-function coerceLocalApiUrlFromConfig(config: unknown): string | null {
-	if (!config || typeof config !== 'object') {
-		return null;
-	}
-
-	const browser = (config as Record<string, unknown>)['browser'];
-	if (!browser || typeof browser !== 'object') {
-		return null;
-	}
-
-	const apiUrl = (browser as Record<string, unknown>)['apiUrl'];
-	if (typeof apiUrl === 'string' && apiUrl.trim()) {
-		return apiUrl.trim();
-	}
-
-	return null;
-}
-
-async function getLocalApiUrlFromConfig(
-	environment: NodeJS.ProcessEnv,
-): Promise<string | null> {
-	try {
-		const configPath = getConfigPath(environment);
-		const configContents = await fs.readFile(configPath, 'utf-8');
-		const parsedConfig = JSON.parse(configContents) as unknown;
-		return coerceLocalApiUrlFromConfig(parsedConfig);
-	} catch {
-		return null;
-	}
-}
-
-async function getApiBaseUrl(
-	mode: TopLevelApiMode,
-	environment: NodeJS.ProcessEnv,
-	apiUrl?: string | null,
-): Promise<string> {
-	if (mode === 'local') {
-		const explicitApiUrl = resolveExplicitApiUrl(apiUrl);
-		if (explicitApiUrl) {
-			return explicitApiUrl;
-		}
-
-		const envApiUrl =
-			environment.STEEL_BROWSER_API_URL?.trim() ||
-			environment.STEEL_LOCAL_API_URL?.trim();
-		if (envApiUrl) {
-			return normalizeApiBaseUrl(envApiUrl);
-		}
-
-		const configApiUrl = await getLocalApiUrlFromConfig(environment);
-		if (configApiUrl) {
-			return normalizeApiBaseUrl(configApiUrl);
-		}
-
-		return normalizeApiBaseUrl(LOCAL_API_PATH);
-	}
-
-	return normalizeApiBaseUrl(environment.STEEL_API_URL?.trim() || API_PATH);
 }
 
 function resolveMode(
@@ -346,7 +245,7 @@ export async function requestTopLevelApi<TResponse>(
 		headers['Steel-Api-Key'] = auth.apiKey;
 	}
 
-	const apiBaseUrl = await getApiBaseUrl(mode, environment, explicitApiUrl);
+	const apiBaseUrl = await resolveApiBaseUrl(mode, environment, explicitApiUrl);
 	let response: Response;
 
 	try {
