@@ -59,6 +59,17 @@ Main flags:
 - `--stealth`
 - `--proxy <url>`
 
+Flag semantics:
+
+- `--stealth` applies a session-creation preset:
+  - `stealthConfig.humanizeInteractions = true`
+  - `stealthConfig.autoCaptchaSolving = true`
+  - `solveCaptcha = true`
+- `--proxy <url>` sets `proxyUrl` on session creation. The Sessions API may return
+  `proxySource: "external"` rather than echoing the proxy URL in responses.
+- `--stealth` and `--proxy` are create-time flags. If `--session <name>` attaches to
+  an existing live session, these values are not re-applied.
+
 Output fields:
 
 - `id`
@@ -66,6 +77,19 @@ Output fields:
 - `name` (when set)
 - `live_url` (when available)
 - `connect_url` (when available)
+
+Security contract:
+
+- `connect_url` is safe for logs and transcripts. Sensitive query values
+  (`apiKey`, `token`, and aliases) are redacted as `REDACTED`.
+- If a workflow needs a fully-authenticated CDP URL, combine the session `id`
+  with `STEEL_API_KEY` instead of scraping secrets from CLI output.
+
+Agent parsing contract:
+
+- Parse `id` as the stable handle for follow-up commands.
+- Treat `connect_url` as display metadata, not a secret-bearing credential.
+- Prefer `--session <name>` for cross-command and cross-process continuity.
 
 ### `steel browser stop`
 
@@ -85,6 +109,10 @@ Main flags:
 
 - `--local`
 - `--api-url <url>`
+
+Output note:
+
+- `connectUrl` values in JSON are display-safe and redact sensitive query values.
 
 ### `steel browser live`
 
@@ -110,9 +138,25 @@ Localhost self-hosted flows provide actionable errors:
 - Runtime missing: instruct `steel dev install`.
 - Runtime installed but unavailable: instruct `steel dev start`.
 
+## Troubleshooting (Agent-Focused)
+
+- `Missing browser auth. Run steel login or set STEEL_API_KEY.`:
+  run `steel login` locally, or set `STEEL_API_KEY` in CI/job env.
+- `Failed to reach Steel session API ...` in local mode:
+  verify `steel dev start` is running and endpoint resolution matches expected
+  host/port.
+- Commands open a fresh browser unexpectedly:
+  ensure all steps share the same `--session <name>` and mode (`cloud` vs
+  `--local`/`--api-url`).
+- `No active live session found` from `steel browser live`:
+  run `steel browser start` first, then retry `steel browser live`.
+- Need hard reset of stale session mapping:
+  run `steel browser stop --all` and start a fresh named session.
+
 ## Related Docs
 
 - [../browser-compat.md](../browser-compat.md)
 - [../migration-agent-browser.md](../migration-agent-browser.md)
+- [./agent-troubleshooting.md](./agent-troubleshooting.md)
 - [../upstream-sync.md](../upstream-sync.md)
 - [../cli-reference.md](../cli-reference.md)

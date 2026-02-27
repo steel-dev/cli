@@ -267,8 +267,8 @@ steel browser start [options]
 - -l, **--local**: Start or attach a local Steel browser session
 - **--api-url**: Explicit self-hosted API endpoint URL
 - -s, **--session**: Named session key for create-or-attach behavior
-- **--stealth**: Enable stealth-oriented session defaults
-- -p, **--proxy**: Proxy URL to apply when creating a new session
+- **--stealth**: Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving)
+- -p, **--proxy**: Proxy URL for new sessions (for example, http://user:pass@host:port)
 
 ## steel browser stop
 

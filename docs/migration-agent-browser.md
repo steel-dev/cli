@@ -93,6 +93,15 @@ When explicit attach flags are provided, Steel passthrough does not inject boots
 
 `--cdp` and `--auto-connect` cannot be combined.
 
+## Output Security Contract
+
+`steel browser start` and `steel browser sessions` print display-safe connect
+URLs. Sensitive query values like `apiKey` are redacted in CLI output to avoid
+leaking credentials into logs.
+
+For tools that need a fully-authenticated CDP URL, compose it from session `id`
+and `STEEL_API_KEY` in your runtime environment.
+
 ## Compatibility References
 
 - [Browser Compatibility Matrix](./browser-compat.md)

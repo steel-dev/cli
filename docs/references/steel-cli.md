@@ -42,6 +42,8 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - `--help` and `--version` are available globally.
 - Browser command paths skip auto-update checks for lower command latency.
 - Command help for inherited browser commands is delegated to the vendored browser runtime.
+- `steel browser start` and `steel browser sessions` emit display-safe connect
+  URLs with sensitive query keys redacted.
 
 ## Core Config Paths
 
@@ -60,5 +62,6 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 ## Key References
 
 - [Steel Browser Reference](./steel-browser.md)
+- [Agent Troubleshooting Playbook](./agent-troubleshooting.md)
 - [Browser Compatibility](../browser-compat.md)
 - [agent-browser Migration Guide](../migration-agent-browser.md)
