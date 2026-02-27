@@ -4,39 +4,24 @@ This is an auto-generated reference for the Steel CLI. The Steel CLI helps you c
 
 ## Table of Contents
 
-- [Steel CLI Reference](#steel-cli-reference)
-	- [Table of Contents](#table-of-contents)
-	- [Global Options](#global-options)
-	- [steel cache](#steel-cache)
-		- [Usage](#usage)
-		- [Options](#options)
-	- [steel docs](#steel-docs)
-		- [Usage](#usage-1)
-	- [steel forge](#steel-forge)
-		- [Usage](#usage-2)
-		- [Available Templates](#available-templates)
-		- [Arguments](#arguments)
-		- [Options](#options-1)
-	- [steel info](#steel-info)
-		- [Usage](#usage-3)
-	- [steel login](#steel-login)
-		- [Usage](#usage-4)
-	- [steel logout](#steel-logout)
-		- [Usage](#usage-5)
-	- [steel run](#steel-run)
-		- [Usage](#usage-6)
-		- [Available Templates](#available-templates-1)
-		- [Arguments](#arguments-1)
-		- [Options](#options-2)
-	- [steel star](#steel-star)
-		- [Usage](#usage-7)
-	- [steel support](#steel-support)
-		- [Usage](#usage-8)
-	- [steel browser start](#steel-browser-start)
-		- [Usage](#usage-9)
-		- [Options](#options-3)
-	- [steel browser stop](#steel-browser-stop)
-		- [Usage](#usage-10)
+- [steel cache](#steel-cache)
+- [steel config](#steel-config)
+- [steel docs](#steel-docs)
+- [steel forge](#steel-forge)
+- [steel login](#steel-login)
+- [steel logout](#steel-logout)
+- [steel run](#steel-run)
+- [steel settings](#steel-settings)
+- [steel star](#steel-star)
+- [steel support](#steel-support)
+- [steel update](#steel-update)
+- [steel browser live](#steel-browser-live)
+- [steel browser sessions](#steel-browser-sessions)
+- [steel browser start](#steel-browser-start)
+- [steel browser stop](#steel-browser-stop)
+- [steel dev install](#steel-dev-install)
+- [steel dev start](#steel-dev-start)
+- [steel dev stop](#steel-dev-stop)
 
 ## Global Options
 
@@ -47,7 +32,7 @@ These options are available for most commands:
 
 ## steel cache
 
-Manage Steel CLI cache
+Manage Steel CLI cache which is used to store files for quickly running scripts
 
 ### Usage
 
@@ -58,6 +43,16 @@ steel cache [options]
 ### Options
 
 - -c, **--clean**: Remove all cached files and directories
+
+## steel config
+
+Display information about the current session
+
+### Usage
+
+```
+steel config
+```
 
 ## steel docs
 
@@ -81,25 +76,25 @@ steel forge [template] [options]
 
 ### Available Templates
 
-| Alias           | Label                                              | Language | Description                                                                |
-| --------------- | -------------------------------------------------- | -------- | -------------------------------------------------------------------------- |
-| `auth`          | Reusing Authentication Context                     | TS       | Template for Reusing Authentication Context automation                     |
-| `browser-use`   | Using Steel with Browser Use                       | PY       | Template for Using Steel with Browser Use automation                       |
-| `claude-cua`    | Using Steel with Claude's Computer Use             | TS       | Template for Using Steel with Claude's Computer Use automation             |
-| `claude-cua-py` | Using Steel with Claude's Computer Use             | PY       | Template for Using Steel with Claude's Computer Use automation             |
-| `creds`         | Using Steel Credentials with Playwright            | TS       | Template for Using Steel Credentials with Playwright automation            |
-| `files`         | Using the Steel Files API                          | TS       | Template for Using the Steel Files API automation                          |
-| `magnitude`     | Using Steel with Magnitude                         | TS       | Template for Using Steel with Magnitude automation                         |
-| `oai-cua`       | Using Steel with OpenAI's Computer Use             | TS       | Template for Using Steel with OpenAI's Computer Use automation             |
-| `oai-cua-py`    | Using Steel with OpenAI's Computer Use             | PY       | Template for Using Steel with OpenAI's Computer Use automation             |
-| `playwright-py` | Drive a Steel Session with Playwright              | PY       | Template for Drive a Steel Session with Playwright automation              |
-| `playwright-js` | Using Playwright with Steel                        | JS       | Template for Using Playwright with Steel automation                        |
-| `playwright`    | Drive a Steel Session with Playwright              | TS       | Template for Drive a Steel Session with Playwright automation              |
-| `puppeteer-js`  | Using Puppeteer with Steel                         | JS       | Template for Using Puppeteer with Steel automation                         |
-| `puppeteer`     | Drive a Steel Session with Puppeteer               | TS       | Template for Drive a Steel Session with Puppeteer automation               |
-| `selenium`      | Using Selenium with Steel                          | PY       | Template for Using Selenium with Steel automation                          |
-| `stagehand`     | Using Steel with Stagehand                         | TS       | Template for Using Steel with Stagehand automation                         |
-| `stagehand-py`  | Using Steel with Stagehand                         | PY       | Template for Using Steel with Stagehand automation                         |
+| Alias | Label | Language | Description |
+|-------|-------|----------|-------------|
+| `steel-auth-context-starter` | Reusing Authentication Context | TS | Template for Reusing Authentication Context automation |
+| `steel-browser-use-starter` | Using Steel with Browser Use | PY | Template for Using Steel with Browser Use automation |
+| `steel-claude-computer-use-node-starter` | Using Steel with Claude's Computer Use | TS | Template for Using Steel with Claude's Computer Use automation |
+| `steel-claude-computer-use-python-starter` | Using Steel with Claude's Computer Use | PY | Template for Using Steel with Claude's Computer Use automation |
+| `steel-credentials-starter` | Using Steel Credentials with Playwright | TS | Template for Using Steel Credentials with Playwright automation |
+| `steel-files-api-starter` | Using the Steel Files API | TS | Template for Using the Steel Files API automation |
+| `steel-magnitude-starter` | Using Steel with Magnitude | TS | Template for Using Steel with Magnitude automation |
+| `steel-oai-computer-use-node-starter` | Using Steel with OpenAI's Computer Use | TS | Template for Using Steel with OpenAI's Computer Use automation |
+| `steel-oai-computer-use-python-starter` | Using Steel with OpenAI's Computer Use | PY | Template for Using Steel with OpenAI's Computer Use automation |
+| `steel-playwright-python-starter` | Drive a Steel Session with Playwright | PY | Template for Drive a Steel Session with Playwright automation |
+| `steel-playwright-starter-js` | Using Playwright with Steel | JS | Template for Using Playwright with Steel automation |
+| `steel-playwright-starter` | Drive a Steel Session with Playwright | TS | Template for Drive a Steel Session with Playwright automation |
+| `steel-puppeteer-starter-js` | Using Puppeteer with Steel | JS | Template for Using Puppeteer with Steel automation |
+| `steel-puppeteer-starter` | Drive a Steel Session with Puppeteer | TS | Template for Drive a Steel Session with Puppeteer automation |
+| `steel-selenium-starter` | Using Selenium with Steel | PY | Template for Using Selenium with Steel automation |
+| `steel-stagehand-node-starter` | Using Steel with Stagehand | TS | Template for Using Steel with Stagehand automation |
+| `steel-stagehand-python-starter` | Using Steel with Stagehand | PY | Template for Using Steel with Stagehand automation |
 
 ### Arguments
 
@@ -111,17 +106,8 @@ steel forge [template] [options]
 - -a, **--api_url**: API URL for Steel API
 - **--api_key**: API Key for Steel API
 - **--openai_key**: API Key for OpenAI
+- **--anthropic_key**: API Key for Anthropic
 - **--skip_auth**: Skip authentication
-
-## steel info
-
-Display information about the current session
-
-### Usage
-
-```
-steel info
-```
 
 ## steel login
 
@@ -145,7 +131,7 @@ steel logout
 
 ## steel run
 
-Run a Steel Cookbook automation instantly from the CLI — no setup, no files, just quick execution in a temporary cache.
+Run a Steel Cookbook automation instantly from the CLI — no setup, no files.
 
 ### Usage
 
@@ -155,20 +141,25 @@ steel run [template] [options]
 
 ### Available Templates
 
-| Alias           | Label                                              | Language | Description                                                                |
-| --------------- | -------------------------------------------------- | -------- | -------------------------------------------------------------------------- |
-| `playwright-js` | Playwright                                         | JS       | Template for Playwright automation                                         |
-| `playwright`    | Playwright + TypeScript                            | TS       | Template for Playwright + TypeScript automation                            |
-| `puppeteer-js`  | Puppeteer                                          | JS       | Template for Puppeteer automation                                          |
-| `puppeteer`     | Puppeteer + TypeScript                             | TS       | Template for Puppeteer + TypeScript automation                             |
-| `files`         | Playwright + Files API Starter in TypeScript       | TS       | Template for Playwright + Files API Starter in TypeScript automation       |
-| `creds`         | Playwright + Credentials API Starter in TypeScript | TS       | Template for Playwright + Credentials API Starter in TypeScript automation |
-| `oai-cua`       | Steel + OpenAI Computer Use + TypeScript           | TS       | Template for Steel + OpenAI Computer Use + TypeScript automation           |
-| `magnitude`     | Steel + Magnitude                                  | TS       | Template for Steel + Magnitude automation                                  |
-| `browser-use`   | (Python) Steel + Browser Use                       | PY       | Template for (Python) Steel + Browser Use automation                       |
-| `oai-cua-py`    | (Python) Steel + OpenAI Computer Use               | PY       | Template for (Python) Steel + OpenAI Computer Use automation               |
-| `playwright-py` | (Python) Steel + Playwright                        | PY       | Template for (Python) Steel + Playwright automation                        |
-| `selenium`      | (Python) Steel + Selenium                          | PY       | Template for (Python) Steel + Selenium automation                          |
+| Alias | Label | Language | Description |
+|-------|-------|----------|-------------|
+| `steel-auth-context-starter` | Reusing Authentication Context | TS | Template for Reusing Authentication Context automation |
+| `steel-browser-use-starter` | Using Steel with Browser Use | PY | Template for Using Steel with Browser Use automation |
+| `steel-claude-computer-use-node-starter` | Using Steel with Claude's Computer Use | TS | Template for Using Steel with Claude's Computer Use automation |
+| `steel-claude-computer-use-python-starter` | Using Steel with Claude's Computer Use | PY | Template for Using Steel with Claude's Computer Use automation |
+| `steel-credentials-starter` | Using Steel Credentials with Playwright | TS | Template for Using Steel Credentials with Playwright automation |
+| `steel-files-api-starter` | Using the Steel Files API | TS | Template for Using the Steel Files API automation |
+| `steel-magnitude-starter` | Using Steel with Magnitude | TS | Template for Using Steel with Magnitude automation |
+| `steel-oai-computer-use-node-starter` | Using Steel with OpenAI's Computer Use | TS | Template for Using Steel with OpenAI's Computer Use automation |
+| `steel-oai-computer-use-python-starter` | Using Steel with OpenAI's Computer Use | PY | Template for Using Steel with OpenAI's Computer Use automation |
+| `steel-playwright-python-starter` | Drive a Steel Session with Playwright | PY | Template for Drive a Steel Session with Playwright automation |
+| `steel-playwright-starter-js` | Using Playwright with Steel | JS | Template for Using Playwright with Steel automation |
+| `steel-playwright-starter` | Drive a Steel Session with Playwright | TS | Template for Drive a Steel Session with Playwright automation |
+| `steel-puppeteer-starter-js` | Using Puppeteer with Steel | JS | Template for Using Puppeteer with Steel automation |
+| `steel-puppeteer-starter` | Drive a Steel Session with Puppeteer | TS | Template for Drive a Steel Session with Puppeteer automation |
+| `steel-selenium-starter` | Using Selenium with Steel | PY | Template for Using Selenium with Steel automation |
+| `steel-stagehand-node-starter` | Using Steel with Stagehand | TS | Template for Using Steel with Stagehand automation |
+| `steel-stagehand-python-starter` | Using Steel with Stagehand | PY | Template for Using Steel with Stagehand automation |
 
 ### Arguments
 
@@ -181,8 +172,20 @@ steel run [template] [options]
 - -t, **--task**: Task to run
 - **--api_key**: API Key for Steel API
 - **--openai_key**: API Key for OpenAI
+- **--anthropic_key**: API Key for Anthropic
+- **--gemini_key**: API Key for Gemini
 - **--skip_auth**: Skip authentication
 - -h, **--help**: Show help
+
+## steel settings
+
+Display current settings
+
+### Usage
+
+```
+steel settings
+```
 
 ## steel star
 
@@ -204,9 +207,54 @@ Navigates to Steel Discord Server
 steel support
 ```
 
+## steel update
+
+Update Steel CLI to the latest version
+
+### Usage
+
+```
+steel update [options]
+```
+
+### Options
+
+- -f, **--force**: Force update even if already on latest version
+- -c, **--check**: Only check for updates without installing
+
+## steel browser live
+
+Print active session live-view URL
+
+### Usage
+
+```
+steel browser live [options]
+```
+
+### Options
+
+- -l, **--local**: Resolve live URL from local active session
+- **--api-url**: Explicit self-hosted API endpoint URL
+
+## steel browser sessions
+
+List browser sessions as JSON
+
+### Usage
+
+```
+steel browser sessions [options]
+```
+
+### Options
+
+- -l, **--local**: List sessions from local Steel runtime
+- **--api-url**: Explicit self-hosted API endpoint URL
+
 ## steel browser start
 
-Starts the development environment
+Create or attach a Steel browser session (cloud by default)
 
 ### Usage
 
@@ -216,20 +264,73 @@ steel browser start [options]
 
 ### Options
 
-- -p, **--port**: Port number
-- -v, **--verbose**: Enable verbose logging
-- -d, **--docker_check**: Verify Docker is running
+- -l, **--local**: Start or attach a local Steel browser session
+- **--api-url**: Explicit self-hosted API endpoint URL
+- -s, **--session**: Named session key for create-or-attach behavior
+- **--stealth**: Enable stealth-oriented session defaults
+- -p, **--proxy**: Proxy URL to apply when creating a new session
 
 ## steel browser stop
 
-Stops the development server
+Stop the active Steel browser session
 
 ### Usage
 
 ```
-steel browser stop
+steel browser stop [options]
 ```
+
+### Options
+
+- -a, **--all**: Stop all live sessions in the active mode
+- -l, **--local**: Stop sessions from local Steel runtime mode
+- **--api-url**: Explicit self-hosted API endpoint URL
+
+## steel dev install
+
+Install local Steel Browser runtime assets without starting containers
+
+### Usage
+
+```
+steel dev install [options]
+```
+
+### Options
+
+- **--repo-url**: Git repository URL for local Steel Browser runtime
+- -v, **--verbose**: Enable verbose git command output
+
+## steel dev start
+
+Start local Steel Browser runtime containers (requires `steel dev install`)
+
+### Usage
+
+```
+steel dev start [options]
+```
+
+### Options
+
+- -p, **--port**: API port for local Steel Browser runtime
+- -v, **--verbose**: Enable verbose Docker command output
+- -d, **--docker_check**: Only verify Docker availability and exit
+
+## steel dev stop
+
+Stop local Steel Browser runtime containers
+
+### Usage
+
+```
+steel dev stop [options]
+```
+
+### Options
+
+- -v, **--verbose**: Enable verbose Docker command output
 
 ---
 
-_This documentation was auto-generated from the Steel CLI source code._
+*This documentation was auto-generated from the Steel CLI source code.*

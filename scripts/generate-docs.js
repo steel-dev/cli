@@ -108,6 +108,14 @@ function extractOptionInfo(optionSchema) {
 	if (!optionSchema) return [];
 
 	try {
+		const toCliOptionName = name => {
+			if (name.includes('_')) {
+				return name;
+			}
+
+			return name.replaceAll(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+		};
+
 		const shapeFn = optionSchema._def?.shape;
 		if (!shapeFn) return [];
 
@@ -169,7 +177,7 @@ function extractOptionInfo(optionSchema) {
 			const isOptional = def._def?.typeName === 'ZodOptional';
 
 			return {
-				name,
+				name: toCliOptionName(name),
 				description: desc,
 				alias,
 				type,
