@@ -170,3 +170,7 @@ Reference docs:
 - [Steel browser commands (synced + transformed)](docs/references/steel-browser-commands.md)
 - [Agent troubleshooting playbook](docs/references/agent-troubleshooting.md)
 - [Pinned upstream source snapshot](docs/references/upstream/agent-browser-commands.source.md)
+
+Agent skill:
+
+- [Steel Browser skill package](skills/steel-browser/README.md)

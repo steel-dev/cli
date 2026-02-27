@@ -1,0 +1,23 @@
+{
+	"skill_name": "steel-browser",
+	"evals": [
+		{
+			"id": 1,
+			"prompt": "Use steel browser to open https://the-internet.herokuapp.com/login, sign in with username tomsmith and password SuperSecretPassword!, wait until the success flash appears, return the final URL, then cleanly stop the session.",
+			"expected_output": "Uses a named steel browser session with start/open/fill/click/wait/get url/stop sequence and confirms the secure-area URL.",
+			"files": []
+		},
+		{
+			"id": 2,
+			"prompt": "I have this legacy script: `agent-browser open https://example.com && agent-browser snapshot -i && agent-browser click @e3 && agent-browser get text @e7`. Convert it to steel browser commands and include any lifecycle commands you think are needed for reliability.",
+			"expected_output": "Converts prefixes to steel browser and adds sensible lifecycle/session discipline without changing intended behavior.",
+			"files": []
+		},
+		{
+			"id": 3,
+			"prompt": "My automation keeps failing with `No active live session found` and occasionally opens a fresh browser tab each command. Give me a minimal steel browser diagnostic and recovery command sequence.",
+			"expected_output": "Diagnoses session continuity/mode mismatch and provides actionable commands using sessions/live/start/stop with consistent --session usage.",
+			"files": []
+		}
+	]
+}
