@@ -104,6 +104,12 @@ todos:
     blockedBy:
       - fix-cdp-passthrough-flag-mapping
       - bundle-daemon-assets-with-runtime
+  - id: expand-e2e-command-chain-coverage
+    content: Expand integration suite with wide cloud command-chain E2E flows using real automation scenarios across multiple test websites and command families.
+    status: pending
+    workstream: compat-and-perf
+    blockedBy:
+      - authenticated-cloud-e2e-smoke
   - id: docs-migration-upstream-sync
     content: Ship migration doc, add simple static browser compatibility docs, keep generated docs focused on Steel-owned commands, and add upstream merge strategy documentation.
     status: completed
@@ -434,6 +440,101 @@ daemon --> actions[unchanged interaction and snapshot actions]
   - download materialization behavior.
 - Document assumptions now; implement after core compatibility + performance gates are green.
 
+### 11) Comprehensive E2E command-chain expansion (cloud-first real scenarios; test-only delivery)
+
+- Scope for this pass:
+  - prioritize cloud workflows only.
+  - explicitly defer self-hosted/local-runtime E2E coverage for a later pass.
+- Objective:
+  - validate full automation journeys with chained commands, not just single-command checks.
+  - stress diverse command families in realistic tasks (auth, forms, navigation, extraction, artifacts, dialogs, frames, tabs, state).
+- Implementation note:
+  - add tests under `tests/integration/` using the existing CLI harness pattern (`spawnSync` on `dist/steel.js` with isolated `STEEL_CONFIG_DIR` + named sessions).
+  - each scenario should exercise at least 4 command families and include deterministic assertions (URL/text/count/state/artifact existence).
+  - use stable public automation-practice sites first; keep per-test fallback pages where possible to reduce flake.
+
+#### Priority P0 (must add first)
+
+- Auth and protected-page workflows:
+  - site(s): `https://practicetestautomation.com/practice-test-login/`, `https://the-internet.herokuapp.com/login`.
+  - chain: `start` -> `open` -> `snapshot -i` -> `click/fill/press` -> `wait --text` -> `get url/text` -> logout action -> `wait --url` -> `stop`.
+  - assertions: successful login signal, protected URL reached, logout returns to login page, non-zero failures when credentials are intentionally wrong.
+- E-commerce task flow:
+  - site: `https://www.saucedemo.com/`.
+  - chain: login -> sort/select items -> add/remove cart -> open cart -> validate item/count -> attempt checkout form steps.
+  - commands: `open`, `fill`, `click`, `select`, `get text`, `get count`, `is visible`, `wait --text`.
+- Multi-step form and data extraction flow:
+  - site: `https://the-internet.herokuapp.com/` pages (`checkboxes`, `dropdown`, `tables`).
+  - chain: navigate between pages -> `check/uncheck/select` -> `get value/text/count/attr` -> validate table-derived output.
+  - assertions: field state transitions and extracted values are consistent.
+- Session continuity across processes:
+  - process A starts named session and leaves page in known state.
+  - process B resumes same `--session`, validates state with `get` commands, continues task, then cleanup.
+  - assertion: no broken continuity between invocations.
+
+#### Priority P1 (high-value breadth and tool-chain diversity)
+
+- Refs + semantic locators hybrid:
+  - chain `snapshot -i` refs with `find role/text/label/placeholder` actions in same flow.
+  - assert both targeting strategies can be mixed reliably.
+- Frames and dialogs workflow:
+  - site(s): `https://the-internet.herokuapp.com/iframe`, `https://the-internet.herokuapp.com/javascript_alerts`.
+  - commands: `frame`, `dialog accept/dismiss`, `get text`, `wait`.
+- Tabs/windows and navigation control:
+  - commands: `tab new`, `tab`, `window new`, `back`, `forward`, `reload`, `get title/url`.
+  - assertions: active-tab context and history behavior remain correct across chained steps.
+- Artifact generation in real flow:
+  - commands: `screenshot` (temp + explicit path), `screenshot --full`, `pdf`.
+  - assertions: artifacts are created and non-empty after meaningful workflow completion.
+- Upload and drag/drop interactions:
+  - site(s): `https://the-internet.herokuapp.com/upload`, `https://the-internet.herokuapp.com/drag_and_drop`.
+  - commands: `upload`, `drag`, `mouse move/down/up`, `get text`.
+  - assertions: upload success message/file name present; drag target state changed.
+
+#### Priority P2 (resilience, debugging surface, and regressions)
+
+- Error propagation + recovery:
+  - intentionally trigger invalid selector / timeout / missing element.
+  - verify stderr/exit behavior and then recover within same session using valid commands.
+- Wait strategy matrix:
+  - exercise `wait <ms>`, `wait --text`, `wait --url`, `wait --load`, `wait --fn` in one scenario pack.
+  - ensure waits are neither flaky nor hiding failures.
+- State and persistence checks:
+  - commands: `cookies`, `cookies set/clear`, `storage local set/get/clear`, `state save/load`.
+  - assertions: saved state can restore login/session context where supported by site behavior.
+- Optional debug instrumentation scenario (nightly):
+  - commands: `trace start/stop`, `console`, `errors`, `highlight`, `record start/stop`.
+  - assertions: debug artifacts/log commands run without breaking core workflow.
+
+#### Candidate scenario list for immediate implementation
+
+- `browser-scenario-auth-login-logout.test.ts`
+- `browser-scenario-ecommerce-cart-checkout.test.ts`
+- `browser-scenario-forms-and-table-extraction.test.ts`
+- `browser-scenario-session-reattach-cross-process.test.ts`
+- `browser-scenario-semantic-plus-refs.test.ts`
+- `browser-scenario-frames-and-dialogs.test.ts`
+- `browser-scenario-tabs-windows-navigation.test.ts`
+- `browser-scenario-upload-dragdrop-artifacts.test.ts`
+- `browser-scenario-state-cookies-storage.test.ts`
+- `browser-scenario-error-recovery.test.ts`
+
+#### Test website pool (preferred for stability)
+
+- `https://the-internet.herokuapp.com/` (broad primitive coverage)
+- `https://practicetestautomation.com/` (realistic login/task flows)
+- `https://www.saucedemo.com/` (commerce-like flow)
+- `https://example.com/` (baseline sanity and fallback)
+
+#### CI execution tiers for expanded scenario coverage
+
+- Tier 1 (credentialed PR gate):
+  - fast, high-signal workflows (auth + form + extraction + session continuity).
+- Tier 2 (credentialed protected-branch gate):
+  - broader command-family scenarios (frames/dialogs/tabs/upload/artifacts/state).
+- Tier 3 (nightly):
+  - long-running resilience/debug scenarios and heavier artifact generation.
+
 ## Subtree Strategy Decision
 
 - Chosen: subtree + thin adapter.
@@ -474,6 +575,13 @@ daemon --> actions[unchanged interaction and snapshot actions]
   - authenticated smoke test: `start -> open -> snapshot -i -> stop` passes using Steel cloud with no external runtime env hacks.
   - Steel-specific UX test: `start/stop/sessions/live` match documented contract and output schemas.
   - packaged runtime smoke tests on Linux/macOS/Windows for key commands.
+- Expanded E2E command-chain checks (next pass):
+  - cloud-first real-world workflows cover auth, forms, extraction, ecommerce, and teardown in one session.
+  - named session reattach works across process boundaries.
+  - refs-based and semantic-locator-based actions are both validated in chained scenarios.
+  - frames/dialogs/tabs/windows/navigation controls are validated in integrated flows.
+  - upload/dragdrop/screenshot/pdf/state commands are exercised and asserted in end-to-end runs.
+  - error propagation and same-session recovery behavior are validated under intentional failure steps.
 - Docs/help validation:
   - `npm run docs:generate` reflects Steel-owned browser commands.
   - README includes explicit cloud vs self-hosted mode and endpoint precedence for users/agents.
