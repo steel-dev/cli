@@ -8,6 +8,7 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '..');
 
 const DEFAULT_FILTERS = [];
+const DEFAULT_RUNNER_TIMEOUT_MS = 45 * 60 * 1000;
 const ANSI_ESCAPE_PATTERN = new RegExp(
 	`${String.fromCharCode(27)}\\[[0-9;]*m`,
 	'g',
@@ -261,9 +262,24 @@ function printFailureDetails(rows) {
 	}
 }
 
+function resolveRunnerTimeoutMs() {
+	const rawTimeout = process.env.STEEL_TEST_RUNNER_TIMEOUT_MS;
+	if (!rawTimeout) {
+		return DEFAULT_RUNNER_TIMEOUT_MS;
+	}
+
+	const parsedTimeout = Number.parseInt(rawTimeout, 10);
+	if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0) {
+		return DEFAULT_RUNNER_TIMEOUT_MS;
+	}
+
+	return parsedTimeout;
+}
+
 function main() {
 	const filters = process.argv.slice(2);
 	const testFilters = filters.length > 0 ? filters : DEFAULT_FILTERS;
+	const runnerTimeoutMs = resolveRunnerTimeoutMs();
 	const outputFile = path.join(
 		os.tmpdir(),
 		`vitest-integration-results-${process.pid}-${Date.now()}.json`,
@@ -287,10 +303,34 @@ function main() {
 			FORCE_COLOR: '0',
 		},
 		encoding: 'utf-8',
+		timeout: runnerTimeoutMs,
+		killSignal: 'SIGKILL',
 	});
 
-	const combinedOutput =
-		`${commandResult.stdout || ''}${commandResult.stderr || ''}`.trim();
+	const commandStderrParts = [commandResult.stderr || ''];
+	if (commandResult.error) {
+		commandStderrParts.push(`runner error: ${commandResult.error.message}`);
+	}
+	if (commandResult.signal) {
+		commandStderrParts.push(
+			`runner terminated by signal: ${commandResult.signal}`,
+		);
+	}
+
+	const combinedOutput = [commandResult.stdout || '', ...commandStderrParts]
+		.filter(Boolean)
+		.join('\n')
+		.trim();
+
+	if (commandResult.error?.code === 'ETIMEDOUT') {
+		console.error(
+			[
+				`Vitest run timed out after ${formatDuration(runnerTimeoutMs)}.`,
+				'Set STEEL_TEST_RUNNER_TIMEOUT_MS to increase or decrease this limit.',
+			].join(' '),
+		);
+	}
+
 	if (commandResult.status !== 0 && combinedOutput) {
 		console.log(combinedOutput);
 	}

@@ -11,6 +11,8 @@ type CommandResult = {
 	output: string;
 };
 
+const COMMAND_TIMEOUT_MS = 90_000;
+
 function runBrowserCommand(
 	arguments_: string[],
 	environment: NodeJS.ProcessEnv,
@@ -23,17 +25,30 @@ function runBrowserCommand(
 			cwd: projectRoot,
 			env: environment,
 			encoding: 'utf-8',
+			timeout: COMMAND_TIMEOUT_MS,
+			killSignal: 'SIGKILL',
 		},
 	);
 
 	const stdout = result.stdout || '';
-	const stderr = result.stderr || '';
+	const stderrParts = [result.stderr || ''];
+
+	if (result.error) {
+		stderrParts.push(`spawn error: ${result.error.message}`);
+	}
+
+	if (result.signal) {
+		stderrParts.push(`terminated by signal: ${result.signal}`);
+	}
+
+	const stderr = stderrParts.filter(Boolean).join('\n');
+	const output = [stdout, stderr].filter(Boolean).join('\n');
 
 	return {
 		status: result.status ?? 1,
 		stdout,
 		stderr,
-		output: `${stdout}${stderr}`,
+		output,
 	};
 }
 

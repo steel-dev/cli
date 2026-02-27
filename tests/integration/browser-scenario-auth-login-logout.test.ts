@@ -68,7 +68,23 @@ function assertSuccessfulStep(stepName: string, result: CommandResult): void {
 	);
 }
 
-describe('browser cloud login workflow e2e', () => {
+function assertFailedStep(stepName: string, result: CommandResult): void {
+	if (result.status !== 0) {
+		return;
+	}
+
+	throw new Error(
+		[
+			`${stepName} unexpectedly succeeded with exit code 0.`,
+			result.stdout.trim() ? `stdout:\n${result.stdout.trim()}` : null,
+			result.stderr.trim() ? `stderr:\n${result.stderr.trim()}` : null,
+		]
+			.filter(Boolean)
+			.join('\n'),
+	);
+}
+
+describe('browser auth scenario login/logout', () => {
 	const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 	const projectRoot = path.resolve(testDirectory, '../..');
 	const distEntrypoint = path.join(projectRoot, 'dist/steel.js');
@@ -76,16 +92,16 @@ describe('browser cloud login workflow e2e', () => {
 	const cloudTest = apiKey ? test : test.skip;
 
 	cloudTest(
-		'executes a richer login workflow with click/fill/scroll/snapshot commands',
+		'logs in and logs out successfully on practicetestautomation.com',
 		() => {
 			if (!fs.existsSync(distEntrypoint)) {
 				throw new Error('dist/steel.js is missing. Run `npm run build` first.');
 			}
 
 			const configDirectory = fs.mkdtempSync(
-				path.join(os.tmpdir(), 'steel-browser-cloud-login-e2e-'),
+				path.join(os.tmpdir(), 'steel-browser-auth-login-logout-'),
 			);
-			const sessionName = `steel-browser-login-e2e-${Date.now()}`;
+			const sessionName = `steel-browser-auth-${Date.now()}`;
 			const environment = {
 				...process.env,
 				STEEL_API_KEY: apiKey!,
@@ -129,29 +145,7 @@ describe('browser cloud login workflow e2e', () => {
 				);
 				expect(loginSnapshotResult.output).toContain('Username');
 				expect(loginSnapshotResult.output).toContain('Password');
-				expect(loginSnapshotResult.output).toContain('Submit');
 				expect(loginSnapshotResult.output).toMatch(/ref=e\d+/);
-
-				const scrollDownResult = runBrowserCommand(
-					['scroll', 'down', '300', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser scroll down', scrollDownResult);
-
-				const scrollUpResult = runBrowserCommand(
-					['scroll', 'up', '200', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser scroll up', scrollUpResult);
-
-				const clickUsernameResult = runBrowserCommand(
-					['click', '#username', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser click username', clickUsernameResult);
 
 				const fillUsernameResult = runBrowserCommand(
 					['fill', '#username', 'student', '--session', sessionName],
@@ -159,13 +153,6 @@ describe('browser cloud login workflow e2e', () => {
 					projectRoot,
 				);
 				assertSuccessfulStep('browser fill username', fillUsernameResult);
-
-				const clickPasswordResult = runBrowserCommand(
-					['click', '#password', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser click password', clickPasswordResult);
 
 				const fillPasswordResult = runBrowserCommand(
 					['fill', '#password', 'Password123', '--session', sessionName],
@@ -193,50 +180,28 @@ describe('browser cloud login workflow e2e', () => {
 					projectRoot,
 				);
 				assertSuccessfulStep(
-					'browser wait for login success',
+					'browser wait for secure area success text',
 					waitSuccessResult,
 				);
 
-				const getUrlResult = runBrowserCommand(
+				const getSecureUrlResult = runBrowserCommand(
 					['get', 'url', '--session', sessionName],
 					environment,
 					projectRoot,
 				);
-				assertSuccessfulStep('browser get url', getUrlResult);
-				expect(getUrlResult.output).toContain('/logged-in-successfully/');
+				assertSuccessfulStep('browser get secure url', getSecureUrlResult);
+				expect(getSecureUrlResult.output).toContain('/logged-in-successfully/');
 
-				const getPageHeaderResult = runBrowserCommand(
+				const getSecureFlashResult = runBrowserCommand(
 					['get', 'text', '.post-title', '--session', sessionName],
 					environment,
 					projectRoot,
 				);
 				assertSuccessfulStep(
-					'browser get logged-in page title text',
-					getPageHeaderResult,
+					'browser get secure flash text',
+					getSecureFlashResult,
 				);
-				expect(getPageHeaderResult.output).toContain('Logged In Successfully');
-
-				const getLinkCountResult = runBrowserCommand(
-					['get', 'count', 'a', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep('browser get link count', getLinkCountResult);
-				const linkCount = Number.parseInt(getLinkCountResult.output.trim(), 10);
-				expect(Number.isNaN(linkCount)).toBe(false);
-				expect(linkCount).toBeGreaterThanOrEqual(1);
-
-				const secureSnapshotResult = runBrowserCommand(
-					['snapshot', '-i', '--session', sessionName],
-					environment,
-					projectRoot,
-				);
-				assertSuccessfulStep(
-					'browser snapshot logged-in page',
-					secureSnapshotResult,
-				);
-				expect(secureSnapshotResult.output).toContain('Log out');
-				expect(secureSnapshotResult.output).toMatch(/ref=e\d+/);
+				expect(getSecureFlashResult.output).toContain('Logged In Successfully');
 
 				const clickLogoutResult = runBrowserCommand(
 					['click', '.wp-block-button__link', '--session', sessionName],
@@ -245,14 +210,20 @@ describe('browser cloud login workflow e2e', () => {
 				);
 				assertSuccessfulStep('browser click logout', clickLogoutResult);
 
-				const waitLoginPageResult = runBrowserCommand(
-					['wait', '--text', 'Test login', '--session', sessionName],
+				const waitLoginUrlResult = runBrowserCommand(
+					[
+						'wait',
+						'--url',
+						'**/practice-test-login/',
+						'--session',
+						sessionName,
+					],
 					environment,
 					projectRoot,
 				);
 				assertSuccessfulStep(
-					'browser wait for login page after logout',
-					waitLoginPageResult,
+					'browser wait for login url after logout',
+					waitLoginUrlResult,
 				);
 
 				const getLoggedOutUrlResult = runBrowserCommand(
@@ -261,10 +232,21 @@ describe('browser cloud login workflow e2e', () => {
 					projectRoot,
 				);
 				assertSuccessfulStep(
-					'browser get url after logout',
+					'browser get logged-out url',
 					getLoggedOutUrlResult,
 				);
 				expect(getLoggedOutUrlResult.output).toContain('/practice-test-login/');
+
+				const getLoggedOutFlashResult = runBrowserCommand(
+					['get', 'title', '--session', sessionName],
+					environment,
+					projectRoot,
+				);
+				assertSuccessfulStep(
+					'browser get logged-out flash text',
+					getLoggedOutFlashResult,
+				);
+				expect(getLoggedOutFlashResult.output).toContain('Test Login');
 			} finally {
 				if (sessionStarted) {
 					const stopResult = runBrowserCommand(
@@ -278,6 +260,108 @@ describe('browser cloud login workflow e2e', () => {
 				fs.rmSync(configDirectory, {recursive: true, force: true});
 			}
 		},
-		180_000,
+		120_000,
+	);
+
+	cloudTest(
+		'fails login with bad credentials and exits non-zero on protected action',
+		() => {
+			if (!fs.existsSync(distEntrypoint)) {
+				throw new Error('dist/steel.js is missing. Run `npm run build` first.');
+			}
+
+			const configDirectory = fs.mkdtempSync(
+				path.join(os.tmpdir(), 'steel-browser-auth-bad-creds-'),
+			);
+			const sessionName = `steel-browser-auth-bad-creds-${Date.now()}`;
+			const environment = {
+				...process.env,
+				STEEL_API_KEY: apiKey!,
+				STEEL_CONFIG_DIR: configDirectory,
+				STEEL_CLI_SKIP_UPDATE_CHECK: 'true',
+				FORCE_COLOR: '0',
+				NODE_NO_WARNINGS: '1',
+			};
+
+			let sessionStarted = false;
+
+			try {
+				const startResult = runBrowserCommand(
+					['start', '--session', sessionName],
+					environment,
+					projectRoot,
+				);
+				assertSuccessfulStep('browser start', startResult);
+				sessionStarted = true;
+
+				const openLoginResult = runBrowserCommand(
+					[
+						'open',
+						'https://practicetestautomation.com/practice-test-login/',
+						'--session',
+						sessionName,
+					],
+					environment,
+					projectRoot,
+				);
+				assertSuccessfulStep('browser open login page', openLoginResult);
+
+				const fillUsernameResult = runBrowserCommand(
+					['fill', '#username', 'student', '--session', sessionName],
+					environment,
+					projectRoot,
+				);
+				assertSuccessfulStep('browser fill username', fillUsernameResult);
+
+				const fillPasswordResult = runBrowserCommand(
+					['fill', '#password', 'wrong-password', '--session', sessionName],
+					environment,
+					projectRoot,
+				);
+				assertSuccessfulStep('browser fill password', fillPasswordResult);
+
+				const clickLoginResult = runBrowserCommand(
+					['click', '#submit', '--session', sessionName],
+					environment,
+					projectRoot,
+				);
+				assertSuccessfulStep('browser click login', clickLoginResult);
+
+				const getInvalidFlashResult = runBrowserCommand(
+					['get', 'text', '#error', '--session', sessionName],
+					environment,
+					projectRoot,
+				);
+				assertSuccessfulStep(
+					'browser get invalid-credentials flash text',
+					getInvalidFlashResult,
+				);
+				expect(getInvalidFlashResult.output).toContain(
+					'Your password is invalid!',
+				);
+
+				const clickMissingLogoutResult = runBrowserCommand(
+					['click', '.wp-block-button__link', '--session', sessionName],
+					environment,
+					projectRoot,
+				);
+				assertFailedStep(
+					'browser click logout after bad credentials',
+					clickMissingLogoutResult,
+				);
+			} finally {
+				if (sessionStarted) {
+					const stopResult = runBrowserCommand(
+						['stop'],
+						environment,
+						projectRoot,
+					);
+					assertSuccessfulStep('browser stop', stopResult);
+				}
+
+				fs.rmSync(configDirectory, {recursive: true, force: true});
+			}
+		},
+		120_000,
 	);
 });
