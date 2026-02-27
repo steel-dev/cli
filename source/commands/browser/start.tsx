@@ -5,6 +5,7 @@ import zod from 'zod';
 import {option} from 'pastel';
 import {startBrowserSession} from '../../utils/browser/lifecycle.js';
 import {BrowserAdapterError} from '../../utils/browser/errors.js';
+import {sanitizeConnectUrlForDisplay} from '../../utils/browser/display.js';
 
 export const description =
 	'Create or attach a Steel browser session (cloud by default)';
@@ -40,7 +41,8 @@ export const options = zod.object({
 		.boolean()
 		.describe(
 			option({
-				description: 'Enable stealth-oriented session defaults',
+				description:
+					'Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving)',
 			}),
 		)
 		.optional(),
@@ -48,7 +50,8 @@ export const options = zod.object({
 		.string()
 		.describe(
 			option({
-				description: 'Proxy URL to apply when creating a new session',
+				description:
+					'Proxy URL for new sessions (for example, http://user:pass@host:port)',
 				alias: 'p',
 			}),
 		)
@@ -82,7 +85,9 @@ export default function Start({options}: Props) {
 				}
 
 				if (session.connectUrl) {
-					console.log(`connect_url: ${session.connectUrl}`);
+					console.log(
+						`connect_url: ${sanitizeConnectUrlForDisplay(session.connectUrl)}`,
+					);
 				}
 
 				process.exit(0);

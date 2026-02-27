@@ -498,7 +498,7 @@ describe('browser lifecycle session contract', () => {
 						humanizeInteractions: true,
 						autoCaptchaSolving: true,
 					},
-					solveCaptchas: true,
+					solveCaptcha: true,
 				}),
 			});
 		} finally {

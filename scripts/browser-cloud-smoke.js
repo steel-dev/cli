@@ -181,17 +181,44 @@ function compareParity(stepName, steelResult, runtimeResult) {
 	);
 }
 
+function buildCloudConnectUrl(sessionId, apiKey) {
+	if (!sessionId || !apiKey) {
+		return null;
+	}
+
+	return `wss://connect.steel.dev?apiKey=${apiKey}&sessionId=${sessionId}`;
+}
+
+function hasRedactedSecret(connectUrl) {
+	return /[?&](?:apiKey|api_key|token|access_token)=REDACTED\b/i.test(
+		connectUrl,
+	);
+}
+
+function resolveConnectUrl(connectUrl, sessionId, apiKey) {
+	if (!connectUrl) {
+		return buildCloudConnectUrl(sessionId, apiKey);
+	}
+
+	const normalizedConnectUrl = connectUrl.trim();
+	if (!normalizedConnectUrl) {
+		return buildCloudConnectUrl(sessionId, apiKey);
+	}
+
+	if (hasRedactedSecret(normalizedConnectUrl)) {
+		return buildCloudConnectUrl(sessionId, apiKey);
+	}
+
+	return normalizedConnectUrl;
+}
+
 function resolveSessionFromStartOutput(startOutput, apiKey) {
 	const sessionId = parseOutputField(startOutput, 'id');
 	const connectUrl = parseOutputField(startOutput, 'connect(?:_|\\s|-)?url');
 
 	return {
 		sessionId,
-		connectUrl:
-			connectUrl ||
-			(sessionId && apiKey
-				? `wss://connect.steel.dev?apiKey=${apiKey}&sessionId=${sessionId}`
-				: null),
+		connectUrl: resolveConnectUrl(connectUrl, sessionId, apiKey),
 	};
 }
 
@@ -199,6 +226,7 @@ function resolveSessionFromSessionsCommand(
 	sessionName,
 	environment,
 	projectRoot,
+	apiKey,
 ) {
 	const sessionsResult = runCommand(
 		process.execPath,
@@ -233,7 +261,11 @@ function resolveSessionFromSessionsCommand(
 
 	return {
 		sessionId: sessionId || null,
-		connectUrl: connectUrl || null,
+		connectUrl: resolveConnectUrl(
+			connectUrl || null,
+			sessionId || null,
+			apiKey,
+		),
 	};
 }
 
@@ -291,6 +323,7 @@ async function main() {
 				sessionName,
 				baseEnvironment,
 				projectRoot,
+				apiKey,
 			);
 
 			if (!sessionId && sessionFromList?.sessionId) {
@@ -313,7 +346,7 @@ async function main() {
 		}
 
 		if (!connectUrl) {
-			connectUrl = `wss://connect.steel.dev?apiKey=${apiKey}&sessionId=${sessionId}`;
+			connectUrl = buildCloudConnectUrl(sessionId, apiKey);
 		}
 
 		const steelOpenResult = runCommand(

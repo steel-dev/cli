@@ -5,6 +5,7 @@ import zod from 'zod';
 import {option} from 'pastel';
 import {listBrowserSessions} from '../../utils/browser/lifecycle.js';
 import {BrowserAdapterError} from '../../utils/browser/errors.js';
+import {sanitizeConnectUrlForDisplay} from '../../utils/browser/display.js';
 
 export const description = 'List browser sessions as JSON';
 
@@ -40,7 +41,15 @@ export default function Sessions({options}: Props) {
 					local: options.local,
 					apiUrl: options.apiUrl,
 				});
-				console.log(JSON.stringify({sessions}, null, 2));
+				const displaySessions = sessions.map(session => ({
+					...session,
+					connectUrl:
+						typeof session.connectUrl === 'string'
+							? sanitizeConnectUrlForDisplay(session.connectUrl)
+							: session.connectUrl,
+				}));
+
+				console.log(JSON.stringify({sessions: displaySessions}, null, 2));
 				process.exit(0);
 			} catch (error) {
 				if (error instanceof BrowserAdapterError) {

@@ -687,7 +687,7 @@ async function createSessionFromApi(
 			humanizeInteractions: true,
 			autoCaptchaSolving: true,
 		};
-		payload['solveCaptchas'] = true;
+		payload['solveCaptcha'] = true;
 	}
 
 	const responseData = await requestApi(
