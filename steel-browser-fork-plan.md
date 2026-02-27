@@ -284,8 +284,8 @@ export const description = 'Starts Steel Browser in development mode';
 - Added authenticated smoke harness: `npm run browser:cloud:smoke` validates `start -> open -> snapshot -i -> stop` plus direct-runtime parity checks when `STEEL_API_KEY` is set.
 - Remaining release gates:
   - completed February 26, 2026: `browser:cloud:smoke` passed in a credentialed environment (`Passed authenticated flow for session 1dd46eb4-3b8d-495e-8dd4-4873f20397ce`).
-  - implement and validate endpoint-targeting contract (`--api-url` + env/settings precedence) for self-hosted deployments.
-  - complete user/agent migration docs for cloud vs self-hosted mode selection and `steel dev install` flow.
+  - completed February 26, 2026: endpoint-targeting contract (`--api-url` + env/settings precedence) implemented and validated for self-hosted deployments.
+  - completed February 26, 2026: migration docs for cloud vs self-hosted mode selection and `steel dev install` flow published.
 
 ## Target Architecture (Performance-First)
 
