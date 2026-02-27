@@ -10,6 +10,7 @@ import {
 	beforeEach,
 	afterEach,
 } from 'vitest';
+import {getLocalBrowserRepoPath} from '../../source/utils/dev/local';
 
 type BrowserLifecycleModule =
 	typeof import('../../source/utils/browser/lifecycle');
@@ -92,6 +93,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 
 			expect(parsed.options).toEqual({
 				local: false,
+				apiUrl: null,
 				sessionName: 'daily',
 				stealth: true,
 				proxyUrl: 'http://proxy.local:8080',
@@ -125,12 +127,51 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				lifecycle.parseBrowserPassthroughBootstrapFlags(['open', '--cdp']),
 			).toThrow('Missing value for --cdp.');
 			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags(['open', '--api-url']),
+			).toThrow('Missing value for --api-url.');
+			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags([
+					'open',
+					'--api-url',
+					'not-a-url',
+				]),
+			).toThrow('Invalid value for --api-url');
+			expect(() =>
 				lifecycle.parseBrowserPassthroughBootstrapFlags([
 					'open',
 					'--auto-connect',
 					'ws://localhost:9222',
 				]),
 			).toThrow('`--auto-connect` does not accept a value.');
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('parses explicit api-url and runs local bootstrap mode', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'https://steel.dev',
+				'--api-url',
+				'https://steel.local.dev/v1/',
+				'--session',
+				'daily',
+			]);
+
+			expect(parsed.options).toEqual({
+				local: true,
+				apiUrl: 'https://steel.local.dev/v1',
+				sessionName: 'daily',
+				stealth: false,
+				proxyUrl: null,
+				autoConnect: false,
+				cdpTarget: null,
+			});
+			expect(parsed.passthroughArgv).toEqual(['open', 'https://steel.dev']);
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}
@@ -263,6 +304,99 @@ describe('browser lifecycle session contract', () => {
 		}
 	});
 
+	test('creates local session when explicit api-url is provided', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-local',
+					status: 'live',
+					websocketUrl: 'ws://localhost:9222/devtools/browser/session-local',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const session = await lifecycle.startBrowserSession({
+				apiUrl: 'https://steel.self-hosted.dev/v1/',
+				environment: {
+					STEEL_CONFIG_DIR: configDirectory,
+				},
+			});
+
+			expect(session.mode).toBe('local');
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://steel.self-hosted.dev/v1/sessions',
+			);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('uses STEEL_BROWSER_API_URL before STEEL_LOCAL_API_URL in local mode', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(createJsonResponse(200, {sessions: []}));
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			await lifecycle.listBrowserSessions({
+				local: true,
+				environment: {
+					STEEL_BROWSER_API_URL: 'https://preferred.local/v1',
+					STEEL_LOCAL_API_URL: 'https://legacy.local/v1',
+				},
+			});
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://preferred.local/v1/sessions',
+			);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('uses config browser.apiUrl when local env vars are absent', async () => {
+		const configDirectory = createTempConfigDirectory();
+		const configPath = path.join(configDirectory, 'config.json');
+
+		try {
+			fs.mkdirSync(configDirectory, {recursive: true});
+			fs.writeFileSync(
+				configPath,
+				JSON.stringify(
+					{
+						browser: {
+							apiUrl: 'https://configured.local/v1/',
+						},
+					},
+					null,
+					2,
+				),
+				'utf-8',
+			);
+
+			fetchMock.mockResolvedValueOnce(createJsonResponse(200, {sessions: []}));
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			await lifecycle.listBrowserSessions({
+				local: true,
+				environment: {
+					STEEL_CONFIG_DIR: configDirectory,
+				},
+			});
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://configured.local/v1/sessions',
+			);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
 	test('reattaches a named live session instead of creating a new one', async () => {
 		const configDirectory = createTempConfigDirectory();
 
@@ -389,6 +523,54 @@ describe('browser lifecycle session contract', () => {
 			});
 
 			expect(fetchMock).not.toHaveBeenCalled();
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('shows install guidance for localhost local mode when runtime is missing', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+
+			await expect(
+				lifecycle.startBrowserSession({
+					local: true,
+					environment: {
+						STEEL_CONFIG_DIR: configDirectory,
+					},
+				}),
+			).rejects.toMatchObject({
+				code: 'API_ERROR',
+				message: expect.stringContaining('steel dev install'),
+			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('shows start guidance for localhost local mode when runtime is installed', async () => {
+		const configDirectory = createTempConfigDirectory();
+		const repoPath = getLocalBrowserRepoPath(configDirectory);
+
+		try {
+			fs.mkdirSync(repoPath, {recursive: true});
+			fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+
+			await expect(
+				lifecycle.startBrowserSession({
+					local: true,
+					environment: {
+						STEEL_CONFIG_DIR: configDirectory,
+					},
+				}),
+			).rejects.toMatchObject({
+				code: 'API_ERROR',
+				message: expect.stringContaining('steel dev start'),
+			});
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}

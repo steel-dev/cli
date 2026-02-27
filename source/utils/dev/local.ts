@@ -35,6 +35,10 @@ type LocalDevContext = {
 	environment?: NodeJS.ProcessEnv;
 };
 
+type InstallLocalBrowserRuntimeOptions = LocalDevContext & {
+	verbose?: boolean;
+};
+
 type StartLocalBrowserRuntimeOptions = LocalDevContext & {
 	port?: number;
 	verbose?: boolean;
@@ -82,7 +86,10 @@ export function deriveLocalApiPort(
 		return String(explicitPort);
 	}
 
-	const configuredApiUrl = environment.STEEL_API_URL?.trim();
+	const configuredApiUrl =
+		environment.STEEL_BROWSER_API_URL?.trim() ||
+		environment.STEEL_LOCAL_API_URL?.trim() ||
+		environment.STEEL_API_URL?.trim();
 	if (!configuredApiUrl) {
 		return '3000';
 	}
@@ -137,16 +144,13 @@ export function resolveComposeCommand(
 	return null;
 }
 
-function ensureLocalBrowserRepo(
+function cloneLocalBrowserRepo(
 	configDirectory: string,
 	repoUrl: string,
 	runner: CommandRunner,
 	verbose = false,
 ): string {
 	const repoPath = getLocalBrowserRepoPath(configDirectory, repoUrl);
-	if (fs.existsSync(repoPath)) {
-		return repoPath;
-	}
 
 	fs.mkdirSync(configDirectory, {recursive: true});
 	const cloneResult = runner('git', ['clone', repoUrl], {
@@ -163,6 +167,36 @@ function ensureLocalBrowserRepo(
 	return repoPath;
 }
 
+export function installLocalBrowserRuntime(
+	options: InstallLocalBrowserRuntimeOptions = {},
+): {repoPath: string; repoUrl: string; installed: boolean} {
+	const configDirectory = options.configDirectory || DEFAULT_CONFIG_DIR;
+	const repoUrl = options.repoUrl || DEFAULT_REPO_URL;
+	const runner = options.runner || defaultRunner;
+	const repoPath = getLocalBrowserRepoPath(configDirectory, repoUrl);
+
+	if (fs.existsSync(repoPath)) {
+		return {
+			repoPath,
+			repoUrl,
+			installed: false,
+		};
+	}
+
+	const clonedRepoPath = cloneLocalBrowserRepo(
+		configDirectory,
+		repoUrl,
+		runner,
+		options.verbose,
+	);
+
+	return {
+		repoPath: clonedRepoPath,
+		repoUrl,
+		installed: true,
+	};
+}
+
 export function startLocalBrowserRuntime(
 	options: StartLocalBrowserRuntimeOptions = {},
 ): {repoPath: string; apiPort: string; composeCommand: ComposeCommand} {
@@ -171,17 +205,18 @@ export function startLocalBrowserRuntime(
 	const environment = options.environment || process.env;
 	const runner = options.runner || defaultRunner;
 	const verbose = options.verbose || false;
+	const repoPath = getLocalBrowserRepoPath(configDirectory, repoUrl);
+
+	if (!fs.existsSync(repoPath)) {
+		throw new Error(
+			'Local browser runtime is not installed. Run `steel dev install` first.',
+		);
+	}
 
 	if (!options.skipDockerCheck && !isDockerRunning(runner)) {
 		throw new Error('Docker is not running. Start Docker and try again.');
 	}
 
-	const repoPath = ensureLocalBrowserRepo(
-		configDirectory,
-		repoUrl,
-		runner,
-		verbose,
-	);
 	const composeCommand = resolveComposeCommand(runner);
 	if (!composeCommand) {
 		throw new Error(
@@ -227,7 +262,7 @@ export function stopLocalBrowserRuntime(
 
 	if (!fs.existsSync(repoPath)) {
 		throw new Error(
-			'No local browser runtime repository found. Run `steel dev start` first.',
+			'Local browser runtime is not installed. Run `steel dev install` first.',
 		);
 	}
 

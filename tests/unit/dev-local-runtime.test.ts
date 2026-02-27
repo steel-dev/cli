@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
 	deriveLocalApiPort,
+	installLocalBrowserRuntime,
 	resolveComposeCommand,
 	startLocalBrowserRuntime,
 	stopLocalBrowserRuntime,
@@ -26,15 +27,17 @@ describe('local runtime port derivation', () => {
 		expect(deriveLocalApiPort({}, 4123)).toBe('4123');
 	});
 
-	test('derives port from STEEL_API_URL', () => {
+	test('derives port from canonical local API URL env var', () => {
 		expect(
-			deriveLocalApiPort({STEEL_API_URL: 'http://localhost:3355/v1'}),
+			deriveLocalApiPort({
+				STEEL_BROWSER_API_URL: 'http://localhost:3355/v1',
+			}),
 		).toBe('3355');
 	});
 
 	test('falls back to 3000 when API URL is missing or invalid', () => {
 		expect(deriveLocalApiPort({})).toBe('3000');
-		expect(deriveLocalApiPort({STEEL_API_URL: 'not-a-url'})).toBe('3000');
+		expect(deriveLocalApiPort({STEEL_LOCAL_API_URL: 'not-a-url'})).toBe('3000');
 	});
 });
 
@@ -74,12 +77,91 @@ describe('local runtime compose detection', () => {
 	});
 });
 
-describe('local runtime lifecycle', () => {
-	test('starts runtime with clone + compose up', () => {
+describe('local runtime install', () => {
+	test('clones the runtime repository when missing', () => {
 		const tempDirectory = createTempDirectory();
 		const repoUrl = 'https://github.com/steel-dev/steel-browser.git';
 		const expectedRepoPath = path.join(tempDirectory, 'steel-browser');
 		const invocations: Invocation[] = [];
+
+		const runner: CommandRunner = (command, args, options) => {
+			invocations.push({command, args, options});
+
+			if (command === 'git' && args[0] === 'clone') {
+				fs.mkdirSync(expectedRepoPath, {recursive: true});
+				return {status: 0};
+			}
+
+			return {status: 1};
+		};
+
+		try {
+			const result = installLocalBrowserRuntime({
+				configDirectory: tempDirectory,
+				repoUrl,
+				runner,
+			});
+
+			expect(result).toEqual({
+				repoPath: expectedRepoPath,
+				repoUrl,
+				installed: true,
+			});
+			expect(invocations).toEqual([
+				{
+					command: 'git',
+					args: ['clone', repoUrl],
+					options: {
+						cwd: tempDirectory,
+						stdio: 'ignore',
+					},
+				},
+			]);
+		} finally {
+			fs.rmSync(tempDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('is idempotent when runtime repository already exists', () => {
+		const tempDirectory = createTempDirectory();
+		const repoUrl = 'https://github.com/steel-dev/steel-browser.git';
+		const expectedRepoPath = path.join(tempDirectory, 'steel-browser');
+		const invocations: Invocation[] = [];
+
+		fs.mkdirSync(expectedRepoPath, {recursive: true});
+
+		const runner: CommandRunner = (command, args, options) => {
+			invocations.push({command, args, options});
+			return {status: 1};
+		};
+
+		try {
+			const result = installLocalBrowserRuntime({
+				configDirectory: tempDirectory,
+				repoUrl,
+				runner,
+			});
+
+			expect(result).toEqual({
+				repoPath: expectedRepoPath,
+				repoUrl,
+				installed: false,
+			});
+			expect(invocations).toEqual([]);
+		} finally {
+			fs.rmSync(tempDirectory, {recursive: true, force: true});
+		}
+	});
+});
+
+describe('local runtime lifecycle', () => {
+	test('starts runtime with compose up when runtime is installed', () => {
+		const tempDirectory = createTempDirectory();
+		const repoUrl = 'https://github.com/steel-dev/steel-browser.git';
+		const expectedRepoPath = path.join(tempDirectory, 'steel-browser');
+		const invocations: Invocation[] = [];
+
+		fs.mkdirSync(expectedRepoPath, {recursive: true});
 
 		const runner: CommandRunner = (
 			command: string,
@@ -93,11 +175,6 @@ describe('local runtime lifecycle', () => {
 			}
 
 			if (command === 'docker-compose' && args[0] === 'version') {
-				return {status: 0};
-			}
-
-			if (command === 'git' && args[0] === 'clone') {
-				fs.mkdirSync(expectedRepoPath, {recursive: true});
 				return {status: 0};
 			}
 
@@ -116,7 +193,7 @@ describe('local runtime lifecycle', () => {
 				configDirectory: tempDirectory,
 				repoUrl,
 				runner,
-				environment: {STEEL_API_URL: 'http://localhost:4567/v1'},
+				environment: {STEEL_BROWSER_API_URL: 'http://localhost:4567/v1'},
 			});
 
 			expect(result.repoPath).toBe(expectedRepoPath);
@@ -133,6 +210,20 @@ describe('local runtime lifecycle', () => {
 			);
 			expect(composeInvocation?.options?.cwd).toBe(expectedRepoPath);
 			expect(composeInvocation?.options?.env?.API_PORT).toBe('4567');
+		} finally {
+			fs.rmSync(tempDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('throws when starting without an installed repository', () => {
+		const tempDirectory = createTempDirectory();
+
+		try {
+			expect(() =>
+				startLocalBrowserRuntime({
+					configDirectory: tempDirectory,
+				}),
+			).toThrow('Local browser runtime is not installed.');
 		} finally {
 			fs.rmSync(tempDirectory, {recursive: true, force: true});
 		}
@@ -186,7 +277,7 @@ describe('local runtime lifecycle', () => {
 		}
 	});
 
-	test('throws when stopping without a checked-out repository', () => {
+	test('throws when stopping without an installed repository', () => {
 		const tempDirectory = createTempDirectory();
 
 		try {
@@ -194,7 +285,7 @@ describe('local runtime lifecycle', () => {
 				stopLocalBrowserRuntime({
 					configDirectory: tempDirectory,
 				}),
-			).toThrow('No local browser runtime repository found');
+			).toThrow('Local browser runtime is not installed.');
 		} finally {
 			fs.rmSync(tempDirectory, {recursive: true, force: true});
 		}

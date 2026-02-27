@@ -92,6 +92,14 @@ describe('browser adapter routing contract', () => {
 			requiresBrowserAuth(['open', 'https://example.com', '--local']),
 		).toBe(false);
 		expect(
+			requiresBrowserAuth([
+				'open',
+				'https://example.com',
+				'--api-url',
+				'https://steel.local.dev/v1',
+			]),
+		).toBe(false);
+		expect(
 			requiresBrowserAuth(['open', 'https://example.com', '--auto-connect']),
 		).toBe(false);
 		expect(

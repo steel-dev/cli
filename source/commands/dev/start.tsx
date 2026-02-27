@@ -9,7 +9,7 @@ import {
 } from '../../utils/dev/local.js';
 
 export const description =
-	'Start local Steel Browser runtime with Docker Compose';
+	'Start local Steel Browser runtime containers (requires `steel dev install`)';
 
 export const options = zod.object({
 	port: zod

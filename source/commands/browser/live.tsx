@@ -18,6 +18,14 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	apiUrl: zod
+		.string()
+		.describe(
+			option({
+				description: 'Explicit self-hosted API endpoint URL',
+			}),
+		)
+		.optional(),
 });
 
 type Props = {
@@ -30,6 +38,7 @@ export default function Live({options}: Props) {
 			try {
 				const liveUrl = await getActiveBrowserLiveUrl({
 					local: options.local,
+					apiUrl: options.apiUrl,
 				});
 
 				if (!liveUrl) {
@@ -56,5 +65,5 @@ export default function Live({options}: Props) {
 		}
 
 		run();
-	}, [options.local]);
+	}, [options.apiUrl, options.local]);
 }

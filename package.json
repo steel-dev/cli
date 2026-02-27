@@ -22,10 +22,12 @@
 		"browser:runtime:package": "node scripts/package-browser-runtime.js",
 		"browser:runtime:smoke": "node scripts/browser-runtime-smoke.js",
 		"browser:cloud:smoke": "node scripts/browser-cloud-smoke.js",
+		"references:sync:agent-browser": "node scripts/sync-agent-browser-commands-reference.js",
 		"docs:generate": "npm run build && node scripts/generate-docs.js",
-		"test": "npm run build && vitest run",
+		"test": "npm run build && node scripts/test-integration-table.js",
 		"test:unit": "vitest run tests/unit",
-		"test:integration": "npm run build && vitest run tests/integration",
+		"test:integration": "npm run build && node scripts/test-integration-table.js tests/integration",
+		"test:integration:raw": "npm run build && vitest run tests/integration",
 		"test:watch": "vitest tests/unit"
 	},
 	"files": [

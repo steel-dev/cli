@@ -7,7 +7,7 @@ import {startBrowserSession} from '../../utils/browser/lifecycle.js';
 import {BrowserAdapterError} from '../../utils/browser/errors.js';
 
 export const description =
-	'Create or attach a Steel browser session (local Docker runtime: `steel dev start`)';
+	'Create or attach a Steel browser session (cloud by default)';
 
 export const options = zod.object({
 	local: zod
@@ -16,6 +16,14 @@ export const options = zod.object({
 			option({
 				description: 'Start or attach a local Steel browser session',
 				alias: 'l',
+			}),
+		)
+		.optional(),
+	apiUrl: zod
+		.string()
+		.describe(
+			option({
+				description: 'Explicit self-hosted API endpoint URL',
 			}),
 		)
 		.optional(),
@@ -57,6 +65,7 @@ export default function Start({options}: Props) {
 			try {
 				const session = await startBrowserSession({
 					local: options.local,
+					apiUrl: options.apiUrl,
 					sessionName: options.session,
 					stealth: options.stealth,
 					proxyUrl: options.proxy,
@@ -93,5 +102,11 @@ export default function Start({options}: Props) {
 		}
 
 		run();
-	}, [options.local, options.proxy, options.session, options.stealth]);
+	}, [
+		options.apiUrl,
+		options.local,
+		options.proxy,
+		options.session,
+		options.stealth,
+	]);
 }

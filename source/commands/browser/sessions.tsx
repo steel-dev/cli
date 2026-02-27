@@ -18,6 +18,14 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	apiUrl: zod
+		.string()
+		.describe(
+			option({
+				description: 'Explicit self-hosted API endpoint URL',
+			}),
+		)
+		.optional(),
 });
 
 type Props = {
@@ -30,6 +38,7 @@ export default function Sessions({options}: Props) {
 			try {
 				const sessions = await listBrowserSessions({
 					local: options.local,
+					apiUrl: options.apiUrl,
 				});
 				console.log(JSON.stringify({sessions}, null, 2));
 				process.exit(0);
@@ -47,5 +56,5 @@ export default function Sessions({options}: Props) {
 		}
 
 		run();
-	}, [options.local]);
+	}, [options.apiUrl, options.local]);
 }

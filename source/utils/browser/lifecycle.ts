@@ -1,6 +1,8 @@
+import * as fsSync from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {getLocalBrowserRepoPath} from '../dev/local.js';
 import {resolveBrowserAuth} from './auth.js';
 import {BrowserAdapterError} from './errors.js';
 
@@ -26,6 +28,7 @@ type StartSessionRequestOptions = {
 
 type ParsedBootstrapOptions = {
 	local: boolean;
+	apiUrl: string | null;
 	sessionName: string | null;
 	stealth: boolean;
 	proxyUrl: string | null;
@@ -46,6 +49,7 @@ export type BrowserSessionSummary = {
 
 export type StartBrowserSessionOptions = {
 	local?: boolean;
+	apiUrl?: string;
 	sessionName?: string;
 	stealth?: boolean;
 	proxyUrl?: string;
@@ -55,6 +59,13 @@ export type StartBrowserSessionOptions = {
 export type StopBrowserSessionOptions = {
 	all?: boolean;
 	local?: boolean;
+	apiUrl?: string;
+	environment?: NodeJS.ProcessEnv;
+};
+
+type BrowserSessionEndpointOptions = {
+	local?: boolean;
+	apiUrl?: string;
 	environment?: NodeJS.ProcessEnv;
 };
 
@@ -255,19 +266,122 @@ function normalizeApiBaseUrl(url: string): string {
 	return url.replace(/\/+$/, '');
 }
 
-function getApiBaseUrl(
+function getConfigDirectory(environment: NodeJS.ProcessEnv): string {
+	return (
+		environment.STEEL_CONFIG_DIR?.trim() ||
+		path.join(os.homedir(), '.config', 'steel')
+	);
+}
+
+function getConfigPath(environment: NodeJS.ProcessEnv): string {
+	return path.join(getConfigDirectory(environment), 'config.json');
+}
+
+function coerceLocalApiUrlFromConfig(config: unknown): string | null {
+	if (!config || typeof config !== 'object') {
+		return null;
+	}
+
+	const browser = (config as Record<string, unknown>)['browser'];
+	if (!browser || typeof browser !== 'object') {
+		return null;
+	}
+
+	const apiUrl = (browser as Record<string, unknown>)['apiUrl'];
+	if (typeof apiUrl === 'string' && apiUrl.trim()) {
+		return apiUrl.trim();
+	}
+
+	return null;
+}
+
+async function getLocalApiUrlFromConfig(
+	environment: NodeJS.ProcessEnv,
+): Promise<string | null> {
+	try {
+		const configPath = getConfigPath(environment);
+		const configContents = await fs.readFile(configPath, 'utf-8');
+		const parsedConfig = JSON.parse(configContents) as unknown;
+		return coerceLocalApiUrlFromConfig(parsedConfig);
+	} catch {
+		return null;
+	}
+}
+
+function validateApiUrl(url: string): string {
+	try {
+		return normalizeApiBaseUrl(new URL(url).toString());
+	} catch {
+		throw new BrowserAdapterError(
+			'INVALID_BROWSER_ARGS',
+			`Invalid value for --api-url: ${url}`,
+		);
+	}
+}
+
+function resolveExplicitApiUrl(apiUrl?: string | null): string | null {
+	if (apiUrl === undefined || apiUrl === null) {
+		return null;
+	}
+
+	const trimmedApiUrl = apiUrl.trim();
+	if (!trimmedApiUrl) {
+		throw new BrowserAdapterError(
+			'INVALID_BROWSER_ARGS',
+			'Missing value for --api-url.',
+		);
+	}
+
+	return validateApiUrl(trimmedApiUrl);
+}
+
+async function getApiBaseUrl(
 	mode: BrowserSessionMode,
 	environment: NodeJS.ProcessEnv,
-): string {
+	apiUrl?: string | null,
+): Promise<string> {
 	if (mode === 'local') {
-		return normalizeApiBaseUrl(
-			environment.STEEL_LOCAL_API_URL?.trim() || DEFAULT_LOCAL_API_PATH,
-		);
+		const explicitApiUrl = resolveExplicitApiUrl(apiUrl);
+		if (explicitApiUrl) {
+			return explicitApiUrl;
+		}
+
+		const envApiUrl =
+			environment.STEEL_BROWSER_API_URL?.trim() ||
+			environment.STEEL_LOCAL_API_URL?.trim();
+		if (envApiUrl) {
+			return normalizeApiBaseUrl(envApiUrl);
+		}
+
+		const configApiUrl = await getLocalApiUrlFromConfig(environment);
+		if (configApiUrl) {
+			return normalizeApiBaseUrl(configApiUrl);
+		}
+
+		return normalizeApiBaseUrl(DEFAULT_LOCAL_API_PATH);
 	}
 
 	return normalizeApiBaseUrl(
 		environment.STEEL_API_URL?.trim() || DEFAULT_API_PATH,
 	);
+}
+
+function isLocalhostEndpoint(apiBaseUrl: string): boolean {
+	try {
+		const parsedUrl = new URL(apiBaseUrl);
+		return (
+			parsedUrl.hostname === 'localhost' ||
+			parsedUrl.hostname === '127.0.0.1' ||
+			parsedUrl.hostname === '::1'
+		);
+	} catch {
+		return false;
+	}
+}
+
+function isLocalRuntimeInstalled(environment: NodeJS.ProcessEnv): boolean {
+	const repoPath = getLocalBrowserRepoPath(getConfigDirectory(environment));
+	return fsSync.existsSync(repoPath);
 }
 
 function getConnectUrl(session: UnknownRecord): string | null {
@@ -444,6 +558,7 @@ async function requestApi(
 	pathname: string,
 	method: 'GET' | 'POST',
 	body?: UnknownRecord,
+	apiUrl?: string | null,
 ): Promise<unknown> {
 	const auth = resolveBrowserAuth(environment);
 	if (mode === 'cloud' && !auth.apiKey) {
@@ -461,14 +576,38 @@ async function requestApi(
 		headers['Steel-Api-Key'] = auth.apiKey;
 	}
 
-	const response = await fetch(
-		`${getApiBaseUrl(mode, environment)}${pathname}`,
-		{
+	const apiBaseUrl = await getApiBaseUrl(mode, environment, apiUrl);
+	let response: Response;
+
+	try {
+		response = await fetch(`${apiBaseUrl}${pathname}`, {
 			method,
 			headers,
 			body: body ? JSON.stringify(body) : undefined,
-		},
-	);
+		});
+	} catch (error) {
+		if (mode === 'local' && isLocalhostEndpoint(apiBaseUrl)) {
+			if (!isLocalRuntimeInstalled(environment)) {
+				throw new BrowserAdapterError(
+					'API_ERROR',
+					'Local Steel Browser runtime is not installed. Run `steel dev install` first.',
+					error,
+				);
+			}
+
+			throw new BrowserAdapterError(
+				'API_ERROR',
+				'Local Steel Browser runtime is not running. Run `steel dev start` and try again.',
+				error,
+			);
+		}
+
+		throw new BrowserAdapterError(
+			'API_ERROR',
+			`Failed to reach Steel session API at ${apiBaseUrl}.`,
+			error,
+		);
+	}
 
 	const responseText = await response.text();
 	let responseData: unknown = null;
@@ -501,8 +640,16 @@ async function requestApi(
 async function listSessionsFromApi(
 	mode: BrowserSessionMode,
 	environment: NodeJS.ProcessEnv,
+	apiUrl?: string | null,
 ): Promise<UnknownRecord[]> {
-	const responseData = await requestApi(mode, environment, '/sessions', 'GET');
+	const responseData = await requestApi(
+		mode,
+		environment,
+		'/sessions',
+		'GET',
+		undefined,
+		apiUrl,
+	);
 	return extractSessionList(responseData);
 }
 
@@ -510,12 +657,15 @@ async function getSessionFromApi(
 	mode: BrowserSessionMode,
 	sessionId: string,
 	environment: NodeJS.ProcessEnv,
+	apiUrl?: string | null,
 ): Promise<UnknownRecord> {
 	const responseData = await requestApi(
 		mode,
 		environment,
 		`/sessions/${sessionId}`,
 		'GET',
+		undefined,
+		apiUrl,
 	);
 	return extractSingleSession(responseData);
 }
@@ -524,6 +674,7 @@ async function createSessionFromApi(
 	mode: BrowserSessionMode,
 	options: StartSessionRequestOptions,
 	environment: NodeJS.ProcessEnv,
+	apiUrl?: string | null,
 ): Promise<UnknownRecord> {
 	const payload: UnknownRecord = {};
 
@@ -545,6 +696,7 @@ async function createSessionFromApi(
 		'/sessions',
 		'POST',
 		payload,
+		apiUrl,
 	);
 	return extractSingleSession(responseData);
 }
@@ -553,17 +705,31 @@ async function releaseSession(
 	mode: BrowserSessionMode,
 	sessionId: string,
 	environment: NodeJS.ProcessEnv,
+	apiUrl?: string | null,
 ): Promise<void> {
-	await requestApi(mode, environment, `/sessions/${sessionId}/release`, 'POST');
+	await requestApi(
+		mode,
+		environment,
+		`/sessions/${sessionId}/release`,
+		'POST',
+		undefined,
+		apiUrl,
+	);
 }
 
 async function tryGetLiveSession(
 	mode: BrowserSessionMode,
 	sessionId: string,
 	environment: NodeJS.ProcessEnv,
+	apiUrl?: string | null,
 ): Promise<UnknownRecord | null> {
 	try {
-		const session = await getSessionFromApi(mode, sessionId, environment);
+		const session = await getSessionFromApi(
+			mode,
+			sessionId,
+			environment,
+			apiUrl,
+		);
 		return isSessionLive(session) ? session : null;
 	} catch (error) {
 		if (error instanceof BrowserAdapterError && error.code === 'API_ERROR') {
@@ -604,6 +770,7 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 } {
 	const options: ParsedBootstrapOptions = {
 		local: false,
+		apiUrl: null,
 		sessionName: null,
 		stealth: false,
 		proxyUrl: null,
@@ -622,6 +789,29 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 
 		if (argument === '--stealth') {
 			options.stealth = true;
+			continue;
+		}
+
+		if (argument === '--api-url' || argument.startsWith('--api-url=')) {
+			const value =
+				argument === '--api-url'
+					? browserArgv[index + 1]
+					: argument.slice('--api-url='.length);
+
+			if (!value) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'Missing value for --api-url.',
+				);
+			}
+
+			options.apiUrl = resolveExplicitApiUrl(value);
+			options.local = true;
+
+			if (argument === '--api-url') {
+				index++;
+			}
+
 			continue;
 		}
 
@@ -732,8 +922,9 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 export async function startBrowserSession(
 	options: StartBrowserSessionOptions = {},
 ): Promise<BrowserSessionSummary> {
-	const mode: BrowserSessionMode = options.local ? 'local' : 'cloud';
 	const environment = options.environment || process.env;
+	const apiUrl = resolveExplicitApiUrl(options.apiUrl);
+	const mode: BrowserSessionMode = options.local || apiUrl ? 'local' : 'cloud';
 	const sessionName = options.sessionName?.trim() || null;
 
 	return withSessionStateLock(async state => {
@@ -750,6 +941,7 @@ export async function startBrowserSession(
 				mode,
 				candidateSessionId,
 				environment,
+				apiUrl,
 			);
 
 			if (existingSession) {
@@ -772,6 +964,7 @@ export async function startBrowserSession(
 				proxyUrl: options.proxyUrl,
 			},
 			environment,
+			apiUrl,
 		);
 		const createdSessionId = getSessionId(createdSession);
 
@@ -791,14 +984,14 @@ export async function startBrowserSession(
 	});
 }
 
-export async function listBrowserSessions(options?: {
-	local?: boolean;
-	environment?: NodeJS.ProcessEnv;
-}): Promise<BrowserSessionSummary[]> {
-	const mode: BrowserSessionMode = options?.local ? 'local' : 'cloud';
+export async function listBrowserSessions(
+	options?: BrowserSessionEndpointOptions,
+): Promise<BrowserSessionSummary[]> {
 	const environment = options?.environment || process.env;
+	const apiUrl = resolveExplicitApiUrl(options?.apiUrl);
+	const mode: BrowserSessionMode = options?.local || apiUrl ? 'local' : 'cloud';
 	const state = await readSessionState();
-	const sessions = await listSessionsFromApi(mode, environment);
+	const sessions = await listSessionsFromApi(mode, environment, apiUrl);
 
 	return sessions.map(session => {
 		const sessionId = getSessionId(session);
@@ -809,14 +1002,16 @@ export async function listBrowserSessions(options?: {
 	});
 }
 
-export async function getActiveBrowserLiveUrl(options?: {
-	local?: boolean;
-	environment?: NodeJS.ProcessEnv;
-}): Promise<string | null> {
+export async function getActiveBrowserLiveUrl(
+	options?: BrowserSessionEndpointOptions,
+): Promise<string | null> {
 	const environment = options?.environment || process.env;
+	const apiUrl = resolveExplicitApiUrl(options?.apiUrl);
 	const state = await readSessionState();
 	const mode: BrowserSessionMode =
-		options?.local || (!options?.local && state.activeSessionMode === 'local')
+		options?.local ||
+		apiUrl ||
+		(!options?.local && !apiUrl && state.activeSessionMode === 'local')
 			? 'local'
 			: 'cloud';
 
@@ -828,6 +1023,7 @@ export async function getActiveBrowserLiveUrl(options?: {
 		mode,
 		state.activeSessionId,
 		environment,
+		apiUrl,
 	);
 	if (!session) {
 		return null;
@@ -846,15 +1042,18 @@ export async function stopBrowserSession(
 	options: StopBrowserSessionOptions = {},
 ): Promise<StopBrowserSessionResult> {
 	const environment = options.environment || process.env;
+	const apiUrl = resolveExplicitApiUrl(options.apiUrl);
 
 	return withSessionStateLock(async state => {
 		const mode: BrowserSessionMode =
-			options.local || (!options.local && state.activeSessionMode === 'local')
+			options.local ||
+			apiUrl ||
+			(!options.local && !apiUrl && state.activeSessionMode === 'local')
 				? 'local'
 				: 'cloud';
 
 		if (options.all) {
-			const sessions = await listSessionsFromApi(mode, environment);
+			const sessions = await listSessionsFromApi(mode, environment, apiUrl);
 			const liveSessionIds = sessions
 				.filter(session => isSessionLive(session))
 				.map(session => getSessionId(session))
@@ -862,7 +1061,7 @@ export async function stopBrowserSession(
 
 			for (const sessionId of liveSessionIds) {
 				try {
-					await releaseSession(mode, sessionId, environment);
+					await releaseSession(mode, sessionId, environment, apiUrl);
 				} catch {
 					// Continue best-effort release for all sessions.
 				}
@@ -888,7 +1087,7 @@ export async function stopBrowserSession(
 			};
 		}
 
-		await releaseSession(mode, targetSessionId, environment);
+		await releaseSession(mode, targetSessionId, environment, apiUrl);
 		clearActiveSessionState(state, mode, targetSessionId);
 
 		return {
@@ -918,6 +1117,7 @@ export async function bootstrapBrowserPassthroughArgv(
 
 	const session = await startBrowserSession({
 		local: parsed.options.local,
+		apiUrl: parsed.options.apiUrl || undefined,
 		sessionName: parsed.options.sessionName || undefined,
 		stealth: parsed.options.stealth,
 		proxyUrl: parsed.options.proxyUrl || undefined,

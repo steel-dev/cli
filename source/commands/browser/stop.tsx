@@ -9,8 +9,7 @@ import {
 } from '../../utils/browser/lifecycle.js';
 import {BrowserAdapterError} from '../../utils/browser/errors.js';
 
-export const description =
-	'Stop the active Steel browser session (local Docker runtime: `steel dev stop`)';
+export const description = 'Stop the active Steel browser session';
 
 export const options = zod.object({
 	all: zod
@@ -19,6 +18,23 @@ export const options = zod.object({
 			option({
 				description: 'Stop all live sessions in the active mode',
 				alias: 'a',
+			}),
+		)
+		.optional(),
+	local: zod
+		.boolean()
+		.describe(
+			option({
+				description: 'Stop sessions from local Steel runtime mode',
+				alias: 'l',
+			}),
+		)
+		.optional(),
+	apiUrl: zod
+		.string()
+		.describe(
+			option({
+				description: 'Explicit self-hosted API endpoint URL',
 			}),
 		)
 		.optional(),
@@ -49,6 +65,8 @@ export default function Stop({options}: Props) {
 			try {
 				const result = await stopBrowserSession({
 					all: options.all,
+					local: options.local,
+					apiUrl: options.apiUrl,
 				});
 
 				printResult(result);
@@ -69,5 +87,5 @@ export default function Stop({options}: Props) {
 		}
 
 		run();
-	}, [options.all]);
+	}, [options.all, options.apiUrl, options.local]);
 }

@@ -265,6 +265,7 @@ async function main() {
 		...process.env,
 		STEEL_CLI_SKIP_UPDATE_CHECK: 'true',
 		FORCE_COLOR: '0',
+		NODE_NO_WARNINGS: '1',
 	};
 
 	let shouldStopSession = false;

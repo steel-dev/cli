@@ -58,7 +58,11 @@ export function requiresBrowserAuth(browserArgv: string[]): boolean {
 		return false;
 	}
 
-	if (browserArgv.includes('--local')) {
+	if (
+		browserArgv.includes('--local') ||
+		browserArgv.includes('--api-url') ||
+		browserArgv.some(argument => argument.startsWith('--api-url='))
+	) {
 		return false;
 	}
 

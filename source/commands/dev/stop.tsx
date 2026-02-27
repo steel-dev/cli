@@ -5,8 +5,7 @@ import zod from 'zod';
 import {option} from 'pastel';
 import {stopLocalBrowserRuntime} from '../../utils/dev/local.js';
 
-export const description =
-	'Stop local Steel Browser runtime managed by Docker Compose';
+export const description = 'Stop local Steel Browser runtime containers';
 
 export const options = zod.object({
 	verbose: zod
