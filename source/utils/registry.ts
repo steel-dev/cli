@@ -61,7 +61,7 @@ export function convertManifestToTemplates(manifest: Manifest): Template[] {
 				alias: example.slug,
 				label: example.title,
 				value: example.id,
-				language: mapLanguage(example.language, example.stack),
+				language: mapLanguage(example.language),
 				category: example.category,
 				accentColor: example.accentColor,
 				groupId: example.groupId,
@@ -77,7 +77,7 @@ export function convertManifestToTemplates(manifest: Manifest): Template[] {
 		});
 }
 
-function mapLanguage(language: string, stack: string): string {
+function mapLanguage(language: string): string {
 	if (language === 'typescript') return 'TS';
 	if (language === 'javascript') return 'JS';
 	if (language === 'python') return 'PY';

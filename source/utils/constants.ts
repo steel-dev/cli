@@ -1,6 +1,6 @@
 import path from 'path';
 import os from 'os';
-import type {TemplateOptions, Template} from './types.js';
+import type {Template} from './types.js';
 import {loadManifest, convertManifestToTemplates} from './registry.js';
 
 export const LOGIN_URL = 'https://app.steel.dev/sign-in';
