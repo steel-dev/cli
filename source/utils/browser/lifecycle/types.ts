@@ -70,6 +70,7 @@ export type StartBrowserSessionOptions = {
 
 export type StopBrowserSessionOptions = {
 	all?: boolean;
+	sessionName?: string;
 	local?: boolean;
 	apiUrl?: string;
 	environment?: NodeJS.ProcessEnv;
@@ -87,6 +88,7 @@ export type SolveBrowserSessionCaptchaOptions = {
 };
 
 export type BrowserSessionEndpointOptions = {
+	sessionName?: string;
 	local?: boolean;
 	apiUrl?: string;
 	environment?: NodeJS.ProcessEnv;
@@ -103,5 +105,37 @@ export type SolveBrowserSessionCaptchaResult = {
 	sessionId: string;
 	success: boolean;
 	message: string | null;
+	raw: UnknownRecord;
+};
+
+export type GetCaptchaStatusRequestOptions = {
+	pageId?: string;
+};
+
+export type GetBrowserSessionCaptchaStatusOptions = {
+	sessionId?: string;
+	sessionName?: string;
+	local?: boolean;
+	apiUrl?: string;
+	pageId?: string;
+	wait?: boolean;
+	timeout?: number;
+	interval?: number;
+	environment?: NodeJS.ProcessEnv;
+};
+
+export type CaptchaStatusValue = 'none' | 'solving' | 'solved' | 'failed';
+
+export type CaptchaType =
+	| 'recaptchaV2'
+	| 'recaptchaV3'
+	| 'turnstile'
+	| 'image_to_text';
+
+export type GetBrowserSessionCaptchaStatusResult = {
+	mode: BrowserSessionMode;
+	sessionId: string;
+	status: CaptchaStatusValue;
+	types: CaptchaType[];
 	raw: UnknownRecord;
 };

@@ -1,6 +1,6 @@
 ---
 name: steel-browser
-description: Use this skill whenever a user needs terminal-first browser automation with `steel browser`, asks to navigate/click/fill/snapshot/extract from websites, needs explicit browser session lifecycle control (`start`, `stop`, `sessions`, `live`, `captcha solve`), or wants to migrate `agent-browser` scripts. Trigger even when the user does not mention this skill by name and instead asks for multi-step web workflows, CDP attach behavior, local runtime setup, CAPTCHA handling, or browser automation troubleshooting.
+description: Use this skill whenever a user needs terminal-first browser automation with `steel browser`, asks to navigate/click/fill/snapshot/get content from websites, needs explicit browser session lifecycle control (`start`, `stop`, `sessions`, `live`, `captcha solve`), or wants to migrate `agent-browser` scripts. Trigger even when the user does not mention this skill by name and instead asks for multi-step web workflows, CDP attach behavior, local runtime setup, CAPTCHA handling, or browser automation troubleshooting.
 ---
 
 # Steel Browser Skill
@@ -42,7 +42,7 @@ SESSION="task-$(date +%s)"
 steel browser start --session "$SESSION"
 steel browser open <url> --session "$SESSION"
 steel browser snapshot -i --session "$SESSION"
-# perform interactions/extraction commands
+# perform interactions/get/snapshot commands
 steel browser stop --session "$SESSION"
 ```
 
@@ -91,6 +91,7 @@ If the user asks for terse output, keep the same order but shorten prose.
 - Do not mix cloud and local mode in one flow unless explicitly transitioning.
 - Do not assume an existing active session without checking.
 - For inherited command uncertainty, use `steel browser <command> --help`.
+- There is no top-level `steel browser extract` command; use `steel browser get ...`, `steel browser snapshot`, and `steel browser find ...` instead.
 
 ## Reference routing table
 

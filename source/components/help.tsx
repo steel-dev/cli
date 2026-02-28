@@ -46,16 +46,16 @@ const BROWSER_LIFECYCLE_COMMANDS = [
 		description: 'Create or attach a managed Steel browser session.',
 	},
 	{
-		usage: 'steel browser stop [--all]',
-		description: 'Stop the active session or all mapped sessions.',
+		usage: 'steel browser stop [options]',
+		description: 'Stop the active session, a named session, or all sessions.',
 	},
 	{
 		usage: 'steel browser sessions',
 		description: 'List active sessions from the Steel Sessions API.',
 	},
 	{
-		usage: 'steel browser live',
-		description: 'Print the live viewer URL for the active session.',
+		usage: 'steel browser live [options]',
+		description: 'Print the live viewer URL for the active or named session.',
 	},
 	{
 		usage: 'steel browser captcha solve [options]',
@@ -73,6 +73,10 @@ const BROWSER_PASSTHROUGH_EXAMPLES = [
 
 const BROWSER_COMMAND_REFERENCE_PATH =
 	'docs/references/steel-browser-commands.md';
+
+function toCliOptionName(optionName: string): string {
+	return optionName.replaceAll(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
 
 // Function to scan command directory and get all available commands
 async function getAvailableCommands(baseDir = 'commands') {
@@ -220,7 +224,7 @@ function extractOptionInfo(optionSchema: ZodSchema) {
 			const isOptional = def._def?.typeName === 'ZodOptional';
 
 			return {
-				name,
+				name: toCliOptionName(name),
 				description: desc,
 				alias,
 				type,

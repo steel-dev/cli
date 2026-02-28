@@ -93,6 +93,7 @@ Purpose: stop active sessions.
 
 Main flags:
 
+- `--session <name>`
 - `--all`
 - `--local`
 - `--api-url <url>`
@@ -130,6 +131,7 @@ Purpose: print the active session live-view URL.
 
 Main flags:
 
+- `--session <name>`
 - `--local`
 - `--api-url <url>`
 

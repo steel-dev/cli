@@ -8,6 +8,7 @@ import {BrowserAdapterError} from '../errors.js';
 import {DEFAULT_API_PATH, DEFAULT_LOCAL_API_PATH} from './constants.js';
 import type {
 	BrowserSessionMode,
+	GetCaptchaStatusRequestOptions,
 	SolveCaptchaRequestOptions,
 	StartSessionRequestOptions,
 	UnknownRecord,
@@ -402,6 +403,44 @@ export async function solveSessionCaptchaFromApi(
 	}
 
 	return responseData as UnknownRecord;
+}
+
+export async function getCaptchaStatusFromApi(
+	mode: BrowserSessionMode,
+	sessionId: string,
+	options: GetCaptchaStatusRequestOptions,
+	environment: NodeJS.ProcessEnv,
+	apiUrl?: string | null,
+): Promise<UnknownRecord[]> {
+	let endpoint = `/sessions/${sessionId}/captchas/status`;
+	if (options.pageId?.trim()) {
+		endpoint += `?pageId=${encodeURIComponent(options.pageId.trim())}`;
+	}
+
+	const responseData = await requestApi(
+		mode,
+		environment,
+		endpoint,
+		'GET',
+		undefined,
+		apiUrl,
+	);
+
+	if (!responseData) {
+		return [];
+	}
+
+	if (Array.isArray(responseData)) {
+		return responseData.filter(
+			item => item && typeof item === 'object',
+		) as UnknownRecord[];
+	}
+
+	if (typeof responseData === 'object') {
+		return [responseData as UnknownRecord];
+	}
+
+	return [];
 }
 
 export async function releaseSession(

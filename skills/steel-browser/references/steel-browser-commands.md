@@ -77,6 +77,9 @@ steel browser get box @e1
 steel browser get styles @e1
 ```
 
+There is no top-level `steel browser extract` command.
+Use `steel browser get ...`, `steel browser snapshot`, and `steel browser find ...`.
+
 ## State checks
 
 ```bash
@@ -107,6 +110,9 @@ steel browser record start ./demo.webm
 steel browser record stop
 steel browser record restart ./take2.webm
 ```
+
+Use a positional file path for screenshot output.
+Do not use `-o`/`--output` with `steel browser screenshot`.
 
 ## Browser settings
 
@@ -203,6 +209,10 @@ steel browser highlight @e1
 ```bash
 steel browser start --session <name> --session-solve-captcha
 steel browser start --session <name> --stealth
+steel browser captcha status
+steel browser captcha status --wait
+steel browser captcha status --wait --timeout 120000
+steel browser captcha status --raw
 steel browser captcha solve --session <name>
 steel browser captcha solve --session <name> --page-id <id> --task-id <id>
 steel browser screenshot /tmp/captcha-progress.png --session <name>

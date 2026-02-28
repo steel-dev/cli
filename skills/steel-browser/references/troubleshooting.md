@@ -9,6 +9,7 @@ Run:
 ```bash
 steel browser sessions
 steel browser live
+# or: steel browser live --session <name>
 ```
 
 Then verify:
@@ -69,10 +70,39 @@ Important constraints:
 - Proxies are strongly recommended for CAPTCHA and anti-bot evasion.
 - `--proxy <url>` + CAPTCHA solving is the strongest default combo.
 
+**Checking CAPTCHA solving progress:**
+
+```bash
+# Quick status check (shows type if solving)
+steel browser captcha status
+# Output: solving recaptchaV2
+
+# Wait for CAPTCHA to resolve (blocks until done)
+steel browser captcha status --wait
+# Output: solved
+
+# With custom timeout (2 minutes)
+steel browser captcha status --wait --timeout 120000
+
+# Full JSON for debugging
+steel browser captcha status --raw
+```
+
+Use status checks to:
+
+- Verify CAPTCHA was detected
+- Wait for auto-solve to complete before continuing
+- Diagnose failed solves (see type in output)
+
 If session is auto solving (`--stealth`):
 
-1. Wait and watch the live page.
-2. Capture screenshots while waiting:
+1. Check status and wait for resolution:
+
+```bash
+steel browser captcha status --wait
+```
+
+2. Or capture screenshots while waiting:
 
 ```bash
 steel browser screenshot /tmp/captcha-auto-progress.png --session <name>
@@ -86,7 +116,13 @@ If session is manual solving (`--session-solve-captcha`):
 steel browser captcha solve --session <name>
 ```
 
-2. If needed, target a specific task:
+2. Wait for completion:
+
+```bash
+steel browser captcha status --wait
+```
+
+3. If needed, target a specific task:
 
 ```bash
 steel browser captcha solve --session <name> --page-id <id> --task-id <id>

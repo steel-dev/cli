@@ -1,6 +1,7 @@
 import {BrowserAdapterError} from './errors.js';
 import {
 	createSessionFromApi,
+	getCaptchaStatusFromApi,
 	getSessionFromApi,
 	listSessionsFromApi,
 	releaseSession,
@@ -28,6 +29,10 @@ import type {
 	BrowserSessionEndpointOptions,
 	BrowserSessionMode,
 	BrowserSessionSummary,
+	CaptchaStatusValue,
+	CaptchaType,
+	GetBrowserSessionCaptchaStatusOptions,
+	GetBrowserSessionCaptchaStatusResult,
 	SolveBrowserSessionCaptchaOptions,
 	SolveBrowserSessionCaptchaResult,
 	StartBrowserSessionOptions,
@@ -40,6 +45,10 @@ export {parseBrowserPassthroughBootstrapFlags};
 export type {
 	BrowserSessionMode,
 	BrowserSessionSummary,
+	CaptchaStatusValue,
+	CaptchaType,
+	GetBrowserSessionCaptchaStatusOptions,
+	GetBrowserSessionCaptchaStatusResult,
 	SolveBrowserSessionCaptchaOptions,
 	SolveBrowserSessionCaptchaResult,
 	StartBrowserSessionOptions,
@@ -219,6 +228,32 @@ export async function listBrowserSessions(
 	});
 }
 
+function resolveTargetSession(
+	options: {sessionName?: string},
+	mode: BrowserSessionMode,
+	state: Awaited<ReturnType<typeof readSessionState>>,
+): {sessionId: string | null; sessionName: string | null} {
+	const sessionName = options.sessionName?.trim();
+	if (sessionName) {
+		return {
+			sessionId: state.namedSessions[mode][sessionName] || null,
+			sessionName,
+		};
+	}
+
+	if (state.activeSessionMode === mode && state.activeSessionId) {
+		return {
+			sessionId: state.activeSessionId,
+			sessionName: state.activeSessionName,
+		};
+	}
+
+	return {
+		sessionId: null,
+		sessionName: null,
+	};
+}
+
 export async function getActiveBrowserLiveUrl(
 	options?: BrowserSessionEndpointOptions,
 ): Promise<string | null> {
@@ -232,13 +267,18 @@ export async function getActiveBrowserLiveUrl(
 		environment,
 	);
 
-	if (state.activeSessionMode !== mode || !state.activeSessionId) {
+	const targetSession = resolveTargetSession(
+		{sessionName: options?.sessionName},
+		mode,
+		state,
+	);
+	if (!targetSession.sessionId) {
 		return null;
 	}
 
 	const session = await tryGetLiveSession(
 		mode,
-		state.activeSessionId,
+		targetSession.sessionId,
 		environment,
 		apiUrl,
 	);
@@ -249,7 +289,7 @@ export async function getActiveBrowserLiveUrl(
 	const summary = toSessionSummary(
 		session,
 		mode,
-		state.activeSessionName,
+		targetSession.sessionName,
 		environment,
 	);
 	return summary.viewerUrl;
@@ -271,8 +311,11 @@ export async function stopBrowserSession(
 
 			return {
 				mode,
-				targetSessionId:
-					state.activeSessionMode === mode ? state.activeSessionId : null,
+				targetSessionId: resolveTargetSession(
+					{sessionName: options.sessionName},
+					mode,
+					state,
+				).sessionId,
 			};
 		},
 		{write: false},
@@ -392,6 +435,164 @@ export async function solveBrowserSessionCaptcha(
 		message: typeof message === 'string' ? message : null,
 		raw: rawResponse,
 	};
+}
+
+const DEFAULT_CAPTCHA_WAIT_TIMEOUT_MS = 60_000;
+const DEFAULT_CAPTCHA_POLL_INTERVAL_MS = 1_000;
+
+const KNOWN_CAPTCHA_TYPES: CaptchaType[] = [
+	'recaptchaV2',
+	'recaptchaV3',
+	'turnstile',
+	'image_to_text',
+];
+
+function wait(milliseconds: number): Promise<void> {
+	return new Promise(resolve => {
+		setTimeout(resolve, milliseconds);
+	});
+}
+
+function normalizeCaptchaStatus(pages: UnknownRecord[]): {
+	status: CaptchaStatusValue;
+	types: CaptchaType[];
+} {
+	if (!pages.length) {
+		return {status: 'none', types: []};
+	}
+
+	const allTasks: UnknownRecord[] = [];
+	let anySolving = false;
+
+	for (const page of pages) {
+		if (page['isSolvingCaptcha'] === true) {
+			anySolving = true;
+		}
+
+		const tasks = page['tasks'];
+		if (Array.isArray(tasks)) {
+			for (const task of tasks) {
+				if (task && typeof task === 'object') {
+					allTasks.push(task as UnknownRecord);
+				}
+			}
+		}
+	}
+
+	if (!allTasks.length) {
+		return {status: anySolving ? 'solving' : 'none', types: []};
+	}
+
+	const solvingTypes: Set<CaptchaType> = new Set();
+	const failedTypes: Set<CaptchaType> = new Set();
+	let hasSolving = false;
+	let hasFailed = false;
+	let hasSolved = false;
+
+	for (const task of allTasks) {
+		const taskStatus = task['status'];
+		const taskType = task['type'];
+		const captchaType = KNOWN_CAPTCHA_TYPES.includes(taskType as CaptchaType)
+			? (taskType as CaptchaType)
+			: null;
+
+		if (
+			taskStatus === 'solving' ||
+			taskStatus === 'detected' ||
+			taskStatus === 'validating'
+		) {
+			hasSolving = true;
+			if (captchaType) {
+				solvingTypes.add(captchaType);
+			}
+		} else if (
+			taskStatus === 'failed_to_solve' ||
+			taskStatus === 'failed_to_detect' ||
+			taskStatus === 'validation_failed'
+		) {
+			hasFailed = true;
+			if (captchaType) {
+				failedTypes.add(captchaType);
+			}
+		} else if (taskStatus === 'solved') {
+			hasSolved = true;
+		}
+	}
+
+	if (hasSolving || anySolving) {
+		return {status: 'solving', types: Array.from(solvingTypes)};
+	}
+
+	if (hasFailed) {
+		return {status: 'failed', types: Array.from(failedTypes)};
+	}
+
+	if (hasSolved) {
+		return {status: 'solved', types: []};
+	}
+
+	return {status: 'none', types: []};
+}
+
+function isTerminalCaptchaStatus(status: CaptchaStatusValue): boolean {
+	return status === 'solved' || status === 'failed' || status === 'none';
+}
+
+export async function getBrowserSessionCaptchaStatus(
+	options: GetBrowserSessionCaptchaStatusOptions = {},
+): Promise<GetBrowserSessionCaptchaStatusResult> {
+	const environment = options.environment || process.env;
+	const apiUrl = resolveExplicitApiUrl(options.apiUrl);
+	const state = await readSessionState();
+	const mode = resolveSessionMode(
+		options.local,
+		apiUrl,
+		state.activeSessionMode,
+		environment,
+	);
+	const sessionId = resolveSolveCaptchaSessionId(options, mode, state);
+
+	if (!sessionId) {
+		throw new BrowserAdapterError(
+			'SESSION_NOT_FOUND',
+			'No target browser session found for CAPTCHA status. Pass `--session-id`, pass `--session <name>`, or start a session first with `steel browser start --session <name>`.',
+		);
+	}
+
+	const timeout = options.timeout ?? DEFAULT_CAPTCHA_WAIT_TIMEOUT_MS;
+	const interval = options.interval ?? DEFAULT_CAPTCHA_POLL_INTERVAL_MS;
+	const startTime = Date.now();
+
+	while (true) {
+		const pages = await getCaptchaStatusFromApi(
+			mode,
+			sessionId,
+			{pageId: options.pageId},
+			environment,
+			apiUrl,
+		);
+
+		const {status, types} = normalizeCaptchaStatus(pages);
+
+		if (!options.wait || isTerminalCaptchaStatus(status)) {
+			return {
+				mode,
+				sessionId,
+				status,
+				types,
+				raw: {pages},
+			};
+		}
+
+		if (Date.now() - startTime >= timeout) {
+			throw new BrowserAdapterError(
+				'API_ERROR',
+				`CAPTCHA status polling timed out after ${timeout}ms. Last status: ${status}`,
+			);
+		}
+
+		await wait(interval);
+	}
 }
 
 export async function bootstrapBrowserPassthroughArgv(

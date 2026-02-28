@@ -52,6 +52,7 @@ Check active context:
 ```bash
 steel browser sessions
 steel browser live
+# or: steel browser live --session "$SESSION_NAME"
 ```
 
 Cloud auth verification:

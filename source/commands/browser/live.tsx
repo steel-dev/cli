@@ -6,9 +6,18 @@ import {option} from 'pastel';
 import {getActiveBrowserLiveUrl} from '../../utils/browser/lifecycle.js';
 import {BrowserAdapterError} from '../../utils/browser/errors.js';
 
-export const description = 'Print active session live-view URL';
+export const description = 'Print active or named session live-view URL';
 
 export const options = zod.object({
+	session: zod
+		.string()
+		.describe(
+			option({
+				description: 'Named session key to resolve live URL for',
+				alias: 's',
+			}),
+		)
+		.optional(),
 	local: zod
 		.boolean()
 		.describe(
@@ -37,14 +46,23 @@ export default function Live({options}: Props) {
 		async function run() {
 			try {
 				const liveUrl = await getActiveBrowserLiveUrl({
+					sessionName: options.session,
 					local: options.local,
 					apiUrl: options.apiUrl,
 				});
 
 				if (!liveUrl) {
-					console.error(
-						'No active live session found. Start one with `steel browser start`.',
-					);
+					const sessionName = options.session?.trim();
+					if (sessionName) {
+						console.error(
+							`No live session found for "${sessionName}". Start one with \`steel browser start --session ${sessionName}\`.`,
+						);
+					} else {
+						console.error(
+							'No active live session found. Start one with `steel browser start`.',
+						);
+					}
+
 					process.exit(1);
 					return;
 				}
@@ -65,5 +83,5 @@ export default function Live({options}: Props) {
 		}
 
 		run();
-	}, [options.apiUrl, options.local]);
+	}, [options.apiUrl, options.local, options.session]);
 }

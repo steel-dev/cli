@@ -323,7 +323,7 @@ steel browser captcha solve [options]
 
 ## steel browser live
 
-Print active session live-view URL
+Print active or named session live-view URL
 
 ### Usage
 
@@ -333,6 +333,7 @@ steel browser live [options]
 
 ### Options
 
+- -s, **--session**: Named session key to resolve live URL for
 - -l, **--local**: Resolve live URL from local active session
 - **--api-url**: Explicit self-hosted API endpoint URL
 
@@ -376,7 +377,7 @@ steel browser start [options]
 
 ## steel browser stop
 
-Stop the active Steel browser session
+Stop the active or named Steel browser session
 
 ### Usage
 
@@ -387,6 +388,7 @@ steel browser stop [options]
 ### Options
 
 - -a, **--all**: Stop all live sessions in the active mode
+- -s, **--session**: Named session key to stop
 - -l, **--local**: Stop sessions from local Steel runtime mode
 - **--api-url**: Explicit self-hosted API endpoint URL
 

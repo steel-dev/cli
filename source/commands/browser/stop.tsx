@@ -9,7 +9,7 @@ import {
 } from '../../utils/browser/lifecycle.js';
 import {BrowserAdapterError} from '../../utils/browser/errors.js';
 
-export const description = 'Stop the active Steel browser session';
+export const description = 'Stop the active or named Steel browser session';
 
 export const options = zod.object({
 	all: zod
@@ -18,6 +18,15 @@ export const options = zod.object({
 			option({
 				description: 'Stop all live sessions in the active mode',
 				alias: 'a',
+			}),
+		)
+		.optional(),
+	session: zod
+		.string()
+		.describe(
+			option({
+				description: 'Named session key to stop',
+				alias: 's',
 			}),
 		)
 		.optional(),
@@ -63,8 +72,15 @@ export default function Stop({options}: Props) {
 	useEffect(() => {
 		async function run() {
 			try {
+				if (options.all && options.session) {
+					console.error('Cannot combine `--all` with `--session`.');
+					process.exit(1);
+					return;
+				}
+
 				const result = await stopBrowserSession({
 					all: options.all,
+					sessionName: options.session,
 					local: options.local,
 					apiUrl: options.apiUrl,
 				});
@@ -87,5 +103,5 @@ export default function Stop({options}: Props) {
 		}
 
 		run();
-	}, [options.all, options.apiUrl, options.local]);
+	}, [options.all, options.apiUrl, options.local, options.session]);
 }

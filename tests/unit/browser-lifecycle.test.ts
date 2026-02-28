@@ -1126,6 +1126,53 @@ describe('browser lifecycle session contract', () => {
 		}
 	});
 
+	test('stops a named mapped session when --session is provided', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			writeSessionState(configDirectory, {
+				activeSessionId: 'session-active',
+				activeSessionMode: 'cloud',
+				activeSessionName: 'active',
+				namedSessions: {
+					cloud: {
+						active: 'session-active',
+						daily: 'session-daily',
+					},
+					local: {},
+				},
+				updatedAt: null,
+			});
+
+			fetchMock.mockResolvedValueOnce(createJsonResponse(200, {ok: true}));
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const result = await lifecycle.stopBrowserSession({
+				sessionName: 'daily',
+				environment: {STEEL_API_KEY: 'env-api-key'},
+			});
+
+			expect(result).toEqual({
+				mode: 'cloud',
+				all: false,
+				stoppedSessionIds: ['session-daily'],
+			});
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions/session-daily/release',
+			);
+
+			const state = readSessionState(configDirectory);
+			expect(state.activeSessionMode).toBe('cloud');
+			expect(state.activeSessionId).toBe('session-active');
+			expect(state.namedSessions.cloud).toEqual({
+				active: 'session-active',
+			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
 	test('returns fallback cloud live URL for the active session', async () => {
 		const configDirectory = createTempConfigDirectory();
 
@@ -1154,6 +1201,46 @@ describe('browser lifecycle session contract', () => {
 			});
 
 			expect(liveUrl).toBe('https://app.steel.dev/sessions/session-live');
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('returns live URL for a named session when requested', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			writeSessionState(configDirectory, {
+				activeSessionId: null,
+				activeSessionMode: null,
+				activeSessionName: null,
+				namedSessions: {
+					cloud: {
+						daily: 'session-live-named',
+					},
+					local: {},
+				},
+				updatedAt: null,
+			});
+
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(200, {
+					id: 'session-live-named',
+					status: 'live',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const liveUrl = await lifecycle.getActiveBrowserLiveUrl({
+				sessionName: 'daily',
+				environment: {STEEL_API_KEY: 'env-api-key'},
+			});
+
+			expect(liveUrl).toBe('https://app.steel.dev/sessions/session-live-named');
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions/session-live-named',
+			);
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}
