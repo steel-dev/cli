@@ -1,50 +1,85 @@
 {
 	"name": "Steel Registry",
 	"description": "A collection of examples for using Steel",
-	"version": "441018c",
+	"version": "48170c9",
 	"groups": [
 		{
 			"id": "playwright-starter",
-			"title": "Using Playwright with Steel",
+			"title": "Playwright",
 			"accentColor": "blue",
 			"category": "BROWSER_AUTOMATION",
 			"description": "A starter project for using Playwright with Steel",
-			"flags": ["cli", "guide", "playground"]
+			"flags": ["cli", "guide", "playground"],
+			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"id": "puppeteer-starter",
-			"title": "Using Puppeteer with Steel",
+			"title": "Puppeteer",
 			"accentColor": "yellow",
 			"category": "BROWSER_AUTOMATION",
 			"description": "A starter project for using Puppeteer with Steel",
-			"flags": ["cli", "guide", "playground"]
+			"flags": ["cli", "guide", "playground"],
+			"thumbnail": "https://registry.steel-edge.net/puppeteer-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"id": "oai-computer-use",
-			"title": "Using Steel with OpenAI's Computer Use API",
+			"title": "OpenAIs Computer Use",
 			"accentColor": "orange",
 			"category": "AI_AUTOMATION",
 			"description": "Create a browser automation agent with Steel and OpenAI's Computer Use Assistant.",
-			"flags": ["cli", "playground"]
+			"flags": ["cli", "guide", "playground"],
+			"thumbnail": "https://registry.steel-edge.net/oai-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"id": "claude-computer-use",
-			"title": "Using Steel with Claude's Computer Use API",
+			"title": "Claudes Computer Use",
 			"accentColor": "purple",
 			"category": "AI_AUTOMATION",
 			"description": "Create a browser automation agent with Steel and Claude's Computer Use API.",
-			"flags": ["cli", "playground"]
+			"flags": ["cli", "guide", "playground"],
+			"thumbnail": "https://registry.steel-edge.net/claude-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"id": "stagehand-starter",
-			"title": "Using Steel with Stagehand for AI-Powered Automations",
+			"title": "Stagehand",
 			"accentColor": "green",
 			"category": "AI_AUTOMATION",
 			"description": "A starter project demonstrating how to use Steel with Stagehand for AI-powered browser automations.",
-			"flags": ["cli", "playground"]
+			"flags": ["cli", "guide", "playground"],
+			"thumbnail": "https://registry.steel-edge.net/stagehand-starter/thumbnail.webp?v=48170c9"
 		}
 	],
 	"examples": [
+		{
+			"slug": "steel-agent-kit-starter",
+			"id": "steel-agent-kit-starter",
+			"title": "Using Steel with Agent Kit",
+			"category": "AI_AGENTS",
+			"stack": "nodejs",
+			"description": "A starter demonstrating how to use Steel with Agent Kit.",
+			"flags": ["cli", "playground"],
+			"directory": "examples/steel-agent-kit-starter",
+			"language": "typescript",
+			"docs": "",
+			"shorthand": "agent-kit",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-agent-kit-starter",
+			"template": "templates/steel-agent-kit-starter.tar.gz"
+		},
+		{
+			"slug": "steel-agno-starter",
+			"id": "steel-agno-starter",
+			"title": "Using Steel with Agno",
+			"category": "AI_AGENTS",
+			"stack": "python",
+			"description": "A starter demonstrating how to use Steel with Agno.",
+			"flags": ["cli", "playground"],
+			"directory": "examples/steel-agno-starter",
+			"language": "python",
+			"docs": "",
+			"shorthand": "agno",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-agno-starter",
+			"template": "templates/steel-agno-starter.tar.gz"
+		},
 		{
 			"slug": "steel-auth-context-starter",
 			"id": "steel-auth-context-starter",
@@ -57,13 +92,29 @@
 			"directory": "examples/steel-auth-context-starter",
 			"language": "typescript",
 			"shorthand": "auth",
+			"docs": "https://docs.steel.dev/overview/guides/reusing-contexts-auth",
 			"template": "templates/steel-auth-context-starter.tar.gz"
+		},
+		{
+			"slug": "steel-browser-use-captcha-solver-starter",
+			"id": "steel-browser-use-captcha-solver-starter",
+			"title": "Browser-use using Steel Captcha Solver",
+			"accentColor": "green",
+			"category": "AI_AGENTS",
+			"stack": "python",
+			"description": "Build an AI Agent that can solve captchas using Steel",
+			"flags": ["cli", "playground"],
+			"directory": "examples/steel-browser-use-captcha-solver-starter",
+			"language": "python",
+			"shorthand": "browser-use-captcha-solver",
+			"docs": "https://docs.steel.dev/integrations/browser-use/captcha-solving",
+			"template": "templates/steel-browser-use-captcha-solver-starter.tar.gz"
 		},
 		{
 			"slug": "steel-browser-use-starter",
 			"id": "steel-browser-use-starter",
-			"title": "Using Steel with Browser Use",
-			"accentColor": "purple",
+			"title": "Browser Use",
+			"accentColor": "red",
 			"category": "AI_AGENTS",
 			"stack": "python",
 			"description": "Build an AI Agent with Steel and browser-use",
@@ -71,7 +122,12 @@
 			"directory": "examples/steel-browser-use-starter",
 			"language": "python",
 			"shorthand": "browser-use",
-			"template": "templates/steel-browser-use-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/integrations/browser-use/overview",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-browser-use-starter",
+			"template": "templates/steel-browser-use-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/steel-browser-use-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-claude-computer-use-node-starter",
@@ -81,12 +137,17 @@
 			"category": "AI_AUTOMATION",
 			"stack": "nodejs",
 			"description": "A starter project demonstrating how to use Steel with Anthropic's Claude Computer Use API in Node.js to create a browser automation agent.",
-			"flags": ["cli", "playground"],
+			"flags": ["cli", "guide", "playground"],
 			"directory": "examples/steel-claude-computer-use-node-starter",
 			"groupId": "claude-computer-use",
 			"language": "typescript",
 			"shorthand": "claude-cua",
-			"template": "templates/steel-claude-computer-use-node-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/integrations/claude-computer-use/quickstart-tsnode",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-claude-computer-use-node-starter",
+			"template": "templates/steel-claude-computer-use-node-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/claude-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-claude-computer-use-python-starter",
@@ -96,12 +157,17 @@
 			"category": "AI_AUTOMATION",
 			"stack": "python",
 			"description": "A starter project demonstrating how to use Steel with Anthropic's Claude Computer Use API in Python to create a browser automation agent.",
-			"flags": ["cli", "playground"],
+			"flags": ["cli", "guide", "playground"],
 			"directory": "examples/steel-claude-computer-use-python-starter",
 			"groupId": "claude-computer-use",
 			"language": "python",
 			"shorthand": "claude-cua-py",
-			"template": "templates/steel-claude-computer-use-python-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/integrations/claude-computer-use/quickstart-python",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-claude-computer-use-python-starter",
+			"template": "templates/steel-claude-computer-use-python-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/claude-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-credentials-starter",
@@ -115,7 +181,38 @@
 			"directory": "examples/steel-credentials-starter",
 			"language": "typescript",
 			"shorthand": "creds",
+			"docs": "https://docs.steel.dev/overview/credentials-api/overview",
 			"template": "templates/steel-credentials-starter.tar.gz"
+		},
+		{
+			"slug": "steel-crew-ai-starter",
+			"id": "steel-crew-ai-starter",
+			"title": "Using Steel with CrewAI",
+			"category": "AI_AGENTS",
+			"stack": "python",
+			"description": "A starter demonstrating how to use Steel with CrewAI",
+			"flags": ["cli", "playground"],
+			"directory": "examples/steel-crew-ai-starter",
+			"language": "python",
+			"docs": "",
+			"shorthand": "crew-ai",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-crew-ai-starter",
+			"template": "templates/steel-crew-ai-starter.tar.gz"
+		},
+		{
+			"slug": "steel-extensions-starter",
+			"id": "steel-extensions-starter",
+			"title": "Using the Steel Extensions API with GitHub Stats",
+			"accentColor": "green",
+			"category": "BROWSER_AUTOMATION",
+			"stack": "nodejs",
+			"description": "A starter project for using the Steel Extensions API with a GitHub Stats extension, Playwright on Node.js & TypeScript.",
+			"flags": ["cli", "playground"],
+			"directory": "examples/steel-extensions-starter",
+			"language": "typescript",
+			"shorthand": "extensions",
+			"docs": "https://docs.steel.dev/overview/extensions-api/overview",
+			"template": "templates/steel-extensions-starter.tar.gz"
 		},
 		{
 			"slug": "steel-files-api-starter",
@@ -125,25 +222,46 @@
 			"category": "BROWSER_AUTOMATION",
 			"stack": "nodejs",
 			"description": "A starter project for using the Steel Files API with Playwright on Node.js & TypeScript.",
-			"flags": ["cli", "playground"],
+			"flags": ["cli"],
 			"directory": "examples/steel-files-api-starter",
 			"language": "typescript",
 			"shorthand": "files",
+			"docs": "https://docs.steel.dev/overview/files-api/overview",
 			"template": "templates/steel-files-api-starter.tar.gz"
 		},
 		{
 			"slug": "steel-magnitude-starter",
 			"id": "steel-magnitude-starter",
-			"title": "Using Steel with Magnitude",
+			"title": "Magnitude",
 			"accentColor": "blue",
 			"category": "AI_AUTOMATION",
 			"stack": "nodejs",
-			"description": "A starter project demonstrating how to use Steel with Magnitude in Node.js & TypeScript for AI-powered browser automations.",
-			"flags": ["cli", "playground"],
+			"description": "Build an AI Agent with Steel and Magnitude",
+			"flags": ["cli", "guide", "playground"],
 			"directory": "examples/steel-magnitude-starter",
 			"language": "typescript",
 			"shorthand": "magnitude",
-			"template": "templates/steel-magnitude-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/integrations/magnitude/quickstart",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-magnitude-starter",
+			"template": "templates/steel-magnitude-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/steel-magnitude-starter/thumbnail.webp?v=48170c9"
+		},
+		{
+			"slug": "steel-notte-starter",
+			"id": "steel-notte-starter",
+			"title": "Notte",
+			"accentColor": "purple",
+			"category": "AI_AUTOMATION",
+			"stack": "python",
+			"description": "Build an AI Agent with Steel and Notte",
+			"flags": ["cli", "guide"],
+			"directory": "examples/steel-notte-starter",
+			"language": "python",
+			"shorthand": "notte",
+			"docs": "https://docs.steel.dev/overview/integrations/notte/quickstart-python",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-notte-starter",
+			"template": "templates/steel-notte-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/steel-notte-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-oai-computer-use-node-starter",
@@ -153,12 +271,17 @@
 			"category": "AI_AGENTS",
 			"stack": "nodejs",
 			"description": "A starter project for integrating Steel with OpenAI's Computer Use Assistant API to create a browser automation agent.",
-			"flags": ["cli", "playground"],
+			"flags": ["cli", "guide", "playground"],
 			"directory": "examples/steel-oai-computer-use-node-starter",
 			"groupId": "oai-computer-use",
 			"language": "typescript",
 			"shorthand": "oai-cua",
-			"template": "templates/steel-oai-computer-use-node-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/integrations/openai-computer-use/quickstart-tsnode",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-oai-computer-use-node-starter",
+			"template": "templates/steel-oai-computer-use-node-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/oai-computer-use/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-oai-computer-use-python-starter",
@@ -168,12 +291,36 @@
 			"category": "AI_AGENTS",
 			"stack": "python",
 			"description": "A starter project for integrating Steel with OpenAI's Computer Use Assistant API to create a browser automation agent.",
-			"flags": ["cli", "playground"],
+			"flags": ["cli", "guide", "playground"],
 			"directory": "examples/steel-oai-computer-use-python-starter",
 			"groupId": "oai-computer-use",
 			"language": "python",
 			"shorthand": "oai-cua-py",
-			"template": "templates/steel-oai-computer-use-python-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/integrations/openai-computer-use/quickstart-python",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-oai-computer-use-python-starter",
+			"template": "templates/steel-oai-computer-use-python-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/oai-computer-use/thumbnail.webp?v=48170c9"
+		},
+		{
+			"slug": "steel-perplexity-clone",
+			"id": "steel-perplexity-clone",
+			"title": "Build a Perplexity‑style Search Engine",
+			"description": "Search with Brave, scrape with Steel, and synthesize with OpenAI using a TypeScript CLI",
+			"accentColor": "blue",
+			"category": "AI_AUTOMATION",
+			"stack": "nodejs",
+			"language": "typescript",
+			"shorthand": "perplexity",
+			"directory": "examples/steel-perplexity-clone",
+			"groupId": "perplexity-clone",
+			"flags": ["guide", "playground", "cli"],
+			"docs": "https://docs.steel.dev/overview/guides/perplexity",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-perplexity-clone",
+			"template": "templates/steel-perplexity-clone.tar.gz"
 		},
 		{
 			"slug": "steel-playwright-python-starter",
@@ -188,7 +335,12 @@
 			"groupId": "playwright-starter",
 			"language": "python",
 			"shorthand": "playwright-py",
-			"template": "templates/steel-playwright-python-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/guides/connect-with-playwright-python",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-playwright-python-starter",
+			"template": "templates/steel-playwright-python-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-playwright-starter-js",
@@ -198,12 +350,14 @@
 			"category": "BROWSER_AUTOMATION",
 			"stack": "nodejs",
 			"description": "A starter project for using Playwright with Steel on Node.js.",
-			"flags": ["cli", "playground"],
+			"flags": ["cli"],
 			"directory": "examples/steel-playwright-starter-js",
 			"groupId": "playwright-starter",
 			"language": "javascript",
 			"shorthand": "playwright-js",
-			"template": "templates/steel-playwright-starter-js.tar.gz"
+			"docs": "https://docs.steel.dev/overview/guides/connect-with-playwright-node",
+			"template": "templates/steel-playwright-starter-js.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-playwright-starter",
@@ -218,7 +372,27 @@
 			"groupId": "playwright-starter",
 			"language": "typescript",
 			"shorthand": "playwright",
-			"template": "templates/steel-playwright-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/guides/connect-with-playwright-node",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-playwright-starter",
+			"template": "templates/steel-playwright-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/playwright-starter/thumbnail.webp?v=48170c9"
+		},
+		{
+			"slug": "steel-profiles-starter",
+			"id": "steel-profiles-starter",
+			"title": "Using the Steel Profiles API to authenticate at Steel.dev",
+			"accentColor": "purple",
+			"category": "BROWSER_AUTOMATION",
+			"stack": "nodejs",
+			"description": "A starter project for using the Steel Profiles API to authenticate and reuse the context, Playwright on Node.js & TypeScript.",
+			"flags": ["cli", "playground"],
+			"directory": "examples/steel-profiles-starter",
+			"language": "typescript",
+			"shorthand": "profiles",
+			"docs": "https://docs.steel.dev/overview/profiles-api/overview",
+			"template": "templates/steel-profiles-starter.tar.gz"
 		},
 		{
 			"slug": "steel-puppeteer-starter-js",
@@ -233,7 +407,9 @@
 			"groupId": "puppeteer-starter",
 			"language": "javascript",
 			"shorthand": "puppeteer-js",
-			"template": "templates/steel-puppeteer-starter-js.tar.gz"
+			"docs": "https://docs.steel.dev/overview/guides/connect-with-puppeteer",
+			"template": "templates/steel-puppeteer-starter-js.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/puppeteer-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-puppeteer-starter",
@@ -248,7 +424,12 @@
 			"groupId": "puppeteer-starter",
 			"language": "typescript",
 			"shorthand": "puppeteer",
-			"template": "templates/steel-puppeteer-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/guides/connect-with-puppeteer",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-puppeteer-starter",
+			"template": "templates/steel-puppeteer-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/puppeteer-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-selenium-starter",
@@ -258,10 +439,11 @@
 			"category": "BROWSER_AUTOMATION",
 			"stack": "python",
 			"description": "A starter project for using Selenium with Steel on Python.",
-			"flags": ["cli", "playground"],
+			"flags": ["cli"],
 			"directory": "examples/steel-selenium-starter",
 			"language": "python",
 			"shorthand": "selenium",
+			"docs": "https://docs.steel.dev/overview/guides/connect-with-selenium",
 			"template": "templates/steel-selenium-starter.tar.gz"
 		},
 		{
@@ -272,12 +454,17 @@
 			"category": "AI_AUTOMATION",
 			"stack": "nodejs",
 			"description": "A starter project demonstrating how to use Steel with Stagehand in Node.js & TypeScript for AI-powered browser automations.",
-			"flags": ["cli", "playground"],
+			"flags": ["cli", "guide", "playground"],
 			"directory": "examples/steel-stagehand-node-starter",
 			"groupId": "stagehand-starter",
 			"language": "typescript",
 			"shorthand": "stagehand",
-			"template": "templates/steel-stagehand-node-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/integrations/stagehand/quickstart-tsnode",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-stagehand-node-starter",
+			"template": "templates/steel-stagehand-node-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/stagehand-starter/thumbnail.webp?v=48170c9"
 		},
 		{
 			"slug": "steel-stagehand-python-starter",
@@ -287,12 +474,17 @@
 			"category": "AI_AUTOMATION",
 			"stack": "python",
 			"description": "A starter project demonstrating how to use Steel with Stagehand in Python for AI-powered browser automations.",
-			"flags": ["cli", "playground"],
+			"flags": ["cli", "guide", "playground"],
 			"directory": "examples/steel-stagehand-python-starter",
 			"groupId": "stagehand-starter",
 			"language": "python",
 			"shorthand": "stagehand-py",
-			"template": "templates/steel-stagehand-python-starter.tar.gz"
+			"docs": "https://docs.steel.dev/overview/integrations/stagehand/quickstart-python",
+			"playgroundLink": "",
+			"replitLink": "",
+			"githubLink": "https://github.com/steel-dev/steel-cookbook/tree/main/examples/steel-stagehand-python-starter",
+			"template": "templates/steel-stagehand-python-starter.tar.gz",
+			"thumbnail": "https://registry.steel-edge.net/stagehand-starter/thumbnail.webp?v=48170c9"
 		}
 	]
 }
