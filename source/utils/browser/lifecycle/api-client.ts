@@ -8,6 +8,7 @@ import {BrowserAdapterError} from '../errors.js';
 import {DEFAULT_API_PATH, DEFAULT_LOCAL_API_PATH} from './constants.js';
 import type {
 	BrowserSessionMode,
+	SolveCaptchaRequestOptions,
 	StartSessionRequestOptions,
 	UnknownRecord,
 } from './types.js';
@@ -361,6 +362,46 @@ export async function createSessionFromApi(
 		apiUrl,
 	);
 	return extractSingleSession(responseData);
+}
+
+export async function solveSessionCaptchaFromApi(
+	mode: BrowserSessionMode,
+	sessionId: string,
+	options: SolveCaptchaRequestOptions,
+	environment: NodeJS.ProcessEnv,
+	apiUrl?: string | null,
+): Promise<UnknownRecord> {
+	const payload: UnknownRecord = {};
+
+	if (options.pageId?.trim()) {
+		payload['pageId'] = options.pageId.trim();
+	}
+
+	if (options.url?.trim()) {
+		payload['url'] = options.url.trim();
+	}
+
+	if (options.taskId?.trim()) {
+		payload['taskId'] = options.taskId.trim();
+	}
+
+	const responseData = await requestApi(
+		mode,
+		environment,
+		`/sessions/${sessionId}/captchas/solve`,
+		'POST',
+		payload,
+		apiUrl,
+	);
+
+	if (!responseData || typeof responseData !== 'object') {
+		throw new BrowserAdapterError(
+			'API_ERROR',
+			'Unexpected empty response from Steel captcha solve endpoint.',
+		);
+	}
+
+	return responseData as UnknownRecord;
 }
 
 export async function releaseSession(

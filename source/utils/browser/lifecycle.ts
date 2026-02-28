@@ -5,6 +5,7 @@ import {
 	listSessionsFromApi,
 	releaseSession,
 	resolveExplicitApiUrl,
+	solveSessionCaptchaFromApi,
 } from './lifecycle/api-client.js';
 import {parseBrowserPassthroughBootstrapFlags} from './lifecycle/bootstrap-flags.js';
 import {
@@ -27,6 +28,8 @@ import type {
 	BrowserSessionEndpointOptions,
 	BrowserSessionMode,
 	BrowserSessionSummary,
+	SolveBrowserSessionCaptchaOptions,
+	SolveBrowserSessionCaptchaResult,
 	StartBrowserSessionOptions,
 	StopBrowserSessionOptions,
 	StopBrowserSessionResult,
@@ -37,6 +40,8 @@ export {parseBrowserPassthroughBootstrapFlags};
 export type {
 	BrowserSessionMode,
 	BrowserSessionSummary,
+	SolveBrowserSessionCaptchaOptions,
+	SolveBrowserSessionCaptchaResult,
 	StartBrowserSessionOptions,
 	StopBrowserSessionOptions,
 	StopBrowserSessionResult,
@@ -320,6 +325,72 @@ export async function stopBrowserSession(
 		mode,
 		all: false,
 		stoppedSessionIds: [targetSessionId],
+	};
+}
+
+function resolveSolveCaptchaSessionId(
+	options: SolveBrowserSessionCaptchaOptions,
+	mode: BrowserSessionMode,
+	state: Awaited<ReturnType<typeof readSessionState>>,
+): string | null {
+	const explicitSessionId = options.sessionId?.trim();
+	if (explicitSessionId) {
+		return explicitSessionId;
+	}
+
+	const sessionName = options.sessionName?.trim();
+	if (sessionName) {
+		return state.namedSessions[mode][sessionName] || null;
+	}
+
+	if (state.activeSessionMode === mode && state.activeSessionId) {
+		return state.activeSessionId;
+	}
+
+	return null;
+}
+
+export async function solveBrowserSessionCaptcha(
+	options: SolveBrowserSessionCaptchaOptions = {},
+): Promise<SolveBrowserSessionCaptchaResult> {
+	const environment = options.environment || process.env;
+	const apiUrl = resolveExplicitApiUrl(options.apiUrl);
+	const state = await readSessionState();
+	const mode = resolveSessionMode(
+		options.local,
+		apiUrl,
+		state.activeSessionMode,
+		environment,
+	);
+	const sessionId = resolveSolveCaptchaSessionId(options, mode, state);
+
+	if (!sessionId) {
+		throw new BrowserAdapterError(
+			'SESSION_NOT_FOUND',
+			'No target browser session found for CAPTCHA solving. Pass `--session-id`, pass `--session <name>`, or start a session first with `steel browser start --session <name>`.',
+		);
+	}
+
+	const rawResponse = await solveSessionCaptchaFromApi(
+		mode,
+		sessionId,
+		{
+			pageId: options.pageId,
+			url: options.url,
+			taskId: options.taskId,
+		},
+		environment,
+		apiUrl,
+	);
+	const success = rawResponse['success'];
+	const message = rawResponse['message'];
+
+	return {
+		mode,
+		sessionId,
+		success: typeof success === 'boolean' ? success : false,
+		message: typeof message === 'string' ? message : null,
+		raw: rawResponse,
 	};
 }
 

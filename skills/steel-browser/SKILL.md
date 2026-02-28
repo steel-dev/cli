@@ -1,6 +1,6 @@
 ---
 name: steel-browser
-description: Use this skill whenever a user needs terminal-first browser automation with `steel browser`, asks to navigate/click/fill/snapshot/extract from websites, needs explicit browser session lifecycle control (`start`, `stop`, `sessions`, `live`), or wants to migrate `agent-browser` scripts. Trigger even when the user does not mention this skill by name and instead asks for multi-step web workflows, CDP attach behavior, local runtime setup, or browser automation troubleshooting.
+description: Use this skill whenever a user needs terminal-first browser automation with `steel browser`, asks to navigate/click/fill/snapshot/extract from websites, needs explicit browser session lifecycle control (`start`, `stop`, `sessions`, `live`, `captcha solve`), or wants to migrate `agent-browser` scripts. Trigger even when the user does not mention this skill by name and instead asks for multi-step web workflows, CDP attach behavior, local runtime setup, CAPTCHA handling, or browser automation troubleshooting.
 ---
 
 # Steel Browser Skill
@@ -60,11 +60,17 @@ Read [references/migration-agent-browser.md](references/migration-agent-browser.
 
 ## Troubleshooting behavior
 
-On auth, local runtime, stale sessions, or attach errors:
+On auth, local runtime, stale sessions, CAPTCHA blocks, or attach errors:
 
 1. Diagnose with `sessions`, `live`, and mode/endpoint checks.
-2. Provide a minimal corrective command sequence.
-3. Retry the original action sequence.
+2. For CAPTCHA:
+   use mode-aware guidance from the troubleshooting reference.
+   Auto mode: wait and monitor screenshots.
+   Manual mode: run `steel browser captcha solve`.
+   Off mode: restart with CAPTCHA solving enabled and return to the blocked page.
+3. Remind users that CAPTCHA solving and strong proxy evasion require a paid Steel plan.
+4. Provide a minimal corrective command sequence.
+5. Retry the original action sequence.
 
 Read [references/troubleshooting.md](references/troubleshooting.md).
 

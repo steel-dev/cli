@@ -19,6 +19,10 @@ describe('browser routing', () => {
 			'native',
 		);
 		expect(resolveBrowserDispatchTarget(['browser', 'live'])).toBe('native');
+		expect(resolveBrowserDispatchTarget(['browser', 'captcha'])).toBe('native');
+		expect(resolveBrowserDispatchTarget(['browser', 'captcha', 'solve'])).toBe(
+			'native',
+		);
 	});
 
 	test('routes inherited browser commands to passthrough', () => {

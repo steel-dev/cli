@@ -10,6 +10,7 @@ This reference defines the `steel browser` command surface, including Steel-owne
 - `steel browser stop`
 - `steel browser sessions`
 - `steel browser live`
+- `steel browser captcha solve`
 
 ### Inherited Commands (Vendored agent-browser Runtime)
 
@@ -58,6 +59,7 @@ Main flags:
 - `--session <name>`
 - `--stealth`
 - `--proxy <url>`
+- `--session-solve-captcha`
 
 Flag semantics:
 
@@ -65,6 +67,9 @@ Flag semantics:
   - `stealthConfig.humanizeInteractions = true`
   - `stealthConfig.autoCaptchaSolving = true`
   - `solveCaptcha = true`
+- `--session-solve-captcha` enables manual CAPTCHA solving for new sessions:
+  - `solveCaptcha = true`
+  - `stealthConfig.autoCaptchaSolving` is not forced on
 - `--proxy <url>` sets `proxyUrl` on session creation. The Sessions API may return
   `proxySource: "external"` rather than echoing the proxy URL in responses.
 - `--stealth` and `--proxy` are create-time flags. If `--session <name>` attaches to
@@ -126,6 +131,27 @@ Main flags:
 - `--local`
 - `--api-url <url>`
 
+### `steel browser captcha solve`
+
+Purpose: manually trigger CAPTCHA solving for a target session.
+
+Main flags:
+
+- `--session-id <id>`
+- `--session <name>`
+- `--page-id <id>`
+- `--url <url>`
+- `--task-id <id>`
+- `--local`
+- `--api-url <url>`
+- `--raw`
+
+API mapping:
+
+- Endpoint: `POST /v1/sessions/{sessionId}/captchas/solve`
+- Request body: optional `pageId`, `url`, `taskId`
+- Response: `success` + optional `message`
+
 ## Passthrough Bootstrap Rules
 
 For inherited commands, Steel bootstrap injects a resolved `--cdp` endpoint unless explicit attach flags are present.
@@ -153,6 +179,12 @@ Localhost self-hosted flows provide actionable errors:
   `--local`/`--api-url`).
 - `No active live session found` from `steel browser live`:
   run `steel browser start` first, then retry `steel browser live`.
+- CAPTCHA solving notes:
+  - CAPTCHA solving requires a paid Steel plan.
+  - `--stealth` enables auto solving; wait and monitor with screenshots.
+  - `--session-solve-captcha` enables manual solving; use `steel browser captcha solve`.
+  - Default sessions do not solve captchas; restart with CAPTCHA solving enabled and navigate back.
+  - Proxy + CAPTCHA solving together is a strong anti-bot evasion combination.
 - Need hard reset of stale session mapping:
   run `steel browser stop --all` and start a fresh named session.
 

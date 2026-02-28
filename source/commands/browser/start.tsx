@@ -42,7 +42,7 @@ export const options = zod.object({
 		.describe(
 			option({
 				description:
-					'Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving)',
+					'Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving / solveCaptcha=true)',
 			}),
 		)
 		.optional(),
@@ -87,7 +87,7 @@ export const options = zod.object({
 		.describe(
 			option({
 				description:
-					'Enable CAPTCHA solving on new sessions (create-time only)',
+					'Enable manual CAPTCHA solving on new sessions (create-time only; use `steel browser captcha solve`)',
 			}),
 		)
 		.optional(),

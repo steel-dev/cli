@@ -61,6 +61,48 @@ Fix:
 - Ensure exact same `--session <name>` value on every command.
 - Ensure commands do not mix cloud and local mode.
 
+### CAPTCHA encountered mid-flow
+
+Important constraints:
+
+- CAPTCHA solving requires a paid Steel plan.
+- Proxies are strongly recommended for CAPTCHA and anti-bot evasion.
+- `--proxy <url>` + CAPTCHA solving is the strongest default combo.
+
+If session is auto solving (`--stealth`):
+
+1. Wait and watch the live page.
+2. Capture screenshots while waiting:
+
+```bash
+steel browser screenshot /tmp/captcha-auto-progress.png --session <name>
+```
+
+If session is manual solving (`--session-solve-captcha`):
+
+1. Trigger solve:
+
+```bash
+steel browser captcha solve --session <name>
+```
+
+2. If needed, target a specific task:
+
+```bash
+steel browser captcha solve --session <name> --page-id <id> --task-id <id>
+```
+
+If session has no CAPTCHA solving enabled (default):
+
+1. Start a new session with solving enabled.
+2. Re-open the blocked page and continue.
+
+```bash
+SESSION="captcha-recovery-$(date +%s)"
+steel browser start --session "$SESSION" --session-solve-captcha --proxy http://user:pass@host:port
+steel browser open <blocked-url> --session "$SESSION"
+```
+
 ### No active live session
 
 Symptom:

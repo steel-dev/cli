@@ -18,6 +18,7 @@ This is an auto-generated reference for the Steel CLI. The Steel CLI helps you c
 - [steel star](#steel-star)
 - [steel support](#steel-support)
 - [steel update](#steel-update)
+- [steel browser captcha solve](#steel-browser-captcha-solve)
 - [steel browser live](#steel-browser-live)
 - [steel browser sessions](#steel-browser-sessions)
 - [steel browser start](#steel-browser-start)
@@ -299,6 +300,27 @@ steel update [options]
 - -f, **--force**: Force update even if already on latest version
 - -c, **--check**: Only check for updates without installing
 
+## steel browser captcha solve
+
+Manually trigger CAPTCHA solving for a Steel browser session
+
+### Usage
+
+```
+steel browser captcha solve [options]
+```
+
+### Options
+
+- **--session-id**: Explicit Steel session id to target
+- -s, **--session**: Named session key to resolve from local state
+- -l, **--local**: Resolve session and execute solve call in local mode
+- **--api-url**: Explicit self-hosted API endpoint URL
+- **--page-id**: Optional page ID for targeted CAPTCHA solving
+- **--url**: Optional page URL for targeted CAPTCHA solving
+- **--task-id**: Optional CAPTCHA task ID for targeted solving
+- **--raw**: Print the full raw API payload
+
 ## steel browser live
 
 Print active session live-view URL
@@ -345,12 +367,12 @@ steel browser start [options]
 - -l, **--local**: Start or attach a local Steel browser session
 - **--api-url**: Explicit self-hosted API endpoint URL
 - -s, **--session**: Named session key for create-or-attach behavior
-- **--stealth**: Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving)
+- **--stealth**: Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving / solveCaptcha=true)
 - -p, **--proxy**: Proxy URL for new sessions (for example, http://user:pass@host:port)
 - **--session-timeout**: Session timeout in milliseconds (create-time only)
 - **--session-headless**: Create new sessions in headless mode (create-time only)
 - **--session-region**: Preferred session region (create-time only)
-- **--session-solve-captcha**: Enable CAPTCHA solving on new sessions (create-time only)
+- **--session-solve-captcha**: Enable manual CAPTCHA solving on new sessions (create-time only; use `steel browser captcha solve`)
 
 ## steel browser stop
 

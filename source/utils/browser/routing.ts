@@ -6,6 +6,7 @@ const NATIVE_BROWSER_SUBCOMMANDS = new Set([
 	'stop',
 	'sessions',
 	'live',
+	'captcha',
 ]);
 
 export function filterSteelGlobalFlags(argv: string[]): string[] {

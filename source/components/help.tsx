@@ -57,6 +57,10 @@ const BROWSER_LIFECYCLE_COMMANDS = [
 		usage: 'steel browser live',
 		description: 'Print the live viewer URL for the active session.',
 	},
+	{
+		usage: 'steel browser captcha solve [options]',
+		description: 'Manually trigger CAPTCHA solving for a target session.',
+	},
 ];
 
 const BROWSER_PASSTHROUGH_EXAMPLES = [

@@ -23,6 +23,12 @@ export type StartSessionRequestOptions = {
 	solveCaptcha?: boolean;
 };
 
+export type SolveCaptchaRequestOptions = {
+	pageId?: string;
+	url?: string;
+	taskId?: string;
+};
+
 export type ParsedBootstrapOptions = {
 	local: boolean;
 	apiUrl: string | null;
@@ -69,6 +75,17 @@ export type StopBrowserSessionOptions = {
 	environment?: NodeJS.ProcessEnv;
 };
 
+export type SolveBrowserSessionCaptchaOptions = {
+	sessionId?: string;
+	sessionName?: string;
+	local?: boolean;
+	apiUrl?: string;
+	pageId?: string;
+	url?: string;
+	taskId?: string;
+	environment?: NodeJS.ProcessEnv;
+};
+
 export type BrowserSessionEndpointOptions = {
 	local?: boolean;
 	apiUrl?: string;
@@ -79,4 +96,12 @@ export type StopBrowserSessionResult = {
 	mode: BrowserSessionMode;
 	all: boolean;
 	stoppedSessionIds: string[];
+};
+
+export type SolveBrowserSessionCaptchaResult = {
+	mode: BrowserSessionMode;
+	sessionId: string;
+	success: boolean;
+	message: string | null;
+	raw: UnknownRecord;
 };

@@ -1158,4 +1158,119 @@ describe('browser lifecycle session contract', () => {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}
 	});
+
+	test('manually solves captchas for the active session', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			writeSessionState(configDirectory, {
+				activeSessionId: 'session-captcha',
+				activeSessionMode: 'cloud',
+				activeSessionName: null,
+				namedSessions: {
+					cloud: {},
+					local: {},
+				},
+				updatedAt: null,
+			});
+
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(200, {
+					success: true,
+					message: 'CAPTCHA solve requested',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const result = await lifecycle.solveBrowserSessionCaptcha({
+				environment: {STEEL_API_KEY: 'env-api-key'},
+			});
+
+			expect(result).toEqual({
+				mode: 'cloud',
+				sessionId: 'session-captcha',
+				success: true,
+				message: 'CAPTCHA solve requested',
+				raw: {
+					success: true,
+					message: 'CAPTCHA solve requested',
+				},
+			});
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions/session-captcha/captchas/solve',
+			);
+			expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+				method: 'POST',
+				body: '{}',
+			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('manually solves a targeted captcha for a named session', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			writeSessionState(configDirectory, {
+				activeSessionId: null,
+				activeSessionMode: null,
+				activeSessionName: null,
+				namedSessions: {
+					cloud: {
+						daily: 'session-daily',
+					},
+					local: {},
+				},
+				updatedAt: null,
+			});
+
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(200, {
+					success: true,
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			await lifecycle.solveBrowserSessionCaptcha({
+				sessionName: 'daily',
+				pageId: 'page-123',
+				taskId: 'task-789',
+				environment: {STEEL_API_KEY: 'env-api-key'},
+			});
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+				method: 'POST',
+				body: JSON.stringify({
+					pageId: 'page-123',
+					taskId: 'task-789',
+				}),
+			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('throws when no target session is available for captcha solving', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+
+			await expect(
+				lifecycle.solveBrowserSessionCaptcha({
+					environment: {STEEL_API_KEY: 'env-api-key'},
+				}),
+			).rejects.toMatchObject({
+				code: 'SESSION_NOT_FOUND',
+			});
+
+			expect(fetchMock).not.toHaveBeenCalled();
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
 });

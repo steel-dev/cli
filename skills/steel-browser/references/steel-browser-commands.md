@@ -197,3 +197,13 @@ steel browser errors
 steel browser errors --clear
 steel browser highlight @e1
 ```
+
+## CAPTCHA control
+
+```bash
+steel browser start --session <name> --session-solve-captcha
+steel browser start --session <name> --stealth
+steel browser captcha solve --session <name>
+steel browser captcha solve --session <name> --page-id <id> --task-id <id>
+steel browser screenshot /tmp/captcha-progress.png --session <name>
+```
