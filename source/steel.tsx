@@ -150,6 +150,10 @@ function UpdateProgress() {
 		);
 	}
 
+	if (shouldProceed) {
+		return <PastelApp />;
+	}
+
 	if (updateState.status === 'error') {
 		return (
 			<Box marginBottom={1}>
@@ -157,10 +161,6 @@ function UpdateProgress() {
 				{updateState.error && <Text color="gray"> ({updateState.error})</Text>}
 			</Box>
 		);
-	}
-
-	if (shouldProceed) {
-		return <PastelApp />;
 	}
 
 	return null;
