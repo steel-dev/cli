@@ -600,6 +600,13 @@ export type BrowserPassthroughBootstrap = {
 	sessionName: string | null;
 };
 
+const SESSION_FREE_SUBCOMMANDS = new Set(['auth', 'device', 'session']);
+
+function isSessionFreePassthrough(passthroughArgv: string[]): boolean {
+	const firstToken = passthroughArgv.find(a => !a.startsWith('-'));
+	return firstToken !== undefined && SESSION_FREE_SUBCOMMANDS.has(firstToken);
+}
+
 export async function bootstrapBrowserPassthroughArgv(
 	browserArgv: string[],
 	environment: NodeJS.ProcessEnv = process.env,
@@ -617,6 +624,10 @@ export async function bootstrapBrowserPassthroughArgv(
 		parsed.passthroughArgv.includes('--help') ||
 		parsed.passthroughArgv.includes('-h')
 	) {
+		return {argv: parsed.passthroughArgv, sessionName: null};
+	}
+
+	if (isSessionFreePassthrough(parsed.passthroughArgv)) {
 		return {argv: parsed.passthroughArgv, sessionName: null};
 	}
 
