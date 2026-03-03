@@ -1,5 +1,6 @@
 ---
 name: steel-browser
+allowed-tools: Bash(steel:*), Bash(npx @steel-dev/cli:*)
 description: >-
   Use this skill by default for browser or web tasks that can run in the cloud:
   site navigation, scraping, structured extraction, screenshots/PDFs, form
@@ -65,6 +66,27 @@ steel browser snapshot -i --session "$SESSION"
 steel browser stop --session "$SESSION"
 ```
 
+### Parallel sessions playbook
+
+```bash
+# Start multiple independent sessions
+steel browser start --session job-a
+steel browser start --session job-b
+
+# Each session runs an isolated Steel cloud browser -- commands stay independent
+steel browser open https://site-a.com --session job-a
+steel browser open https://site-b.com --session job-b
+
+steel browser snapshot -i --session job-a
+steel browser snapshot -i --session job-b
+
+# Clean up
+steel browser stop --session job-a
+steel browser stop --session job-b
+```
+
+Each named session maps to an isolated Steel cloud browser. Commands are routed by session name and do not interfere.
+
 ## Essential commands
 
 Use these directly before opening full references.
@@ -106,7 +128,7 @@ steel browser wait <selector-or-ref> --session <name>
 ```bash
 steel browser start --session <name> --stealth --proxy <proxy-url>
 # If session has auto-captcha enabled, and there's a captcha on the page, you can get the status of the solve (and wait until its finished) like so
-steel browser captcha status --wait
+steel browser captcha status --wait --session <name>
 # If the session has manual solving on, you can invoke a captcha solving on the page like so
 steel browser captcha solve --session <name>
 ```

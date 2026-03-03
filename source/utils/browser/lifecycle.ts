@@ -595,21 +595,29 @@ export async function getBrowserSessionCaptchaStatus(
 	}
 }
 
+export type BrowserPassthroughBootstrap = {
+	argv: string[];
+	sessionName: string | null;
+};
+
 export async function bootstrapBrowserPassthroughArgv(
 	browserArgv: string[],
 	environment: NodeJS.ProcessEnv = process.env,
-): Promise<string[]> {
+): Promise<BrowserPassthroughBootstrap> {
 	const parsed = parseBrowserPassthroughBootstrapFlags(browserArgv);
 
 	if (parsed.options.autoConnect || parsed.options.cdpTarget) {
-		return parsed.passthroughArgv;
+		return {
+			argv: parsed.passthroughArgv,
+			sessionName: parsed.options.sessionName,
+		};
 	}
 
 	if (
 		parsed.passthroughArgv.includes('--help') ||
 		parsed.passthroughArgv.includes('-h')
 	) {
-		return parsed.passthroughArgv;
+		return {argv: parsed.passthroughArgv, sessionName: null};
 	}
 
 	const session = await startBrowserSession({
@@ -633,5 +641,8 @@ export async function bootstrapBrowserPassthroughArgv(
 		);
 	}
 
-	return [...parsed.passthroughArgv, '--cdp', session.connectUrl];
+	return {
+		argv: [...parsed.passthroughArgv, '--cdp', session.connectUrl],
+		sessionName: parsed.options.sessionName,
+	};
 }

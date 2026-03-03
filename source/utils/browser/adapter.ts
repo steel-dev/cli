@@ -239,11 +239,11 @@ export async function runBrowserPassthrough(
 		);
 	}
 
-	const passthroughArgv = await bootstrapBrowserPassthroughArgv(
+	const bootstrap = await bootstrapBrowserPassthroughArgv(
 		browserArgv,
 		environment,
 	);
-	const normalizedPassthroughArgv = normalizeTabNewUrlArgv(passthroughArgv);
+	const normalizedPassthroughArgv = normalizeTabNewUrlArgv(bootstrap.argv);
 	const auth = resolveBrowserAuth(environment);
 
 	const runtime = resolveBrowserRuntime(environment);
@@ -251,6 +251,10 @@ export async function runBrowserPassthrough(
 
 	if (!runtimeEnvironment.STEEL_API_KEY && auth.apiKey) {
 		runtimeEnvironment.STEEL_API_KEY = auth.apiKey;
+	}
+
+	if (!runtimeEnvironment.AGENT_BROWSER_SESSION && bootstrap.sessionName) {
+		runtimeEnvironment.AGENT_BROWSER_SESSION = bootstrap.sessionName;
 	}
 
 	if (!runtimeEnvironment.AGENT_BROWSER_HOME) {

@@ -305,7 +305,11 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				{STEEL_API_KEY: 'env-api-key'},
 			);
 
-			expect(result).toEqual(['open', 'https://steel.dev', '--auto-connect']);
+			expect(result.argv).toEqual([
+				'open',
+				'https://steel.dev',
+				'--auto-connect',
+			]);
 			expect(fetchMock).not.toHaveBeenCalled();
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
@@ -322,7 +326,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				{STEEL_API_KEY: 'env-api-key'},
 			);
 
-			expect(result).toEqual([
+			expect(result.argv).toEqual([
 				'open',
 				'https://steel.dev',
 				'--cdp',
@@ -364,7 +368,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				{STEEL_API_KEY: 'env-api-key'},
 			);
 
-			expect(result).toEqual(['open', '--help']);
+			expect(result.argv).toEqual(['open', '--help']);
 			expect(fetchMock).not.toHaveBeenCalled();
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
@@ -717,7 +721,7 @@ describe('browser lifecycle session contract', () => {
 				},
 			);
 
-			expect(passthroughArgv).toEqual([
+			expect(passthroughArgv.argv).toEqual([
 				'open',
 				'https://steel.dev',
 				'--cdp',
@@ -770,7 +774,7 @@ describe('browser lifecycle session contract', () => {
 				},
 			);
 
-			expect(passthroughArgv).toEqual([
+			expect(passthroughArgv.argv).toEqual([
 				'open',
 				'https://steel.dev',
 				'--cdp',
@@ -822,7 +826,7 @@ describe('browser lifecycle session contract', () => {
 				},
 			);
 
-			expect(passthroughArgv).toEqual([
+			expect(passthroughArgv.argv).toEqual([
 				'open',
 				'https://steel.dev',
 				'--cdp',

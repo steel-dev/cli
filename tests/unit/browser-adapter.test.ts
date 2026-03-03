@@ -28,6 +28,7 @@ function writeProbeRuntimeScript(rootDirectory: string): {
 			'  argv: process.argv.slice(2),',
 			'  apiKey: process.env.STEEL_API_KEY ?? null,',
 			'  agentBrowserHome: process.env.AGENT_BROWSER_HOME ?? null,',
+			'  agentBrowserSession: process.env.AGENT_BROWSER_SESSION ?? null,',
 			'};',
 			'if (process.env.STEEL_RUNTIME_CAPTURE_PATH) {',
 			'  fs.writeFileSync(',
@@ -257,6 +258,7 @@ describe('browser passthrough execution contract', () => {
 				argv: ['open', '--help'],
 				apiKey: 'config-api-key',
 				agentBrowserHome: null,
+				agentBrowserSession: null,
 			});
 		} finally {
 			fs.rmSync(temporaryRoot, {recursive: true, force: true});
@@ -470,5 +472,66 @@ describe('browser passthrough execution contract', () => {
 			name: 'BrowserAdapterError',
 			code: 'RUNTIME_NOT_FOUND',
 		});
+	});
+
+	test('sets AGENT_BROWSER_SESSION to Steel session name for named session passthrough', async () => {
+		const temporaryRoot = createTempDirectory(
+			'steel-browser-passthrough-session-isolation-',
+		);
+		const {runtimePath, capturePath} = writeProbeRuntimeScript(temporaryRoot);
+
+		try {
+			await runBrowserPassthrough(
+				[
+					'open',
+					'https://example.com',
+					'--session',
+					'my-job',
+					'--cdp',
+					'ws://localhost:9222',
+				],
+				{
+					STEEL_BROWSER_RUNTIME_BIN: runtimePath,
+					STEEL_RUNTIME_CAPTURE_PATH: capturePath,
+				},
+			);
+			const runtimePayload = JSON.parse(
+				fs.readFileSync(capturePath, 'utf-8'),
+			) as {
+				argv: string[];
+				agentBrowserSession: string | null;
+			};
+
+			expect(runtimePayload.agentBrowserSession).toBe('my-job');
+		} finally {
+			fs.rmSync(temporaryRoot, {recursive: true, force: true});
+		}
+	});
+
+	test('does not set AGENT_BROWSER_SESSION when no Steel session name is given', async () => {
+		const temporaryRoot = createTempDirectory(
+			'steel-browser-passthrough-session-default-',
+		);
+		const {runtimePath, capturePath} = writeProbeRuntimeScript(temporaryRoot);
+
+		try {
+			await runBrowserPassthrough(
+				['open', 'https://example.com', '--cdp', 'ws://localhost:9222'],
+				{
+					STEEL_BROWSER_RUNTIME_BIN: runtimePath,
+					STEEL_RUNTIME_CAPTURE_PATH: capturePath,
+				},
+			);
+			const runtimePayload = JSON.parse(
+				fs.readFileSync(capturePath, 'utf-8'),
+			) as {
+				argv: string[];
+				agentBrowserSession: string | null;
+			};
+
+			expect(runtimePayload.agentBrowserSession).toBeNull();
+		} finally {
+			fs.rmSync(temporaryRoot, {recursive: true, force: true});
+		}
 	});
 });
