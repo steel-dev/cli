@@ -21,7 +21,7 @@ export interface RefMap {
     [ref: string]: {
         selector: string;
         role: string;
-        name?: string;
+        name: string;
         /** Index for disambiguation when multiple elements have same role+name */
         nth?: number;
     };

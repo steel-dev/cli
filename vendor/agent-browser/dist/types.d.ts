@@ -31,6 +31,10 @@ export interface LaunchCommand extends BaseCommand {
     ignoreHTTPSErrors?: boolean;
     allowFileAccess?: boolean;
     colorScheme?: 'light' | 'dark' | 'no-preference';
+    downloadPath?: string;
+    allowedDomains?: string[];
+    actionPolicy?: string;
+    confirmActions?: string[];
     autoStateFilePath?: string;
 }
 export interface NavigateCommand extends BaseCommand {
@@ -685,7 +689,40 @@ export interface WindowNewCommand extends BaseCommand {
         height: number;
     } | null;
 }
-export type Command = LaunchCommand | NavigateCommand | ClickCommand | TypeCommand | FillCommand | CheckCommand | UncheckCommand | UploadCommand | DoubleClickCommand | FocusCommand | DragCommand | FrameCommand | MainFrameCommand | GetByRoleCommand | GetByTextCommand | GetByLabelCommand | GetByPlaceholderCommand | PressCommand | ScreenshotCommand | SnapshotCommand | EvaluateCommand | WaitCommand | ScrollCommand | SelectCommand | HoverCommand | ContentCommand | CloseCommand | TabNewCommand | TabListCommand | TabSwitchCommand | TabCloseCommand | WindowNewCommand | CookiesGetCommand | CookiesSetCommand | CookiesClearCommand | StorageGetCommand | StorageSetCommand | StorageClearCommand | DialogCommand | PdfCommand | RouteCommand | UnrouteCommand | RequestsCommand | DownloadCommand | GeolocationCommand | PermissionsCommand | ViewportCommand | UserAgentCommand | DeviceCommand | BackCommand | ForwardCommand | ReloadCommand | UrlCommand | TitleCommand | GetAttributeCommand | GetTextCommand | IsVisibleCommand | IsEnabledCommand | IsCheckedCommand | CountCommand | BoundingBoxCommand | StylesCommand | VideoStartCommand | VideoStopCommand | RecordingStartCommand | RecordingStopCommand | RecordingRestartCommand | TraceStartCommand | TraceStopCommand | ProfilerStartCommand | ProfilerStopCommand | HarStartCommand | HarStopCommand | StorageStateSaveCommand | StorageStateLoadCommand | StateListCommand | StateClearCommand | StateShowCommand | StateCleanCommand | StateRenameCommand | ConsoleCommand | ErrorsCommand | KeyboardCommand | WheelCommand | TapCommand | ClipboardCommand | HighlightCommand | ClearCommand | SelectAllCommand | InnerTextCommand | InnerHtmlCommand | InputValueCommand | SetValueCommand | DispatchEventCommand | EvaluateHandleCommand | ExposeFunctionCommand | AddScriptCommand | AddStyleCommand | EmulateMediaCommand | OfflineCommand | HeadersCommand | PauseCommand | GetByAltTextCommand | GetByTitleCommand | GetByTestIdCommand | NthCommand | WaitForUrlCommand | WaitForLoadStateCommand | SetContentCommand | TimezoneCommand | LocaleCommand | HttpCredentialsCommand | MouseMoveCommand | MouseDownCommand | MouseUpCommand | BringToFrontCommand | WaitForFunctionCommand | ScrollIntoViewCommand | AddInitScriptCommand | KeyDownCommand | KeyUpCommand | InsertTextCommand | MultiSelectCommand | WaitForDownloadCommand | ResponseBodyCommand | ScreencastStartCommand | ScreencastStopCommand | InputMouseCommand | InputKeyboardCommand | InputTouchCommand | SwipeCommand | DeviceListCommand | DiffSnapshotCommand | DiffScreenshotCommand | DiffUrlCommand;
+export type Command = LaunchCommand | NavigateCommand | ClickCommand | TypeCommand | FillCommand | CheckCommand | UncheckCommand | UploadCommand | DoubleClickCommand | FocusCommand | DragCommand | FrameCommand | MainFrameCommand | GetByRoleCommand | GetByTextCommand | GetByLabelCommand | GetByPlaceholderCommand | PressCommand | ScreenshotCommand | SnapshotCommand | EvaluateCommand | WaitCommand | ScrollCommand | SelectCommand | HoverCommand | ContentCommand | CloseCommand | TabNewCommand | TabListCommand | TabSwitchCommand | TabCloseCommand | WindowNewCommand | CookiesGetCommand | CookiesSetCommand | CookiesClearCommand | StorageGetCommand | StorageSetCommand | StorageClearCommand | DialogCommand | PdfCommand | RouteCommand | UnrouteCommand | RequestsCommand | DownloadCommand | GeolocationCommand | PermissionsCommand | ViewportCommand | UserAgentCommand | DeviceCommand | BackCommand | ForwardCommand | ReloadCommand | UrlCommand | TitleCommand | GetAttributeCommand | GetTextCommand | IsVisibleCommand | IsEnabledCommand | IsCheckedCommand | CountCommand | BoundingBoxCommand | StylesCommand | VideoStartCommand | VideoStopCommand | RecordingStartCommand | RecordingStopCommand | RecordingRestartCommand | TraceStartCommand | TraceStopCommand | ProfilerStartCommand | ProfilerStopCommand | HarStartCommand | HarStopCommand | StorageStateSaveCommand | StorageStateLoadCommand | StateListCommand | StateClearCommand | StateShowCommand | StateCleanCommand | StateRenameCommand | ConsoleCommand | ErrorsCommand | KeyboardCommand | WheelCommand | TapCommand | ClipboardCommand | HighlightCommand | ClearCommand | SelectAllCommand | InnerTextCommand | InnerHtmlCommand | InputValueCommand | SetValueCommand | DispatchEventCommand | EvaluateHandleCommand | ExposeFunctionCommand | AddScriptCommand | AddStyleCommand | EmulateMediaCommand | OfflineCommand | HeadersCommand | PauseCommand | GetByAltTextCommand | GetByTitleCommand | GetByTestIdCommand | NthCommand | WaitForUrlCommand | WaitForLoadStateCommand | SetContentCommand | TimezoneCommand | LocaleCommand | HttpCredentialsCommand | MouseMoveCommand | MouseDownCommand | MouseUpCommand | BringToFrontCommand | WaitForFunctionCommand | ScrollIntoViewCommand | AddInitScriptCommand | KeyDownCommand | KeyUpCommand | InsertTextCommand | MultiSelectCommand | WaitForDownloadCommand | ResponseBodyCommand | ScreencastStartCommand | ScreencastStopCommand | InputMouseCommand | InputKeyboardCommand | InputTouchCommand | SwipeCommand | DeviceListCommand | DiffSnapshotCommand | DiffScreenshotCommand | DiffUrlCommand | AuthSaveCommand | AuthLoginCommand | AuthListCommand | AuthDeleteCommand | AuthShowCommand | ConfirmCommand | DenyCommand;
+export interface AuthSaveCommand extends BaseCommand {
+    action: 'auth_save';
+    name: string;
+    url: string;
+    username: string;
+    password: string;
+    usernameSelector?: string;
+    passwordSelector?: string;
+    submitSelector?: string;
+}
+export interface AuthLoginCommand extends BaseCommand {
+    action: 'auth_login';
+    name: string;
+}
+export interface AuthListCommand extends BaseCommand {
+    action: 'auth_list';
+}
+export interface AuthDeleteCommand extends BaseCommand {
+    action: 'auth_delete';
+    name: string;
+}
+export interface AuthShowCommand extends BaseCommand {
+    action: 'auth_show';
+    name: string;
+}
+export interface ConfirmCommand extends BaseCommand {
+    action: 'confirm';
+    confirmationId: string;
+}
+export interface DenyCommand extends BaseCommand {
+    action: 'deny';
+    confirmationId: string;
+}
 export interface DiffSnapshotCommand extends BaseCommand {
     action: 'diff_snapshot';
     baseline?: string;
@@ -746,12 +783,39 @@ export interface ScreenshotData {
 }
 export interface SnapshotData {
     snapshot: string;
+    refs?: Record<string, {
+        role: string;
+        name?: string;
+    }>;
+    origin?: string;
 }
 export interface EvaluateData {
     result: unknown;
+    origin?: string;
 }
 export interface ContentData {
     html: string;
+    origin?: string;
+}
+export interface TextData {
+    text: string | null;
+    origin?: string;
+}
+export interface AttributeData {
+    attribute: string;
+    value: string | null;
+    origin?: string;
+}
+export interface ValueData {
+    value: string;
+    origin?: string;
+}
+export interface ConsoleData {
+    messages: Array<{
+        type: string;
+        text: string;
+    }>;
+    origin?: string;
 }
 export interface TabInfo {
     index: number;

@@ -14,14 +14,37 @@ export interface EncryptedPayload {
     authTag: string;
     data: string;
 }
+export declare function getKeyFilePath(): string;
 /**
- * Get encryption key from environment variable.
+ * Restrict file permissions to the current user only.
+ * On Unix, the caller should use `mode: 0o600` when writing. This function
+ * handles Windows where Node's mode parameter is ignored.
+ */
+export declare function restrictFilePermissions(filePath: string): void;
+/**
+ * Restrict directory permissions to the current user only.
+ * On Unix, the caller should use `mode: 0o700` when creating. This function
+ * handles Windows where Node's mode parameter is ignored.
+ */
+export declare function restrictDirPermissions(dirPath: string): void;
+/**
+ * Get encryption key from environment variable or key file.
  * The key should be a 32-byte (256-bit) hex-encoded string (64 characters).
  * Generate with: openssl rand -hex 32
  *
- * @returns Buffer containing the key, or null if not set/invalid
+ * Checks (in order):
+ * 1. AGENT_BROWSER_ENCRYPTION_KEY env var
+ * 2. ~/.agent-browser/.encryption-key file
+ *
+ * @returns Buffer containing the key, or null if not available
  */
 export declare function getEncryptionKey(): Buffer | null;
+/**
+ * Ensure an encryption key is available, auto-generating one if needed.
+ * On first call without an existing key, generates a random 256-bit key
+ * and writes it to ~/.agent-browser/.encryption-key (mode 0600).
+ */
+export declare function ensureEncryptionKey(): Buffer;
 /**
  * Encrypt data using AES-256-GCM.
  * Returns a JSON-serializable payload with IV, auth tag, and encrypted data.

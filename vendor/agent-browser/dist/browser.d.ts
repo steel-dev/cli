@@ -72,6 +72,8 @@ export declare class BrowserManager {
     private lastSnapshot;
     private scopedHeaderRoutes;
     private colorScheme;
+    private downloadPath;
+    private allowedDomains;
     /**
      * Set the persistent color scheme preference.
      * Applied automatically to all new pages and contexts.
@@ -133,6 +135,23 @@ export declare class BrowserManager {
      * Check if a selector looks like a ref
      */
     isRef(selector: string): boolean;
+    /**
+     * Install the domain filter on a context if an allowlist is configured.
+     * Should be called before any pages navigate on the context.
+     */
+    private ensureDomainFilter;
+    /**
+     * After installing the domain filter, verify existing pages are on allowed
+     * domains. Pages that pre-date the filter (e.g. CDP/cloud connect) may have
+     * already navigated to disallowed domains. Navigate them to about:blank.
+     */
+    private sanitizeExistingPages;
+    /**
+     * Check if a URL is allowed by the domain allowlist.
+     * Throws if the URL's domain is blocked. No-op if no allowlist is set.
+     * Blocks non-http(s) schemes and unparseable URLs by default.
+     */
+    checkDomainAllowed(url: string): void;
     /**
      * Get locator - supports both refs and regular selectors
      */

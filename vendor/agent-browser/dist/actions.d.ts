@@ -10,6 +10,7 @@ export declare function setScreencastFrameCallback(callback: ((frame: Screencast
  * @internal Exported for testing
  */
 export declare function toAIFriendlyError(error: unknown, selector: string): Error;
+export declare function initActionPolicy(): void;
 /**
  * Execute a command and return a response
  */

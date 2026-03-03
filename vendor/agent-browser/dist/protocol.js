@@ -43,8 +43,12 @@ const launchSchema = baseCommandSchema.extend({
     ignoreHTTPSErrors: z.boolean().optional(),
     allowFileAccess: z.boolean().optional(),
     colorScheme: z.enum(['light', 'dark', 'no-preference']).optional(),
+    downloadPath: z.string().optional(),
     profile: z.string().optional(),
     storageState: z.string().optional(),
+    allowedDomains: z.array(z.string()).optional(),
+    actionPolicy: z.string().optional(),
+    confirmActions: z.array(z.string()).optional(),
 });
 const navigateSchema = baseCommandSchema.extend({
     action: z.literal('navigate'),
@@ -726,6 +730,45 @@ const windowNewSchema = baseCommandSchema.extend({
         .nullable()
         .optional(),
 });
+const authProfileName = z
+    .string()
+    .min(1)
+    .regex(/^[a-zA-Z0-9_-]+$/, {
+    message: 'Profile name must contain only alphanumeric characters, hyphens, and underscores',
+});
+const authSaveSchema = baseCommandSchema.extend({
+    action: z.literal('auth_save'),
+    name: authProfileName,
+    url: z.string().min(1),
+    username: z.string().min(1),
+    password: z.string().min(1),
+    usernameSelector: z.string().optional(),
+    passwordSelector: z.string().optional(),
+    submitSelector: z.string().optional(),
+});
+const authLoginSchema = baseCommandSchema.extend({
+    action: z.literal('auth_login'),
+    name: authProfileName,
+});
+const authListSchema = baseCommandSchema.extend({
+    action: z.literal('auth_list'),
+});
+const authDeleteSchema = baseCommandSchema.extend({
+    action: z.literal('auth_delete'),
+    name: authProfileName,
+});
+const authShowSchema = baseCommandSchema.extend({
+    action: z.literal('auth_show'),
+    name: authProfileName,
+});
+const confirmSchema = baseCommandSchema.extend({
+    action: z.literal('confirm'),
+    confirmationId: z.string().min(1),
+});
+const denySchema = baseCommandSchema.extend({
+    action: z.literal('deny'),
+    confirmationId: z.string().min(1),
+});
 // Union schema for all commands
 const commandSchema = z.discriminatedUnion('action', [
     launchSchema,
@@ -863,6 +906,13 @@ const commandSchema = z.discriminatedUnion('action', [
     diffSnapshotSchema,
     diffScreenshotSchema,
     diffUrlSchema,
+    confirmSchema,
+    denySchema,
+    authSaveSchema,
+    authLoginSchema,
+    authListSchema,
+    authDeleteSchema,
+    authShowSchema,
 ]);
 /**
  * Parse a JSON string into a validated command

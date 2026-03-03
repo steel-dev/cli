@@ -1,10 +1,11 @@
 import { chromium, firefox, webkit, devices, } from 'playwright-core';
 import path from 'node:path';
 import os from 'node:os';
-import { existsSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, readFileSync, statSync } from 'node:fs';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { getEnhancedSnapshot, parseRef } from './snapshot.js';
 import { safeHeaderMerge } from './state-utils.js';
+import { isDomainAllowed, installDomainFilter, parseDomainList } from './domain-filter.js';
 import { getEncryptionKey, isEncryptedPayload, decryptData, ENCRYPTION_KEY_ENV, } from './state-utils.js';
 /**
  * Returns the default Playwright timeout in milliseconds for standard operations.
@@ -50,6 +51,8 @@ export class BrowserManager {
     lastSnapshot = '';
     scopedHeaderRoutes = new Map();
     colorScheme = null;
+    downloadPath = null;
+    allowedDomains = [];
     /**
      * Set the persistent color scheme preference.
      * Applied automatically to all new pages and contexts.
@@ -138,13 +141,10 @@ export class BrowserManager {
             return page.locator(refData.selector);
         }
         // Build locator with exact: true to avoid substring matches
-        let locator;
-        if (refData.name) {
-            locator = page.getByRole(refData.role, { name: refData.name, exact: true });
-        }
-        else {
-            locator = page.getByRole(refData.role);
-        }
+        let locator = page.getByRole(refData.role, {
+            name: refData.name,
+            exact: true,
+        });
         // If an nth index is stored (for disambiguation), use it
         if (refData.nth !== undefined) {
             locator = locator.nth(refData.nth);
@@ -156,6 +156,60 @@ export class BrowserManager {
      */
     isRef(selector) {
         return parseRef(selector) !== null;
+    }
+    /**
+     * Install the domain filter on a context if an allowlist is configured.
+     * Should be called before any pages navigate on the context.
+     */
+    async ensureDomainFilter(context) {
+        if (this.allowedDomains.length > 0) {
+            await installDomainFilter(context, this.allowedDomains);
+        }
+    }
+    /**
+     * After installing the domain filter, verify existing pages are on allowed
+     * domains. Pages that pre-date the filter (e.g. CDP/cloud connect) may have
+     * already navigated to disallowed domains. Navigate them to about:blank.
+     */
+    async sanitizeExistingPages(pages) {
+        if (this.allowedDomains.length === 0)
+            return;
+        for (const page of pages) {
+            const url = page.url();
+            if (!url || url === 'about:blank')
+                continue;
+            try {
+                const hostname = new URL(url).hostname.toLowerCase();
+                if (!isDomainAllowed(hostname, this.allowedDomains)) {
+                    await page.goto('about:blank');
+                }
+            }
+            catch {
+                await page.goto('about:blank').catch(() => { });
+            }
+        }
+    }
+    /**
+     * Check if a URL is allowed by the domain allowlist.
+     * Throws if the URL's domain is blocked. No-op if no allowlist is set.
+     * Blocks non-http(s) schemes and unparseable URLs by default.
+     */
+    checkDomainAllowed(url) {
+        if (this.allowedDomains.length === 0)
+            return;
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            throw new Error(`Navigation blocked: non-http(s) scheme in URL "${url}"`);
+        }
+        let hostname;
+        try {
+            hostname = new URL(url).hostname.toLowerCase();
+        }
+        catch {
+            throw new Error(`Navigation blocked: unable to parse URL "${url}"`);
+        }
+        if (!isDomainAllowed(hostname, this.allowedDomains)) {
+            throw new Error(`Navigation blocked: ${hostname} is not in the allowed domains list`);
+        }
     }
     /**
      * Get locator - supports both refs and regular selectors
@@ -197,6 +251,7 @@ export class BrowserManager {
             context.setDefaultTimeout(getDefaultTimeout());
             this.contexts.push(context);
             this.setupContextTracking(context);
+            await this.ensureDomainFilter(context);
         }
         else {
             return;
@@ -742,6 +797,8 @@ export class BrowserManager {
             context.setDefaultTimeout(10000);
             this.contexts.push(context);
             this.setupContextTracking(context);
+            await this.ensureDomainFilter(context);
+            await this.sanitizeExistingPages([page]);
             this.pages.push(page);
             this.activePageIndex = 0;
             this.setupPageTracking(page);
@@ -858,10 +915,12 @@ export class BrowserManager {
             this.browser = browser;
             context.setDefaultTimeout(getDefaultTimeout());
             this.contexts.push(context);
+            this.setupContextTracking(context);
+            await this.ensureDomainFilter(context);
+            await this.sanitizeExistingPages([page]);
             this.pages.push(page);
             this.activePageIndex = 0;
             this.setupPageTracking(page);
-            this.setupContextTracking(context);
         }
         catch (error) {
             await this.closeKernelSession(session.session_id, kernelApiKey).catch((sessionError) => {
@@ -921,10 +980,12 @@ export class BrowserManager {
             this.browser = browser;
             context.setDefaultTimeout(getDefaultTimeout());
             this.contexts.push(context);
+            this.setupContextTracking(context);
+            await this.ensureDomainFilter(context);
+            await this.sanitizeExistingPages([page]);
             this.pages.push(page);
             this.activePageIndex = 0;
             this.setupPageTracking(page);
-            this.setupContextTracking(context);
         }
         catch (error) {
             await this.closeBrowserUseSession(session.id, browserUseApiKey).catch((sessionError) => {
@@ -973,6 +1034,23 @@ export class BrowserManager {
         if (options.colorScheme) {
             this.colorScheme = options.colorScheme;
         }
+        if (options.downloadPath) {
+            this.downloadPath = options.downloadPath;
+        }
+        if (options.allowedDomains && options.allowedDomains.length > 0) {
+            this.allowedDomains = options.allowedDomains.map((d) => d.toLowerCase());
+        }
+        else {
+            const envDomains = process.env.AGENT_BROWSER_ALLOWED_DOMAINS;
+            if (envDomains) {
+                this.allowedDomains = parseDomainList(envDomains);
+            }
+        }
+        if (this.downloadPath && (cdpEndpoint || options.autoConnect)) {
+            const warning = "--download-path is ignored when connecting via CDP or auto-connect (downloads use the remote browser's configuration)";
+            this.launchWarnings.push(warning);
+            console.error(`[WARN] ${warning}`);
+        }
         if (cdpEndpoint) {
             await this.connectViaCDP(cdpEndpoint);
             return;
@@ -984,6 +1062,11 @@ export class BrowserManager {
         // Cloud browser providers require explicit opt-in via -p flag or AGENT_BROWSER_PROVIDER env var
         // -p flag takes precedence over env var
         const provider = options.provider ?? process.env.AGENT_BROWSER_PROVIDER;
+        if (this.downloadPath && provider) {
+            const warning = "--download-path is ignored when using a cloud provider (downloads use the remote browser's configuration)";
+            this.launchWarnings.push(warning);
+            console.error(`[WARN] ${warning}`);
+        }
         if (provider === 'browserbase') {
             await this.connectToBrowserbase();
             return;
@@ -996,6 +1079,23 @@ export class BrowserManager {
         if (provider === 'kernel') {
             await this.connectToKernel();
             return;
+        }
+        if (this.downloadPath) {
+            const resolved = path.resolve(this.downloadPath);
+            const stat = statSync(resolved, { throwIfNoEntry: false });
+            if (stat && !stat.isDirectory()) {
+                throw new Error(`Download path is not a directory: ${resolved}`);
+            }
+            if (!stat) {
+                try {
+                    mkdirSync(resolved, { recursive: true });
+                }
+                catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    throw new Error(`Cannot create download directory '${resolved}': ${msg}`);
+                }
+            }
+            this.downloadPath = resolved;
         }
         const browserType = options.browser ?? 'chromium';
         if (hasExtensions && browserType !== 'chromium') {
@@ -1043,6 +1143,7 @@ export class BrowserManager {
                 ...(options.proxy && { proxy: options.proxy }),
                 ignoreHTTPSErrors: options.ignoreHTTPSErrors ?? false,
                 ...(this.colorScheme && { colorScheme: this.colorScheme }),
+                ...(this.downloadPath && { downloadsPath: this.downloadPath }),
             });
             this.isPersistentContext = true;
         }
@@ -1060,6 +1161,7 @@ export class BrowserManager {
                 ...(options.proxy && { proxy: options.proxy }),
                 ignoreHTTPSErrors: options.ignoreHTTPSErrors ?? false,
                 ...(this.colorScheme && { colorScheme: this.colorScheme }),
+                ...(this.downloadPath && { downloadsPath: this.downloadPath }),
             });
             this.isPersistentContext = true;
         }
@@ -1069,6 +1171,7 @@ export class BrowserManager {
                 headless: options.headless ?? true,
                 executablePath: options.executablePath,
                 args: baseArgs,
+                ...(this.downloadPath && { downloadsPath: this.downloadPath }),
             });
             this.cdpEndpoint = null;
             // Check for auto-load state file (supports encrypted files)
@@ -1131,7 +1234,9 @@ export class BrowserManager {
         context.setDefaultTimeout(getDefaultTimeout());
         this.contexts.push(context);
         this.setupContextTracking(context);
+        await this.ensureDomainFilter(context);
         const page = context.pages()[0] ?? (await context.newPage());
+        await this.sanitizeExistingPages([page]);
         // Only add if not already tracked (setupContextTracking may have already added it via 'page' event)
         if (!this.pages.includes(page)) {
             this.pages.push(page);
@@ -1192,7 +1297,9 @@ export class BrowserManager {
                 context.setDefaultTimeout(10000);
                 this.contexts.push(context);
                 this.setupContextTracking(context);
+                await this.ensureDomainFilter(context);
             }
+            await this.sanitizeExistingPages(allPages);
             for (const page of allPages) {
                 this.pages.push(page);
                 this.setupPageTracking(page);
@@ -1432,6 +1539,7 @@ export class BrowserManager {
         context.setDefaultTimeout(getDefaultTimeout());
         this.contexts.push(context);
         this.setupContextTracking(context);
+        await this.ensureDomainFilter(context);
         const page = await context.newPage();
         // Only add if not already tracked (setupContextTracking may have already added it via 'page' event)
         if (!this.pages.includes(page)) {

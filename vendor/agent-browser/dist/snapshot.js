@@ -94,11 +94,8 @@ const STRUCTURAL_ROLES = new Set([
  * Build a selector string for storing in ref map
  */
 function buildSelector(role, name) {
-    if (name) {
-        const escapedName = JSON.stringify(name);
-        return `getByRole('${role}', { name: ${escapedName}, exact: true })`;
-    }
-    return `getByRole('${role}')`;
+    const escapedName = JSON.stringify(name);
+    return `getByRole('${role}', { name: ${escapedName}, exact: true })`;
 }
 /**
  * Query the page for clickable elements that might not have proper ARIA roles.
@@ -232,7 +229,7 @@ export async function getEnhancedSnapshot(page, options = {}) {
     if (options.cursor) {
         const cursorElements = await findCursorInteractiveElements(page, options.selector);
         // Filter out elements whose text is already captured in the snapshot
-        const existingTexts = new Set(Object.values(refs).map((r) => r.name?.toLowerCase()));
+        const existingTexts = new Set(Object.values(refs).map((r) => r.name.toLowerCase()));
         // Also extract quoted strings from the ARIA tree for broader dedup
         for (const m of enhancedTree.matchAll(/"([^"]+)"/g)) {
             existingTexts.add(m[1].toLowerCase());
@@ -321,12 +318,13 @@ function processAriaTree(ariaTree, refs, options) {
             const roleLower = role.toLowerCase();
             if (INTERACTIVE_ROLES.has(roleLower)) {
                 const ref = nextRef();
-                const nth = tracker.getNextIndex(roleLower, name);
-                tracker.trackRef(roleLower, name, ref);
+                const resolvedName = name ?? '';
+                const nth = tracker.getNextIndex(roleLower, resolvedName);
+                tracker.trackRef(roleLower, resolvedName, ref);
                 refs[ref] = {
-                    selector: buildSelector(roleLower, name),
+                    selector: buildSelector(roleLower, resolvedName),
                     role: roleLower,
-                    name,
+                    name: resolvedName,
                     nth, // Always store nth, we'll use it for duplicates
                 };
                 let enhanced = `- ${role}`;
@@ -424,12 +422,14 @@ function processLine(line, refs, options, tracker) {
     const shouldHaveRef = isInteractive || (isContent && name);
     if (shouldHaveRef) {
         const ref = nextRef();
-        const nth = tracker.getNextIndex(roleLower, name);
-        tracker.trackRef(roleLower, name, ref);
+        // Normalize to "" so unnamed elements get exact-match selectors
+        const resolvedName = isInteractive ? (name ?? '') : name;
+        const nth = tracker.getNextIndex(roleLower, resolvedName);
+        tracker.trackRef(roleLower, resolvedName, ref);
         refs[ref] = {
-            selector: buildSelector(roleLower, name),
+            selector: buildSelector(roleLower, resolvedName),
             role: roleLower,
-            name,
+            name: resolvedName,
             nth, // Always store nth, we'll clean up non-duplicates later
         };
         // Build enhanced line with ref

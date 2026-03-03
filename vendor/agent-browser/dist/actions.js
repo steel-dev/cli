@@ -2,8 +2,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { mkdirSync } from 'node:fs';
 import { getAppDir } from './daemon.js';
+import { checkPolicy, describeAction, getActionCategory, loadPolicyFile, initPolicyReloader, reloadPolicyIfChanged, } from './action-policy.js';
+import { requestConfirmation, getAndRemovePending } from './confirmation.js';
+import { getAuthProfile, updateLastLogin } from './auth-vault.js';
 import { getSessionsDir, readStateFile, isValidSessionName, isEncryptedPayload, listStateFiles, cleanupExpiredStates, } from './state-utils.js';
-import { successResponse, errorResponse } from './protocol.js';
+import { successResponse, errorResponse, parseCommand } from './protocol.js';
 import { diffSnapshots, diffScreenshots } from './diff.js';
 import { getEnhancedSnapshot } from './snapshot.js';
 // Callback for screencast frames - will be set by the daemon when streaming is active
@@ -54,288 +57,345 @@ export function toAIFriendlyError(error, selector) {
     // Return original error for unknown cases
     return error instanceof Error ? error : new Error(message);
 }
+let actionPolicy = null;
+let confirmCategories = new Set();
+export function initActionPolicy() {
+    const policyPath = process.env.AGENT_BROWSER_ACTION_POLICY;
+    if (policyPath) {
+        try {
+            actionPolicy = loadPolicyFile(policyPath);
+            initPolicyReloader(policyPath, actionPolicy);
+        }
+        catch (err) {
+            console.error(`[ERROR] Failed to load action policy from ${policyPath}: ${err instanceof Error ? err.message : err}`);
+            process.exit(1);
+        }
+    }
+    const confirmActionsEnv = process.env.AGENT_BROWSER_CONFIRM_ACTIONS;
+    if (confirmActionsEnv) {
+        confirmCategories = new Set(confirmActionsEnv
+            .split(',')
+            .map((c) => c.trim().toLowerCase())
+            .filter((c) => c.length > 0));
+    }
+}
 /**
  * Execute a command and return a response
  */
 export async function executeCommand(command, browser) {
     try {
-        switch (command.action) {
-            case 'launch':
-                return await handleLaunch(command, browser);
-            case 'navigate':
-                return await handleNavigate(command, browser);
-            case 'click':
-                return await handleClick(command, browser);
-            case 'type':
-                return await handleType(command, browser);
-            case 'fill':
-                return await handleFill(command, browser);
-            case 'check':
-                return await handleCheck(command, browser);
-            case 'uncheck':
-                return await handleUncheck(command, browser);
-            case 'upload':
-                return await handleUpload(command, browser);
-            case 'dblclick':
-                return await handleDoubleClick(command, browser);
-            case 'focus':
-                return await handleFocus(command, browser);
-            case 'drag':
-                return await handleDrag(command, browser);
-            case 'frame':
-                return await handleFrame(command, browser);
-            case 'mainframe':
-                return await handleMainFrame(command, browser);
-            case 'getbyrole':
-                return await handleGetByRole(command, browser);
-            case 'getbytext':
-                return await handleGetByText(command, browser);
-            case 'getbylabel':
-                return await handleGetByLabel(command, browser);
-            case 'getbyplaceholder':
-                return await handleGetByPlaceholder(command, browser);
-            case 'press':
-                return await handlePress(command, browser);
-            case 'screenshot':
-                return await handleScreenshot(command, browser);
-            case 'snapshot':
-                return await handleSnapshot(command, browser);
-            case 'evaluate':
-                return await handleEvaluate(command, browser);
-            case 'wait':
-                return await handleWait(command, browser);
-            case 'scroll':
-                return await handleScroll(command, browser);
-            case 'select':
-                return await handleSelect(command, browser);
-            case 'hover':
-                return await handleHover(command, browser);
-            case 'content':
-                return await handleContent(command, browser);
-            case 'close':
-                return await handleClose(command, browser);
-            case 'tab_new':
-                return await handleTabNew(command, browser);
-            case 'tab_list':
-                return await handleTabList(command, browser);
-            case 'tab_switch':
-                return await handleTabSwitch(command, browser);
-            case 'tab_close':
-                return await handleTabClose(command, browser);
-            case 'window_new':
-                return await handleWindowNew(command, browser);
-            case 'cookies_get':
-                return await handleCookiesGet(command, browser);
-            case 'cookies_set':
-                return await handleCookiesSet(command, browser);
-            case 'cookies_clear':
-                return await handleCookiesClear(command, browser);
-            case 'storage_get':
-                return await handleStorageGet(command, browser);
-            case 'storage_set':
-                return await handleStorageSet(command, browser);
-            case 'storage_clear':
-                return await handleStorageClear(command, browser);
-            case 'dialog':
-                return await handleDialog(command, browser);
-            case 'pdf':
-                return await handlePdf(command, browser);
-            case 'route':
-                return await handleRoute(command, browser);
-            case 'unroute':
-                return await handleUnroute(command, browser);
-            case 'requests':
-                return await handleRequests(command, browser);
-            case 'download':
-                return await handleDownload(command, browser);
-            case 'geolocation':
-                return await handleGeolocation(command, browser);
-            case 'permissions':
-                return await handlePermissions(command, browser);
-            case 'viewport':
-                return await handleViewport(command, browser);
-            case 'useragent':
-                return await handleUserAgent(command, browser);
-            case 'device':
-                return await handleDevice(command, browser);
-            case 'back':
-                return await handleBack(command, browser);
-            case 'forward':
-                return await handleForward(command, browser);
-            case 'reload':
-                return await handleReload(command, browser);
-            case 'url':
-                return await handleUrl(command, browser);
-            case 'title':
-                return await handleTitle(command, browser);
-            case 'getattribute':
-                return await handleGetAttribute(command, browser);
-            case 'gettext':
-                return await handleGetText(command, browser);
-            case 'isvisible':
-                return await handleIsVisible(command, browser);
-            case 'isenabled':
-                return await handleIsEnabled(command, browser);
-            case 'ischecked':
-                return await handleIsChecked(command, browser);
-            case 'count':
-                return await handleCount(command, browser);
-            case 'boundingbox':
-                return await handleBoundingBox(command, browser);
-            case 'styles':
-                return await handleStyles(command, browser);
-            case 'video_start':
-                return await handleVideoStart(command, browser);
-            case 'video_stop':
-                return await handleVideoStop(command, browser);
-            case 'trace_start':
-                return await handleTraceStart(command, browser);
-            case 'trace_stop':
-                return await handleTraceStop(command, browser);
-            case 'profiler_start':
-                return await handleProfilerStart(command, browser);
-            case 'profiler_stop':
-                return await handleProfilerStop(command, browser);
-            case 'har_start':
-                return await handleHarStart(command, browser);
-            case 'har_stop':
-                return await handleHarStop(command, browser);
-            case 'state_save':
-                return await handleStateSave(command, browser);
-            case 'state_load':
-                return await handleStateLoad(command, browser);
-            case 'state_list':
-                return await handleStateList(command);
-            case 'state_clear':
-                return await handleStateClear(command);
-            case 'state_show':
-                return await handleStateShow(command);
-            case 'state_clean':
-                return await handleStateClean(command);
-            case 'state_rename':
-                return await handleStateRename(command);
-            case 'console':
-                return await handleConsole(command, browser);
-            case 'errors':
-                return await handleErrors(command, browser);
-            case 'keyboard':
-                return await handleKeyboard(command, browser);
-            case 'wheel':
-                return await handleWheel(command, browser);
-            case 'tap':
-                return await handleTap(command, browser);
-            case 'clipboard':
-                return await handleClipboard(command, browser);
-            case 'highlight':
-                return await handleHighlight(command, browser);
-            case 'clear':
-                return await handleClear(command, browser);
-            case 'selectall':
-                return await handleSelectAll(command, browser);
-            case 'innertext':
-                return await handleInnerText(command, browser);
-            case 'innerhtml':
-                return await handleInnerHtml(command, browser);
-            case 'inputvalue':
-                return await handleInputValue(command, browser);
-            case 'setvalue':
-                return await handleSetValue(command, browser);
-            case 'dispatch':
-                return await handleDispatch(command, browser);
-            case 'evalhandle':
-                return await handleEvalHandle(command, browser);
-            case 'expose':
-                return await handleExpose(command, browser);
-            case 'addscript':
-                return await handleAddScript(command, browser);
-            case 'addstyle':
-                return await handleAddStyle(command, browser);
-            case 'emulatemedia':
-                return await handleEmulateMedia(command, browser);
-            case 'offline':
-                return await handleOffline(command, browser);
-            case 'headers':
-                return await handleHeaders(command, browser);
-            case 'pause':
-                return await handlePause(command, browser);
-            case 'getbyalttext':
-                return await handleGetByAltText(command, browser);
-            case 'getbytitle':
-                return await handleGetByTitle(command, browser);
-            case 'getbytestid':
-                return await handleGetByTestId(command, browser);
-            case 'nth':
-                return await handleNth(command, browser);
-            case 'waitforurl':
-                return await handleWaitForUrl(command, browser);
-            case 'waitforloadstate':
-                return await handleWaitForLoadState(command, browser);
-            case 'setcontent':
-                return await handleSetContent(command, browser);
-            case 'timezone':
-                return await handleTimezone(command, browser);
-            case 'locale':
-                return await handleLocale(command, browser);
-            case 'credentials':
-                return await handleCredentials(command, browser);
-            case 'mousemove':
-                return await handleMouseMove(command, browser);
-            case 'mousedown':
-                return await handleMouseDown(command, browser);
-            case 'mouseup':
-                return await handleMouseUp(command, browser);
-            case 'bringtofront':
-                return await handleBringToFront(command, browser);
-            case 'waitforfunction':
-                return await handleWaitForFunction(command, browser);
-            case 'scrollintoview':
-                return await handleScrollIntoView(command, browser);
-            case 'addinitscript':
-                return await handleAddInitScript(command, browser);
-            case 'keydown':
-                return await handleKeyDown(command, browser);
-            case 'keyup':
-                return await handleKeyUp(command, browser);
-            case 'inserttext':
-                return await handleInsertText(command, browser);
-            case 'multiselect':
-                return await handleMultiSelect(command, browser);
-            case 'waitfordownload':
-                return await handleWaitForDownload(command, browser);
-            case 'responsebody':
-                return await handleResponseBody(command, browser);
-            case 'screencast_start':
-                return await handleScreencastStart(command, browser);
-            case 'screencast_stop':
-                return await handleScreencastStop(command, browser);
-            case 'input_mouse':
-                return await handleInputMouse(command, browser);
-            case 'input_keyboard':
-                return await handleInputKeyboard(command, browser);
-            case 'input_touch':
-                return await handleInputTouch(command, browser);
-            case 'recording_start':
-                return await handleRecordingStart(command, browser);
-            case 'recording_stop':
-                return await handleRecordingStop(command, browser);
-            case 'recording_restart':
-                return await handleRecordingRestart(command, browser);
-            case 'diff_snapshot':
-                return await handleDiffSnapshot(command, browser);
-            case 'diff_screenshot':
-                return await handleDiffScreenshot(command, browser);
-            case 'diff_url':
-                return await handleDiffUrl(command, browser);
-            default: {
-                // TypeScript narrows to never here, but we handle it for safety
-                const unknownCommand = command;
-                return errorResponse(unknownCommand.id, `Unknown action: ${unknownCommand.action}`);
-            }
+        // Handle confirm/deny actions (bypass policy check)
+        if (command.action === 'confirm') {
+            return await handleConfirm(command, browser);
         }
+        if (command.action === 'deny') {
+            return handleDeny(command);
+        }
+        // Hot-reload policy file if it changed on disk
+        actionPolicy = reloadPolicyIfChanged();
+        // Policy enforcement
+        const decision = checkPolicy(command.action, actionPolicy, confirmCategories);
+        if (decision === 'deny') {
+            const category = getActionCategory(command.action);
+            return errorResponse(command.id, `Action denied by policy: '${category}' is not allowed`);
+        }
+        if (decision === 'confirm') {
+            const category = getActionCategory(command.action);
+            const description = describeAction(command.action, command);
+            const { confirmationId } = requestConfirmation(command.action, category, description, command);
+            return successResponse(command.id, {
+                confirmation_required: true,
+                action: command.action,
+                category,
+                description,
+                confirmation_id: confirmationId,
+            });
+        }
+        return await dispatchAction(command, browser);
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return errorResponse(command.id, message);
+    }
+}
+/**
+ * Dispatch a command to its handler after policy checks have passed.
+ */
+async function dispatchAction(command, browser) {
+    switch (command.action) {
+        case 'launch':
+            return await handleLaunch(command, browser);
+        case 'navigate':
+            return await handleNavigate(command, browser);
+        case 'click':
+            return await handleClick(command, browser);
+        case 'type':
+            return await handleType(command, browser);
+        case 'fill':
+            return await handleFill(command, browser);
+        case 'check':
+            return await handleCheck(command, browser);
+        case 'uncheck':
+            return await handleUncheck(command, browser);
+        case 'upload':
+            return await handleUpload(command, browser);
+        case 'dblclick':
+            return await handleDoubleClick(command, browser);
+        case 'focus':
+            return await handleFocus(command, browser);
+        case 'drag':
+            return await handleDrag(command, browser);
+        case 'frame':
+            return await handleFrame(command, browser);
+        case 'mainframe':
+            return await handleMainFrame(command, browser);
+        case 'getbyrole':
+            return await handleGetByRole(command, browser);
+        case 'getbytext':
+            return await handleGetByText(command, browser);
+        case 'getbylabel':
+            return await handleGetByLabel(command, browser);
+        case 'getbyplaceholder':
+            return await handleGetByPlaceholder(command, browser);
+        case 'press':
+            return await handlePress(command, browser);
+        case 'screenshot':
+            return await handleScreenshot(command, browser);
+        case 'snapshot':
+            return await handleSnapshot(command, browser);
+        case 'evaluate':
+            return await handleEvaluate(command, browser);
+        case 'wait':
+            return await handleWait(command, browser);
+        case 'scroll':
+            return await handleScroll(command, browser);
+        case 'select':
+            return await handleSelect(command, browser);
+        case 'hover':
+            return await handleHover(command, browser);
+        case 'content':
+            return await handleContent(command, browser);
+        case 'close':
+            return await handleClose(command, browser);
+        case 'tab_new':
+            return await handleTabNew(command, browser);
+        case 'tab_list':
+            return await handleTabList(command, browser);
+        case 'tab_switch':
+            return await handleTabSwitch(command, browser);
+        case 'tab_close':
+            return await handleTabClose(command, browser);
+        case 'window_new':
+            return await handleWindowNew(command, browser);
+        case 'cookies_get':
+            return await handleCookiesGet(command, browser);
+        case 'cookies_set':
+            return await handleCookiesSet(command, browser);
+        case 'cookies_clear':
+            return await handleCookiesClear(command, browser);
+        case 'storage_get':
+            return await handleStorageGet(command, browser);
+        case 'storage_set':
+            return await handleStorageSet(command, browser);
+        case 'storage_clear':
+            return await handleStorageClear(command, browser);
+        case 'dialog':
+            return await handleDialog(command, browser);
+        case 'pdf':
+            return await handlePdf(command, browser);
+        case 'route':
+            return await handleRoute(command, browser);
+        case 'unroute':
+            return await handleUnroute(command, browser);
+        case 'requests':
+            return await handleRequests(command, browser);
+        case 'download':
+            return await handleDownload(command, browser);
+        case 'geolocation':
+            return await handleGeolocation(command, browser);
+        case 'permissions':
+            return await handlePermissions(command, browser);
+        case 'viewport':
+            return await handleViewport(command, browser);
+        case 'useragent':
+            return await handleUserAgent(command, browser);
+        case 'device':
+            return await handleDevice(command, browser);
+        case 'back':
+            return await handleBack(command, browser);
+        case 'forward':
+            return await handleForward(command, browser);
+        case 'reload':
+            return await handleReload(command, browser);
+        case 'url':
+            return await handleUrl(command, browser);
+        case 'title':
+            return await handleTitle(command, browser);
+        case 'getattribute':
+            return await handleGetAttribute(command, browser);
+        case 'gettext':
+            return await handleGetText(command, browser);
+        case 'isvisible':
+            return await handleIsVisible(command, browser);
+        case 'isenabled':
+            return await handleIsEnabled(command, browser);
+        case 'ischecked':
+            return await handleIsChecked(command, browser);
+        case 'count':
+            return await handleCount(command, browser);
+        case 'boundingbox':
+            return await handleBoundingBox(command, browser);
+        case 'styles':
+            return await handleStyles(command, browser);
+        case 'video_start':
+            return await handleVideoStart(command, browser);
+        case 'video_stop':
+            return await handleVideoStop(command, browser);
+        case 'trace_start':
+            return await handleTraceStart(command, browser);
+        case 'trace_stop':
+            return await handleTraceStop(command, browser);
+        case 'profiler_start':
+            return await handleProfilerStart(command, browser);
+        case 'profiler_stop':
+            return await handleProfilerStop(command, browser);
+        case 'har_start':
+            return await handleHarStart(command, browser);
+        case 'har_stop':
+            return await handleHarStop(command, browser);
+        case 'state_save':
+            return await handleStateSave(command, browser);
+        case 'state_load':
+            return await handleStateLoad(command, browser);
+        case 'state_list':
+            return await handleStateList(command);
+        case 'state_clear':
+            return await handleStateClear(command);
+        case 'state_show':
+            return await handleStateShow(command);
+        case 'state_clean':
+            return await handleStateClean(command);
+        case 'state_rename':
+            return await handleStateRename(command);
+        case 'console':
+            return await handleConsole(command, browser);
+        case 'errors':
+            return await handleErrors(command, browser);
+        case 'keyboard':
+            return await handleKeyboard(command, browser);
+        case 'wheel':
+            return await handleWheel(command, browser);
+        case 'tap':
+            return await handleTap(command, browser);
+        case 'clipboard':
+            return await handleClipboard(command, browser);
+        case 'highlight':
+            return await handleHighlight(command, browser);
+        case 'clear':
+            return await handleClear(command, browser);
+        case 'selectall':
+            return await handleSelectAll(command, browser);
+        case 'innertext':
+            return await handleInnerText(command, browser);
+        case 'innerhtml':
+            return await handleInnerHtml(command, browser);
+        case 'inputvalue':
+            return await handleInputValue(command, browser);
+        case 'setvalue':
+            return await handleSetValue(command, browser);
+        case 'dispatch':
+            return await handleDispatch(command, browser);
+        case 'evalhandle':
+            return await handleEvalHandle(command, browser);
+        case 'expose':
+            return await handleExpose(command, browser);
+        case 'addscript':
+            return await handleAddScript(command, browser);
+        case 'addstyle':
+            return await handleAddStyle(command, browser);
+        case 'emulatemedia':
+            return await handleEmulateMedia(command, browser);
+        case 'offline':
+            return await handleOffline(command, browser);
+        case 'headers':
+            return await handleHeaders(command, browser);
+        case 'pause':
+            return await handlePause(command, browser);
+        case 'getbyalttext':
+            return await handleGetByAltText(command, browser);
+        case 'getbytitle':
+            return await handleGetByTitle(command, browser);
+        case 'getbytestid':
+            return await handleGetByTestId(command, browser);
+        case 'nth':
+            return await handleNth(command, browser);
+        case 'waitforurl':
+            return await handleWaitForUrl(command, browser);
+        case 'waitforloadstate':
+            return await handleWaitForLoadState(command, browser);
+        case 'setcontent':
+            return await handleSetContent(command, browser);
+        case 'timezone':
+            return await handleTimezone(command, browser);
+        case 'locale':
+            return await handleLocale(command, browser);
+        case 'credentials':
+            return await handleCredentials(command, browser);
+        case 'mousemove':
+            return await handleMouseMove(command, browser);
+        case 'mousedown':
+            return await handleMouseDown(command, browser);
+        case 'mouseup':
+            return await handleMouseUp(command, browser);
+        case 'bringtofront':
+            return await handleBringToFront(command, browser);
+        case 'waitforfunction':
+            return await handleWaitForFunction(command, browser);
+        case 'scrollintoview':
+            return await handleScrollIntoView(command, browser);
+        case 'addinitscript':
+            return await handleAddInitScript(command, browser);
+        case 'keydown':
+            return await handleKeyDown(command, browser);
+        case 'keyup':
+            return await handleKeyUp(command, browser);
+        case 'inserttext':
+            return await handleInsertText(command, browser);
+        case 'multiselect':
+            return await handleMultiSelect(command, browser);
+        case 'waitfordownload':
+            return await handleWaitForDownload(command, browser);
+        case 'responsebody':
+            return await handleResponseBody(command, browser);
+        case 'screencast_start':
+            return await handleScreencastStart(command, browser);
+        case 'screencast_stop':
+            return await handleScreencastStop(command, browser);
+        case 'input_mouse':
+            return await handleInputMouse(command, browser);
+        case 'input_keyboard':
+            return await handleInputKeyboard(command, browser);
+        case 'input_touch':
+            return await handleInputTouch(command, browser);
+        case 'recording_start':
+            return await handleRecordingStart(command, browser);
+        case 'recording_stop':
+            return await handleRecordingStop(command, browser);
+        case 'recording_restart':
+            return await handleRecordingRestart(command, browser);
+        case 'diff_snapshot':
+            return await handleDiffSnapshot(command, browser);
+        case 'diff_screenshot':
+            return await handleDiffScreenshot(command, browser);
+        case 'diff_url':
+            return await handleDiffUrl(command, browser);
+        case 'auth_login':
+            return await handleAuthLogin(command, browser);
+        default: {
+            // TypeScript narrows to never here, but we handle it for safety
+            const unknownCommand = command;
+            return errorResponse(unknownCommand.id, `Unknown action: ${unknownCommand.action}`);
+        }
     }
 }
 async function handleLaunch(command, browser) {
@@ -343,6 +403,7 @@ async function handleLaunch(command, browser) {
     return successResponse(command.id, { launched: true });
 }
 async function handleNavigate(command, browser) {
+    browser.checkDomainAllowed(command.url);
     const page = browser.getPage();
     // If headers are provided, set up scoped headers for this origin
     if (command.headers && Object.keys(command.headers).length > 0) {
@@ -612,16 +673,18 @@ async function handleSnapshot(command, browser) {
     for (const [ref, data] of Object.entries(refs)) {
         simpleRefs[ref] = { role: data.role, name: data.name };
     }
+    const page = browser.getPage();
     return successResponse(command.id, {
         snapshot: tree || 'Empty page',
         refs: Object.keys(simpleRefs).length > 0 ? simpleRefs : undefined,
+        origin: page.url(),
     });
 }
 async function handleEvaluate(command, browser) {
     const page = browser.getPage();
     // Evaluate the script directly as a string expression
     const result = await page.evaluate(command.script);
-    return successResponse(command.id, { result });
+    return successResponse(command.id, { result, origin: page.url() });
 }
 async function handleWait(command, browser) {
     const page = browser.getPage();
@@ -642,36 +705,36 @@ async function handleWait(command, browser) {
 }
 async function handleScroll(command, browser) {
     const page = browser.getPage();
+    let deltaX = command.x ?? 0;
+    let deltaY = command.y ?? 0;
+    const hasExplicitDelta = command.x !== undefined || command.y !== undefined;
+    if (command.direction) {
+        const amount = command.amount ?? 100;
+        switch (command.direction) {
+            case 'up':
+                deltaY = -amount;
+                break;
+            case 'down':
+                deltaY = amount;
+                break;
+            case 'left':
+                deltaX = -amount;
+                break;
+            case 'right':
+                deltaX = amount;
+                break;
+        }
+    }
     if (command.selector) {
         const element = browser.getLocator(command.selector);
         await element.scrollIntoViewIfNeeded();
-        if (command.x !== undefined || command.y !== undefined) {
+        if (hasExplicitDelta || deltaX !== 0 || deltaY !== 0) {
             await element.evaluate((el, { x, y }) => {
-                el.scrollBy(x ?? 0, y ?? 0);
-            }, { x: command.x, y: command.y });
+                el.scrollBy(x, y);
+            }, { x: deltaX, y: deltaY });
         }
     }
     else {
-        // Scroll the page
-        let deltaX = command.x ?? 0;
-        let deltaY = command.y ?? 0;
-        if (command.direction) {
-            const amount = command.amount ?? 100;
-            switch (command.direction) {
-                case 'up':
-                    deltaY = -amount;
-                    break;
-                case 'down':
-                    deltaY = amount;
-                    break;
-                case 'left':
-                    deltaX = -amount;
-                    break;
-                case 'right':
-                    deltaX = amount;
-                    break;
-            }
-        }
         await page.evaluate(`window.scrollBy(${deltaX}, ${deltaY})`);
     }
     return successResponse(command.id, { scrolled: true });
@@ -706,7 +769,7 @@ async function handleContent(command, browser) {
     else {
         html = await page.content();
     }
-    return successResponse(command.id, { html });
+    return successResponse(command.id, { html, origin: page.url() });
 }
 async function handleClose(command, browser) {
     await browser.close();
@@ -1067,14 +1130,16 @@ async function handleTitle(command, browser) {
     return successResponse(command.id, { title });
 }
 async function handleGetAttribute(command, browser) {
+    const page = browser.getPage();
     const locator = browser.getLocator(command.selector);
     const value = await locator.getAttribute(command.attribute);
-    return successResponse(command.id, { attribute: command.attribute, value });
+    return successResponse(command.id, { attribute: command.attribute, value, origin: page.url() });
 }
 async function handleGetText(command, browser) {
+    const page = browser.getPage();
     const locator = browser.getLocator(command.selector);
     const text = await locator.textContent();
-    return successResponse(command.id, { text });
+    return successResponse(command.id, { text, origin: page.url() });
 }
 async function handleIsVisible(command, browser) {
     const locator = browser.getLocator(command.selector);
@@ -1354,8 +1419,9 @@ async function handleConsole(command, browser) {
         browser.clearConsoleMessages();
         return successResponse(command.id, { cleared: true });
     }
+    const page = browser.getPage();
     const messages = browser.getConsoleMessages();
-    return successResponse(command.id, { messages });
+    return successResponse(command.id, { messages, origin: page.url() });
 }
 async function handleErrors(command, browser) {
     if (command.clear) {
@@ -1435,12 +1501,13 @@ async function handleInnerText(command, browser) {
 async function handleInnerHtml(command, browser) {
     const page = browser.getPage();
     const html = await page.locator(command.selector).innerHTML();
-    return successResponse(command.id, { html });
+    return successResponse(command.id, { html, origin: page.url() });
 }
 async function handleInputValue(command, browser) {
+    const page = browser.getPage();
     const locator = browser.getLocator(command.selector);
     const value = await locator.inputValue();
-    return successResponse(command.id, { value });
+    return successResponse(command.id, { value, origin: page.url() });
 }
 async function handleSetValue(command, browser) {
     const page = browser.getPage();
@@ -1858,5 +1925,113 @@ async function handleDiffUrl(command, browser) {
         result.screenshot = await diffScreenshots(page.context(), screenshot1, screenshot2, {});
     }
     return successResponse(command.id, result);
+}
+async function handleAuthLogin(command, browser) {
+    const profile = getAuthProfile(command.name);
+    if (!profile) {
+        return errorResponse(command.id, `Auth profile '${command.name}' not found`);
+    }
+    browser.checkDomainAllowed(profile.url);
+    const page = browser.getPage();
+    await page.goto(profile.url, { waitUntil: 'load' });
+    const usingAutoDetect = !profile.usernameSelector && !profile.passwordSelector && !profile.submitSelector;
+    if (usingAutoDetect) {
+        console.error(`[agent-browser] Auth login '${command.name}': using auto-detected form selectors. ` +
+            `If login fails, specify --username-selector/--password-selector/--submit-selector with auth save.`);
+    }
+    const passSel = profile.passwordSelector || 'input[type="password"]:visible';
+    // Auto-detect selectors ordered from most specific to broadest.
+    // Locale-dependent text matchers (e.g. "Sign in") are intentionally
+    // excluded -- they break on non-English pages.
+    const AUTO_USER_SELECTORS = [
+        'input[autocomplete="username"]:visible',
+        'input[type="email"]:visible',
+        'input[name="username"]:visible',
+        'input[name="email"]:visible',
+    ];
+    const AUTO_SUBMIT_SELECTORS = ['button[type="submit"]:visible', 'input[type="submit"]:visible'];
+    try {
+        // Resolve username field: custom selector or sequential auto-detect
+        let userLocator;
+        if (profile.usernameSelector) {
+            userLocator = page.locator(profile.usernameSelector).first();
+        }
+        else {
+            userLocator = null;
+            for (const sel of AUTO_USER_SELECTORS) {
+                const loc = page.locator(sel).first();
+                if (await loc.isVisible({ timeout: 1000 }).catch(() => false)) {
+                    userLocator = loc;
+                    break;
+                }
+            }
+            if (!userLocator) {
+                return errorResponse(command.id, `Auth login failed for '${command.name}': could not find username field. ` +
+                    `Specify --username-selector with auth save.`);
+            }
+        }
+        // Resolve submit button: custom selector or sequential auto-detect
+        let submitLocator;
+        if (profile.submitSelector) {
+            submitLocator = page.locator(profile.submitSelector).first();
+        }
+        else {
+            submitLocator = null;
+            for (const sel of AUTO_SUBMIT_SELECTORS) {
+                const loc = page.locator(sel).first();
+                if (await loc.isVisible({ timeout: 1000 }).catch(() => false)) {
+                    submitLocator = loc;
+                    break;
+                }
+            }
+            if (!submitLocator) {
+                return errorResponse(command.id, `Auth login failed for '${command.name}': could not find submit button. ` +
+                    `Specify --submit-selector with auth save.`);
+            }
+        }
+        await userLocator.fill(profile.username);
+        await page.locator(passSel).first().fill(profile.password);
+        await submitLocator.click();
+        await page.waitForLoadState('load');
+    }
+    catch (err) {
+        return errorResponse(command.id, `Auth login failed for '${command.name}': ${err instanceof Error ? err.message : err}. ` +
+            `Try specifying custom selectors with auth save --username-selector/--password-selector/--submit-selector`);
+    }
+    updateLastLogin(command.name);
+    return successResponse(command.id, {
+        loggedIn: true,
+        name: command.name,
+        url: page.url(),
+        title: await page.title(),
+    });
+}
+async function handleConfirm(command, browser) {
+    const entry = getAndRemovePending(command.confirmationId);
+    if (!entry) {
+        return errorResponse(command.id, `No pending confirmation with id '${command.confirmationId}'`);
+    }
+    // Re-validate the stored command through the schema to guard against
+    // shape drift between when the confirmation was issued and now.
+    const parseResult = parseCommand(JSON.stringify(entry.command));
+    if (!parseResult.success) {
+        return errorResponse(command.id, `Stored command is no longer valid: ${parseResult.error}`);
+    }
+    const originalCommand = parseResult.command;
+    // Re-check deny list in case policy was updated since the confirmation was issued
+    actionPolicy = reloadPolicyIfChanged();
+    const decision = checkPolicy(originalCommand.action, actionPolicy, new Set());
+    if (decision === 'deny') {
+        const category = getActionCategory(originalCommand.action);
+        return errorResponse(command.id, `Action denied by policy: '${category}' is not allowed`);
+    }
+    return await dispatchAction(originalCommand, browser);
+}
+function handleDeny(command) {
+    const entry = getAndRemovePending(command.confirmationId);
+    if (!entry) {
+        return errorResponse(command.id, `No pending confirmation with id '${command.confirmationId}'`);
+    }
+    return successResponse(command.id, { denied: true });
 }
 //# sourceMappingURL=actions.js.map
