@@ -11,7 +11,6 @@ import {
 	subscribeToUpdateState,
 	type UpdateState,
 } from './utils/update.js';
-import Spinner from 'ink-spinner';
 import {
 	filterSteelGlobalFlags,
 	getBrowserPassthroughArgv,
@@ -84,86 +83,37 @@ if (helpFlag || !command || command === 'help') {
 	process.exit(0);
 }
 
-// Component to show update progress
+// Component to show update notification and run the command immediately
 function UpdateProgress() {
-	const [updateState, setUpdateState] = React.useState<UpdateState>({
-		status: 'idle',
-		message: '',
-	});
-	const [shouldProceed, setShouldProceed] = React.useState(false);
+	const [updateInfo, setUpdateInfo] = React.useState<{
+		current: string;
+		latest: string;
+	} | null>(null);
 
 	React.useEffect(() => {
-		const unsubscribe = subscribeToUpdateState(state => {
-			setUpdateState(state);
-
-			if (state.status === 'complete') {
-				if (state.versionInfo?.hasUpdate) {
-					setGlobalUpdateInfo(state.versionInfo || null);
-					setShouldProceed(true);
-				} else {
-					setGlobalUpdateInfo(state.versionInfo || null);
-					setShouldProceed(true);
+		checkAndUpdate({silent: true, autoUpdate: false, reactMode: true})
+			.then(info => {
+				if (info.hasUpdate) {
+					setUpdateInfo({current: info.current, latest: info.latest});
+					setGlobalUpdateInfo(info);
 				}
-			} else if (state.status === 'error') {
-				setShouldProceed(true);
-			}
-		});
-
-		// Start the update check
-		async function performUpdateCheck() {
-			try {
-				await checkAndUpdate({
-					silent: true,
-					autoUpdate: true,
-					reactMode: true,
-				});
-			} catch {
-				setShouldProceed(true);
-			}
-		}
-
-		performUpdateCheck();
-
-		// Cleanup subscription on unmount
-		return unsubscribe;
+			})
+			.catch(() => {});
 	}, []);
 
-	if (
-		updateState.status === 'idle' ||
-		updateState.status === 'checking' ||
-		updateState.status === 'updating'
-	) {
-		return (
-			<Box marginBottom={1}>
-				<Text>
-					<Spinner type="dots" /> {updateState.message}
-				</Text>
-			</Box>
-		);
-	}
-
-	if (updateState.status === 'complete' && updateState.versionInfo?.hasUpdate) {
-		return (
-			<Box marginBottom={1}>
-				<Text>✅ {updateState.message}</Text>
-			</Box>
-		);
-	}
-
-	if (shouldProceed) {
-		return <PastelApp />;
-	}
-
-	if (updateState.status === 'error') {
-		return (
-			<Box marginBottom={1}>
-				<Text color="red">❌ {updateState.message}</Text>
-				{updateState.error && <Text color="gray"> ({updateState.error})</Text>}
-			</Box>
-		);
-	}
-
-	return null;
+	return (
+		<>
+			{updateInfo && (
+				<Box marginBottom={1}>
+					<Text color="yellow">
+						Update available: v{updateInfo.current} → v{updateInfo.latest}. Run
+						`steel update` to install.
+					</Text>
+				</Box>
+			)}
+			<PastelApp />
+		</>
+	);
 }
 
 // Component to render the Pastel app
