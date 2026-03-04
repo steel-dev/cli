@@ -165,8 +165,8 @@ export async function startBrowserSession(
 
 		let resolvedProfileId: string | undefined;
 
-		if (options.profileDir) {
-			const stored = await readSteelProfile(options.profileDir);
+		if (options.profileName) {
+			const stored = await readSteelProfile(options.profileName, environment);
 			resolvedProfileId = stored?.profileId;
 		}
 
@@ -182,14 +182,14 @@ export async function startBrowserSession(
 					region: options.region,
 					solveCaptcha: options.solveCaptcha,
 					profileId: resolvedProfileId,
-					persistProfile: Boolean(options.profileDir),
+					persistProfile: Boolean(options.profileName),
 				},
 				environment,
 				apiUrl,
 			);
 		} catch (error) {
 			if (
-				options.profileDir &&
+				options.profileName &&
 				resolvedProfileId &&
 				isNotFoundApiError(error)
 			) {
@@ -240,10 +240,14 @@ export async function startBrowserSession(
 		});
 
 		if (claimedCreatedSession) {
-			if (options.profileDir) {
+			if (options.profileName) {
 				const returnedProfileId = createdSession['profileId'];
 				if (typeof returnedProfileId === 'string') {
-					await writeSteelProfile(options.profileDir, returnedProfileId);
+					await writeSteelProfile(
+						options.profileName,
+						returnedProfileId,
+						environment,
+					);
 				}
 			}
 
@@ -691,7 +695,7 @@ export async function bootstrapBrowserPassthroughArgv(
 		solveCaptcha: parsed.options.solveCaptcha || undefined,
 		deadSessionBehavior: 'error',
 		environment,
-		profileDir: parsed.options.profileDir || undefined,
+		profileName: parsed.options.profileName || undefined,
 	});
 
 	if (!session.connectUrl) {

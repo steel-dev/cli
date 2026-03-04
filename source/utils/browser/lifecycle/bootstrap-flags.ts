@@ -3,6 +3,7 @@ import {
 	parsePositiveIntegerFlagValue,
 	resolveExplicitApiUrl,
 } from './api-client.js';
+import {validateProfileName} from './profile-store.js';
 import type {ParsedBootstrapOptions} from './types.js';
 
 export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
@@ -21,7 +22,7 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		solveCaptcha: false,
 		autoConnect: false,
 		cdpTarget: null,
-		profileDir: process.env['STEEL_PROFILE']?.trim() || null,
+		profileName: process.env['STEEL_PROFILE']?.trim() || null,
 	};
 	const passthroughArgv: string[] = [];
 
@@ -215,7 +216,13 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 				);
 			}
 
-			options.profileDir = value.trim();
+			const name = value.trim();
+			const validationError = validateProfileName(name);
+			if (validationError) {
+				throw new BrowserAdapterError('INVALID_BROWSER_ARGS', validationError);
+			}
+
+			options.profileName = name;
 
 			if (argument === '--profile') {
 				index++;

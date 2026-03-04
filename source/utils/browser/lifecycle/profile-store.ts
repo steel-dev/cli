@@ -4,22 +4,36 @@ import * as path from 'node:path';
 
 type SteelProfileData = {
 	profileId: string;
-	updatedAt: string;
 };
 
-function expandProfileDir(dir: string): string {
-	if (dir.startsWith('~')) {
-		return path.join(os.homedir(), dir.slice(1));
+function getProfilesDirectory(environment: NodeJS.ProcessEnv): string {
+	const configDir =
+		environment.STEEL_CONFIG_DIR?.trim() ||
+		path.join(os.homedir(), '.config', 'steel');
+	return path.join(configDir, 'profiles');
+}
+
+function getProfilePath(name: string, environment: NodeJS.ProcessEnv): string {
+	return path.join(getProfilesDirectory(environment), `${name}.json`);
+}
+
+export function validateProfileName(name: string): string | null {
+	if (!name.trim()) {
+		return 'Profile name cannot be empty.';
 	}
 
-	return dir;
+	if (name.includes('/') || name.includes('\\')) {
+		return `Invalid profile name "${name}". Use a name like "myapp", not a path.`;
+	}
+
+	return null;
 }
 
 export async function readSteelProfile(
-	dir: string,
+	name: string,
+	environment: NodeJS.ProcessEnv,
 ): Promise<{profileId: string} | null> {
-	const expandedDir = expandProfileDir(dir);
-	const filePath = path.join(expandedDir, '.steel.json');
+	const filePath = getProfilePath(name, environment);
 
 	try {
 		const contents = await fs.readFile(filePath, 'utf-8');
@@ -40,18 +54,15 @@ export async function readSteelProfile(
 }
 
 export async function writeSteelProfile(
-	dir: string,
+	name: string,
 	profileId: string,
+	environment: NodeJS.ProcessEnv,
 ): Promise<void> {
-	const expandedDir = expandProfileDir(dir);
+	const profilesDir = getProfilesDirectory(environment);
+	await fs.mkdir(profilesDir, {recursive: true});
 
-	await fs.mkdir(expandedDir, {recursive: true});
-
-	const filePath = path.join(expandedDir, '.steel.json');
-	const data: SteelProfileData = {
-		profileId,
-		updatedAt: new Date().toISOString(),
-	};
+	const filePath = getProfilePath(name, environment);
+	const data: SteelProfileData = {profileId};
 
 	await fs.writeFile(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
 }

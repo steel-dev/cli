@@ -43,7 +43,7 @@ export type ParsedBootstrapOptions = {
 	solveCaptcha: boolean;
 	autoConnect: boolean;
 	cdpTarget: string | null;
-	profileDir: string | null;
+	profileName: string | null;
 };
 
 export type BrowserSessionSummary = {
@@ -69,7 +69,7 @@ export type StartBrowserSessionOptions = {
 	solveCaptcha?: boolean;
 	deadSessionBehavior?: DeadSessionBehavior;
 	environment?: NodeJS.ProcessEnv;
-	profileDir?: string;
+	profileName?: string;
 };
 
 export type StopBrowserSessionOptions = {

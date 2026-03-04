@@ -96,7 +96,7 @@ export const options = zod.object({
 		.describe(
 			option({
 				description:
-					'Profile directory to persist browser state across sessions',
+					'Named profile to persist browser state across sessions (stored in ~/.config/steel/profiles/)',
 			}),
 		)
 		.optional(),
@@ -120,7 +120,7 @@ export default function Start({options}: Props) {
 					headless: options.sessionHeadless,
 					region: options.sessionRegion,
 					solveCaptcha: options.sessionSolveCaptcha,
-					profileDir: options.profile,
+					profileName: options.profile,
 				});
 
 				console.log(`id: ${session.id}`);
