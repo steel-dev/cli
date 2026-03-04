@@ -66,3 +66,59 @@ export async function writeSteelProfile(
 
 	await fs.writeFile(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
 }
+
+export async function listSteelProfiles(
+	environment: NodeJS.ProcessEnv,
+): Promise<Array<{name: string; profileId: string}>> {
+	const profilesDir = getProfilesDirectory(environment);
+
+	let entries: string[];
+	try {
+		entries = await fs.readdir(profilesDir);
+	} catch {
+		return [];
+	}
+
+	const profiles: Array<{name: string; profileId: string}> = [];
+
+	for (const entry of entries) {
+		if (!entry.endsWith('.json')) continue;
+
+		const name = entry.slice(0, -5);
+		const filePath = path.join(profilesDir, entry);
+
+		try {
+			const contents = await fs.readFile(filePath, 'utf-8');
+			const parsed = JSON.parse(contents) as unknown;
+
+			if (
+				parsed &&
+				typeof parsed === 'object' &&
+				typeof (parsed as Record<string, unknown>)['profileId'] === 'string'
+			) {
+				profiles.push({
+					name,
+					profileId: (parsed as SteelProfileData).profileId,
+				});
+			}
+		} catch {
+			// Skip corrupt files
+		}
+	}
+
+	return profiles;
+}
+
+export async function deleteSteelProfile(
+	name: string,
+	environment: NodeJS.ProcessEnv,
+): Promise<boolean> {
+	const filePath = getProfilePath(name, environment);
+
+	try {
+		await fs.unlink(filePath);
+		return true;
+	} catch {
+		return false;
+	}
+}

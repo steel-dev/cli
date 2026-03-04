@@ -6,6 +6,8 @@ import {
 	readSteelProfile,
 	writeSteelProfile,
 	validateProfileName,
+	listSteelProfiles,
+	deleteSteelProfile,
 } from '../../source/utils/browser/lifecycle/profile-store';
 
 function createTempConfigDir(): string {
@@ -200,6 +202,185 @@ describe('writeSteelProfile', () => {
 
 			expect(a.profileId).toBe('uuid-a');
 			expect(b.profileId).toBe('uuid-b');
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+});
+
+describe('listSteelProfiles', () => {
+	test('returns empty array when profiles directory does not exist', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			const result = await listSteelProfiles({STEEL_CONFIG_DIR: configDir});
+			expect(result).toEqual([]);
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+
+	test('returns empty array when profiles directory is empty', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			fs.mkdirSync(path.join(configDir, 'profiles'), {recursive: true});
+			const result = await listSteelProfiles({STEEL_CONFIG_DIR: configDir});
+			expect(result).toEqual([]);
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+
+	test('lists all valid profiles', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			await writeSteelProfile('app-a', 'uuid-a', {STEEL_CONFIG_DIR: configDir});
+			await writeSteelProfile('app-b', 'uuid-b', {STEEL_CONFIG_DIR: configDir});
+
+			const result = await listSteelProfiles({STEEL_CONFIG_DIR: configDir});
+			const sorted = result.sort((a, b) => a.name.localeCompare(b.name));
+
+			expect(sorted).toEqual([
+				{name: 'app-a', profileId: 'uuid-a'},
+				{name: 'app-b', profileId: 'uuid-b'},
+			]);
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+
+	test('skips corrupt (invalid JSON) files', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			const profilesDir = path.join(configDir, 'profiles');
+			fs.mkdirSync(profilesDir, {recursive: true});
+			fs.writeFileSync(
+				path.join(profilesDir, 'corrupt.json'),
+				'not-json',
+				'utf-8',
+			);
+			await writeSteelProfile('good', 'uuid-good', {
+				STEEL_CONFIG_DIR: configDir,
+			});
+
+			const result = await listSteelProfiles({STEEL_CONFIG_DIR: configDir});
+			expect(result).toEqual([{name: 'good', profileId: 'uuid-good'}]);
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+
+	test('skips files missing profileId field', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			const profilesDir = path.join(configDir, 'profiles');
+			fs.mkdirSync(profilesDir, {recursive: true});
+			fs.writeFileSync(
+				path.join(profilesDir, 'no-id.json'),
+				JSON.stringify({something: 'else'}),
+				'utf-8',
+			);
+			await writeSteelProfile('valid', 'uuid-valid', {
+				STEEL_CONFIG_DIR: configDir,
+			});
+
+			const result = await listSteelProfiles({STEEL_CONFIG_DIR: configDir});
+			expect(result).toEqual([{name: 'valid', profileId: 'uuid-valid'}]);
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+
+	test('ignores non-.json files', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			const profilesDir = path.join(configDir, 'profiles');
+			fs.mkdirSync(profilesDir, {recursive: true});
+			fs.writeFileSync(
+				path.join(profilesDir, 'readme.txt'),
+				'ignore me',
+				'utf-8',
+			);
+			await writeSteelProfile('myapp', 'uuid-myapp', {
+				STEEL_CONFIG_DIR: configDir,
+			});
+
+			const result = await listSteelProfiles({STEEL_CONFIG_DIR: configDir});
+			expect(result).toEqual([{name: 'myapp', profileId: 'uuid-myapp'}]);
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+});
+
+describe('deleteSteelProfile', () => {
+	test('returns false when profile does not exist', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			const result = await deleteSteelProfile('nonexistent', {
+				STEEL_CONFIG_DIR: configDir,
+			});
+			expect(result).toBe(false);
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+
+	test('deletes the profile file and returns true', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			await writeSteelProfile('myapp', 'uuid-123', {
+				STEEL_CONFIG_DIR: configDir,
+			});
+			const filePath = path.join(configDir, 'profiles', 'myapp.json');
+			expect(fs.existsSync(filePath)).toBe(true);
+
+			const result = await deleteSteelProfile('myapp', {
+				STEEL_CONFIG_DIR: configDir,
+			});
+			expect(result).toBe(true);
+			expect(fs.existsSync(filePath)).toBe(false);
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+
+	test('does not affect other profiles when deleting one', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			await writeSteelProfile('app-a', 'uuid-a', {STEEL_CONFIG_DIR: configDir});
+			await writeSteelProfile('app-b', 'uuid-b', {STEEL_CONFIG_DIR: configDir});
+
+			await deleteSteelProfile('app-a', {STEEL_CONFIG_DIR: configDir});
+
+			const remaining = await listSteelProfiles({STEEL_CONFIG_DIR: configDir});
+			expect(remaining).toEqual([{name: 'app-b', profileId: 'uuid-b'}]);
+		} finally {
+			fs.rmSync(configDir, {recursive: true, force: true});
+		}
+	});
+
+	test('returns false on second delete of same profile', async () => {
+		const configDir = createTempConfigDir();
+
+		try {
+			await writeSteelProfile('myapp', 'uuid-123', {
+				STEEL_CONFIG_DIR: configDir,
+			});
+			await deleteSteelProfile('myapp', {STEEL_CONFIG_DIR: configDir});
+
+			const result = await deleteSteelProfile('myapp', {
+				STEEL_CONFIG_DIR: configDir,
+			});
+			expect(result).toBe(false);
 		} finally {
 			fs.rmSync(configDir, {recursive: true, force: true});
 		}
