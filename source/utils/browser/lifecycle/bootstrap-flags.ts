@@ -21,6 +21,7 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		solveCaptcha: false,
 		autoConnect: false,
 		cdpTarget: null,
+		profileDir: process.env['STEEL_PROFILE']?.trim() || null,
 	};
 	const passthroughArgv: string[] = [];
 
@@ -199,6 +200,28 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 				'INVALID_BROWSER_ARGS',
 				'`--auto-connect` does not accept a value. Use `--cdp <url|port>` for explicit endpoints.',
 			);
+		}
+
+		if (argument === '--profile' || argument.startsWith('--profile=')) {
+			const value =
+				argument === '--profile'
+					? browserArgv[index + 1]
+					: argument.slice('--profile='.length);
+
+			if (!value) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'Missing value for --profile.',
+				);
+			}
+
+			options.profileDir = value.trim();
+
+			if (argument === '--profile') {
+				index++;
+			}
+
+			continue;
 		}
 
 		if (argument === '--cdp' || argument.startsWith('--cdp=')) {

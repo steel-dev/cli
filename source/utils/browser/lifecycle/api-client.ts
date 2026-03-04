@@ -354,6 +354,14 @@ export async function createSessionFromApi(
 		payload['solveCaptcha'] = true;
 	}
 
+	if (options.profileId) {
+		payload['profileId'] = options.profileId;
+	}
+
+	if (options.persistProfile) {
+		payload['persistProfile'] = true;
+	}
+
 	const responseData = await requestApi(
 		mode,
 		environment,

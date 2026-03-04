@@ -91,6 +91,15 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	profile: zod
+		.string()
+		.describe(
+			option({
+				description:
+					'Profile directory to persist browser state across sessions',
+			}),
+		)
+		.optional(),
 });
 
 type Props = {
@@ -111,6 +120,7 @@ export default function Start({options}: Props) {
 					headless: options.sessionHeadless,
 					region: options.sessionRegion,
 					solveCaptcha: options.sessionSolveCaptcha,
+					profileDir: options.profile,
 				});
 
 				console.log(`id: ${session.id}`);
@@ -149,6 +159,7 @@ export default function Start({options}: Props) {
 	}, [
 		options.apiUrl,
 		options.local,
+		options.profile,
 		options.proxy,
 		options.sessionHeadless,
 		options.sessionRegion,

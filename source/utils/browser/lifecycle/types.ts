@@ -21,6 +21,8 @@ export type StartSessionRequestOptions = {
 	headless?: boolean;
 	region?: string;
 	solveCaptcha?: boolean;
+	profileId?: string;
+	persistProfile?: boolean;
 };
 
 export type SolveCaptchaRequestOptions = {
@@ -41,6 +43,7 @@ export type ParsedBootstrapOptions = {
 	solveCaptcha: boolean;
 	autoConnect: boolean;
 	cdpTarget: string | null;
+	profileDir: string | null;
 };
 
 export type BrowserSessionSummary = {
@@ -66,6 +69,7 @@ export type StartBrowserSessionOptions = {
 	solveCaptcha?: boolean;
 	deadSessionBehavior?: DeadSessionBehavior;
 	environment?: NodeJS.ProcessEnv;
+	profileDir?: string;
 };
 
 export type StopBrowserSessionOptions = {
