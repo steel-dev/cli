@@ -168,6 +168,8 @@ export async function startBrowserSession(
 				headless: options.headless,
 				region: options.region,
 				solveCaptcha: options.solveCaptcha,
+				namespace: options.namespace,
+				credentials: options.credentials,
 			},
 			environment,
 			apiUrl,
@@ -641,6 +643,8 @@ export async function bootstrapBrowserPassthroughArgv(
 		headless: parsed.options.headless || undefined,
 		region: parsed.options.region || undefined,
 		solveCaptcha: parsed.options.solveCaptcha || undefined,
+		namespace: parsed.options.namespace || undefined,
+		credentials: parsed.options.credentials || undefined,
 		deadSessionBehavior: 'error',
 		environment,
 	});

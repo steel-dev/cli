@@ -60,6 +60,8 @@ Main flags:
 - `--stealth`
 - `--proxy <url>`
 - `--session-solve-captcha`
+- `--namespace <name>`
+- `--credentials`
 
 Flag semantics:
 
@@ -72,8 +74,13 @@ Flag semantics:
   - `stealthConfig.autoCaptchaSolving` is not forced on
 - `--proxy <url>` sets `proxyUrl` on session creation. The Sessions API may return
   `proxySource: "external"` rather than echoing the proxy URL in responses.
-- `--stealth` and `--proxy` are create-time flags. If `--session <name>` attaches to
-  an existing live session, these values are not re-applied.
+- `--namespace <name>` sets the credential namespace for the session. Credentials
+  stored under this namespace will be available for injection.
+- `--credentials` enables credential injection for the session. Sends
+  `credentials: {}` in the session creation payload.
+- `--stealth`, `--proxy`, `--namespace`, and `--credentials` are create-time flags.
+  If `--session <name>` attaches to an existing live session, these values are not
+  re-applied.
 
 Output fields:
 
