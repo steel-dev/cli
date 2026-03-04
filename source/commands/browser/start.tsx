@@ -91,6 +91,22 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	namespace: zod
+		.string()
+		.describe(
+			option({
+				description: 'Credential namespace to use with this session',
+			}),
+		)
+		.optional(),
+	credentials: zod
+		.boolean()
+		.describe(
+			option({
+				description: 'Enable credential injection for this session',
+			}),
+		)
+		.optional(),
 });
 
 type Props = {
@@ -111,6 +127,8 @@ export default function Start({options}: Props) {
 					headless: options.sessionHeadless,
 					region: options.sessionRegion,
 					solveCaptcha: options.sessionSolveCaptcha,
+					namespace: options.namespace,
+					credentials: options.credentials,
 				});
 
 				console.log(`id: ${session.id}`);
@@ -156,5 +174,7 @@ export default function Start({options}: Props) {
 		options.sessionTimeout,
 		options.session,
 		options.stealth,
+		options.namespace,
+		options.credentials,
 	]);
 }

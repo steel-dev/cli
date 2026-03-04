@@ -21,6 +21,8 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		solveCaptcha: false,
 		autoConnect: false,
 		cdpTarget: null,
+		namespace: null,
+		credentials: false,
 	};
 	const passthroughArgv: string[] = [];
 
@@ -198,6 +200,40 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 			throw new BrowserAdapterError(
 				'INVALID_BROWSER_ARGS',
 				'`--auto-connect` does not accept a value. Use `--cdp <url|port>` for explicit endpoints.',
+			);
+		}
+
+		if (argument === '--namespace' || argument.startsWith('--namespace=')) {
+			const value =
+				argument === '--namespace'
+					? browserArgv[index + 1]
+					: argument.slice('--namespace='.length);
+
+			if (!value) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'Missing value for --namespace.',
+				);
+			}
+
+			options.namespace = value.trim();
+
+			if (argument === '--namespace') {
+				index++;
+			}
+
+			continue;
+		}
+
+		if (argument === '--credentials') {
+			options.credentials = true;
+			continue;
+		}
+
+		if (argument.startsWith('--credentials=')) {
+			throw new BrowserAdapterError(
+				'INVALID_BROWSER_ARGS',
+				'`--credentials` does not accept a value.',
 			);
 		}
 

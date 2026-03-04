@@ -47,6 +47,8 @@ Main flags:
 - `--stealth`
 - `--proxy <url>`
 - `--session-solve-captcha`
+- `--namespace <name>` — credential namespace for the session
+- `--credentials` — enable credential injection for the session
 
 Parse these output fields:
 
