@@ -8,8 +8,6 @@ import {
 	checkAndUpdate,
 	getCurrentVersion,
 	setGlobalUpdateInfo,
-	subscribeToUpdateState,
-	type UpdateState,
 } from './utils/update.js';
 import {
 	filterSteelGlobalFlags,
