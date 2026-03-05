@@ -164,10 +164,12 @@ export async function startBrowserSession(
 		}
 
 		let resolvedProfileId: string | undefined;
+		let storedChromeProfile: string | undefined;
 
 		if (options.profileName) {
 			const stored = await readSteelProfile(options.profileName, environment);
 			resolvedProfileId = stored?.profileId;
+			storedChromeProfile = stored?.chromeProfile;
 		}
 
 		const persistProfile = Boolean(
@@ -255,6 +257,7 @@ export async function startBrowserSession(
 						options.profileName,
 						returnedProfileId,
 						environment,
+						storedChromeProfile,
 					);
 				}
 			}
