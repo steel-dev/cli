@@ -93,6 +93,7 @@ Read more:
 | Quickstart          | `forge`, `run`                                                                        |
 | Browser lifecycle   | `browser start`, `browser stop`, `browser sessions`, `browser live`                   |
 | Browser passthrough | `steel browser <inherited-command>`                                                   |
+| Browser profiles    | `profile import`, `profile sync`, `profile list`, `profile delete`                    |
 | API tools           | `scrape`, `screenshot`, `pdf`                                                         |
 | Local runtime       | `dev install`, `dev start`, `dev stop`                                                |
 | Account and utility | `login`, `logout`, `config`, `settings`, `cache`, `docs`, `support`, `star`, `update` |
