@@ -1482,6 +1482,7 @@ describe('browser lifecycle session profile contract', () => {
 			const lifecycle = await loadBrowserLifecycle(configDirectory);
 			const session = await lifecycle.startBrowserSession({
 				profileName: 'myapp',
+				updateProfile: true,
 				environment: {
 					STEEL_API_KEY: 'env-api-key',
 					STEEL_CONFIG_DIR: configDirectory,
@@ -1534,6 +1535,7 @@ describe('browser lifecycle session profile contract', () => {
 			const lifecycle = await loadBrowserLifecycle(configDirectory);
 			const session = await lifecycle.startBrowserSession({
 				profileName: 'myapp',
+				updateProfile: true,
 				environment: {
 					STEEL_API_KEY: 'env-api-key',
 					STEEL_CONFIG_DIR: configDirectory,
@@ -1670,7 +1672,8 @@ describe('browser lifecycle session profile contract', () => {
 			const body = JSON.parse(
 				fetchMock.mock.calls[0]?.[1]?.body as string,
 			) as Record<string, unknown>;
-			expect(body['persistProfile']).toBe(true);
+			// --profile without --update-profile should not persist
+			expect(body['persistProfile']).toBeFalsy();
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}

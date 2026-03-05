@@ -3,7 +3,10 @@
 import {useEffect} from 'react';
 import zod from 'zod';
 import {option} from 'pastel';
-import {deleteSteelProfile} from '../../utils/browser/lifecycle/profile-store.js';
+import {
+	deleteSteelProfile,
+	validateProfileName,
+} from '../../utils/browser/lifecycle/profile-store.js';
 
 export const description =
 	'Delete a saved Steel browser profile (local file only)';
@@ -23,6 +26,13 @@ type Props = {
 export default function Delete({options}: Props) {
 	useEffect(() => {
 		async function run() {
+			const nameError = validateProfileName(options.name);
+			if (nameError) {
+				console.error(nameError);
+				process.exit(1);
+				return;
+			}
+
 			const deleted = await deleteSteelProfile(options.name, process.env);
 
 			if (!deleted) {

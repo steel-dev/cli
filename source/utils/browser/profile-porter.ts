@@ -283,7 +283,10 @@ export function packageChromeProfile(
 			}
 		} else if (stat.isDirectory()) {
 			onProgress?.(`Collecting ${entry}/...`);
-			collectFiles(fullPath, profileDir, files);
+			const dirFiles = collectFiles(fullPath, fullPath, {});
+			for (const [relPath, data] of Object.entries(dirFiles)) {
+				files[`Default/${entry}/${relPath}`] = data;
+			}
 		}
 	}
 

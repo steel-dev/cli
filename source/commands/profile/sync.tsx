@@ -12,7 +12,11 @@ import {
 	updateProfileOnSteel,
 	type ChromeProfile,
 } from '../../utils/browser/profile-porter.js';
-import {readSteelProfile} from '../../utils/browser/lifecycle/profile-store.js';
+import {
+	readSteelProfile,
+	validateProfileName,
+	writeSteelProfile,
+} from '../../utils/browser/lifecycle/profile-store.js';
 import {resolveBrowserAuth} from '../../utils/browser/auth.js';
 import {DEFAULT_API_PATH} from '../../utils/browser/lifecycle/constants.js';
 
@@ -49,6 +53,12 @@ export default function Sync({options}: Props) {
 
 	React.useEffect(() => {
 		(async () => {
+			const nameError = validateProfileName(options.name);
+			if (nameError) {
+				setPhase({tag: 'error', message: nameError});
+				return;
+			}
+
 			if (process.platform !== 'darwin') {
 				setPhase({
 					tag: 'error',
@@ -141,6 +151,15 @@ export default function Sync({options}: Props) {
 					message: error instanceof Error ? error.message : String(error),
 				});
 				return;
+			}
+
+			if (options.from && options.from !== stored.chromeProfile) {
+				await writeSteelProfile(
+					options.name,
+					stored.profileId,
+					process.env,
+					options.from,
+				);
 			}
 
 			const zipMb = (zipBuffer.length / 1024 / 1024).toFixed(1);

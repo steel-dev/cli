@@ -13,7 +13,10 @@ import {
 	uploadProfileToSteel,
 	type ChromeProfile,
 } from '../../utils/browser/profile-porter.js';
-import {writeSteelProfile} from '../../utils/browser/lifecycle/profile-store.js';
+import {
+	validateProfileName,
+	writeSteelProfile,
+} from '../../utils/browser/lifecycle/profile-store.js';
 import {resolveBrowserAuth} from '../../utils/browser/auth.js';
 import {DEFAULT_API_PATH} from '../../utils/browser/lifecycle/constants.js';
 
@@ -52,6 +55,12 @@ export default function Import({options}: Props) {
 	const [phase, setPhase] = React.useState<Phase>({tag: 'checking'});
 
 	React.useEffect(() => {
+		const nameError = validateProfileName(options.name);
+		if (nameError) {
+			setPhase({tag: 'error', message: nameError});
+			return;
+		}
+
 		if (process.platform !== 'darwin') {
 			setPhase({
 				tag: 'error',

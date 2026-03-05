@@ -170,11 +170,9 @@ export async function startBrowserSession(
 			resolvedProfileId = stored?.profileId;
 		}
 
-		const persistProfile = options.profileName
-			? resolvedProfileId
-				? Boolean(options.updateProfile)
-				: true
-			: false;
+		const persistProfile = Boolean(
+			options.profileName && options.updateProfile,
+		);
 
 		let createdSession: UnknownRecord;
 		try {
