@@ -149,7 +149,12 @@ export default function Import({options}: Props) {
 				return;
 			}
 
-			await writeSteelProfile(options.name, profileId, process.env);
+			await writeSteelProfile(
+				options.name,
+				profileId,
+				process.env,
+				chromeProfile.dirName,
+			);
 
 			setPhase({tag: 'done', profileId, cookiesReencrypted, zipMb});
 			process.exit(0);

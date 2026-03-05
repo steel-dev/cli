@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 type SteelProfileData = {
 	profileId: string;
+	chromeProfile?: string;
 };
 
 function getProfilesDirectory(environment: NodeJS.ProcessEnv): string {
@@ -32,7 +33,7 @@ export function validateProfileName(name: string): string | null {
 export async function readSteelProfile(
 	name: string,
 	environment: NodeJS.ProcessEnv,
-): Promise<{profileId: string} | null> {
+): Promise<{profileId: string; chromeProfile?: string} | null> {
 	const filePath = getProfilePath(name, environment);
 
 	try {
@@ -44,7 +45,11 @@ export async function readSteelProfile(
 			typeof parsed === 'object' &&
 			typeof (parsed as Record<string, unknown>)['profileId'] === 'string'
 		) {
-			return {profileId: (parsed as SteelProfileData).profileId};
+			const data = parsed as SteelProfileData;
+			return {
+				profileId: data.profileId,
+				chromeProfile: data.chromeProfile,
+			};
 		}
 
 		return null;
@@ -57,12 +62,13 @@ export async function writeSteelProfile(
 	name: string,
 	profileId: string,
 	environment: NodeJS.ProcessEnv,
+	chromeProfile?: string,
 ): Promise<void> {
 	const profilesDir = getProfilesDirectory(environment);
 	await fs.mkdir(profilesDir, {recursive: true});
 
 	const filePath = getProfilePath(name, environment);
-	const data: SteelProfileData = {profileId};
+	const data: SteelProfileData = {profileId, chromeProfile};
 
 	await fs.writeFile(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
 }
