@@ -170,6 +170,12 @@ export async function startBrowserSession(
 			resolvedProfileId = stored?.profileId;
 		}
 
+		const persistProfile = options.profileName
+			? resolvedProfileId
+				? Boolean(options.updateProfile)
+				: true
+			: false;
+
 		let createdSession: UnknownRecord;
 		try {
 			createdSession = await createSessionFromApi(
@@ -182,7 +188,7 @@ export async function startBrowserSession(
 					region: options.region,
 					solveCaptcha: options.solveCaptcha,
 					profileId: resolvedProfileId,
-					persistProfile: Boolean(options.profileName),
+					persistProfile,
 				},
 				environment,
 				apiUrl,

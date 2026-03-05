@@ -100,6 +100,15 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	updateProfile: zod
+		.boolean()
+		.describe(
+			option({
+				description:
+					'Save session state back to the profile when the session ends (default: false — profile is loaded read-only)',
+			}),
+		)
+		.optional(),
 });
 
 type Props = {
@@ -121,6 +130,7 @@ export default function Start({options}: Props) {
 					region: options.sessionRegion,
 					solveCaptcha: options.sessionSolveCaptcha,
 					profileName: options.profile,
+					updateProfile: options.updateProfile,
 				});
 
 				console.log(`id: ${session.id}`);
@@ -167,5 +177,6 @@ export default function Start({options}: Props) {
 		options.sessionTimeout,
 		options.session,
 		options.stealth,
+		options.updateProfile,
 	]);
 }

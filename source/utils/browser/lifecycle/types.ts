@@ -70,6 +70,7 @@ export type StartBrowserSessionOptions = {
 	deadSessionBehavior?: DeadSessionBehavior;
 	environment?: NodeJS.ProcessEnv;
 	profileName?: string;
+	updateProfile?: boolean;
 };
 
 export type StopBrowserSessionOptions = {
