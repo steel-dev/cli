@@ -19,6 +19,13 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - `steel browser live`: print the active session live-view URL.
 - `steel browser <inherited-command>`: pass through to vendored `agent-browser` runtime.
 
+### Credentials Commands
+
+- `steel credentials create`: store a new credential for a given origin.
+- `steel credentials list`: list stored credentials.
+- `steel credentials update`: update an existing credential.
+- `steel credentials delete`: delete a stored credential.
+
 ### API Tool Commands
 
 - `steel scrape`: scrape webpage content and metadata.

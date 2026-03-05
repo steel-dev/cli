@@ -104,6 +104,8 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				autoConnect: false,
 				cdpTarget: null,
 				profileName: null,
+				namespace: null,
+				credentials: false,
 			});
 			expect(parsed.passthroughArgv).toEqual([
 				'open',
@@ -210,6 +212,8 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				autoConnect: false,
 				cdpTarget: null,
 				profileName: null,
+				namespace: null,
+				credentials: false,
 			});
 			expect(parsed.passthroughArgv).toEqual(['open', 'https://steel.dev']);
 		} finally {
@@ -248,6 +252,8 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				autoConnect: false,
 				cdpTarget: null,
 				profileName: null,
+				namespace: null,
+				credentials: false,
 			});
 			expect(parsed.passthroughArgv).toEqual([
 				'open',
@@ -287,6 +293,8 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				autoConnect: false,
 				cdpTarget: null,
 				profileName: null,
+				namespace: null,
+				credentials: false,
 			});
 			expect(parsed.passthroughArgv).toEqual([
 				'open',

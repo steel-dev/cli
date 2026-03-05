@@ -362,6 +362,14 @@ export async function createSessionFromApi(
 		payload['persistProfile'] = true;
 	}
 
+	if (options.namespace?.trim()) {
+		payload['namespace'] = options.namespace.trim();
+	}
+
+	if (options.credentials) {
+		payload['credentials'] = {};
+	}
+
 	const responseData = await requestApi(
 		mode,
 		environment,

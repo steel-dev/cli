@@ -23,6 +23,8 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		autoConnect: false,
 		cdpTarget: null,
 		profileName: process.env['STEEL_PROFILE']?.trim() || null,
+		namespace: null,
+		credentials: false,
 	};
 	const passthroughArgv: string[] = [];
 
@@ -229,6 +231,40 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 			}
 
 			continue;
+		}
+
+		if (argument === '--namespace' || argument.startsWith('--namespace=')) {
+			const value =
+				argument === '--namespace'
+					? browserArgv[index + 1]
+					: argument.slice('--namespace='.length);
+
+			if (!value) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'Missing value for --namespace.',
+				);
+			}
+
+			options.namespace = value.trim();
+
+			if (argument === '--namespace') {
+				index++;
+			}
+
+			continue;
+		}
+
+		if (argument === '--credentials') {
+			options.credentials = true;
+			continue;
+		}
+
+		if (argument.startsWith('--credentials=')) {
+			throw new BrowserAdapterError(
+				'INVALID_BROWSER_ARGS',
+				'`--credentials` does not accept a value.',
+			);
 		}
 
 		if (argument === '--cdp' || argument.startsWith('--cdp=')) {

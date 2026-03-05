@@ -133,6 +133,10 @@ steel browser captcha status --wait --session <name>
 steel browser captcha solve --session <name>
 ```
 
+### Credentials
+
+Manage stored credentials and inject them into sessions via `steel credentials` commands and `--namespace`/`--credentials` flags on `steel browser start`. See [references/steel-browser-lifecycle.md](references/steel-browser-lifecycle.md) for flag details.
+
 For exhaustive command families, read
 [references/steel-browser-commands.md](references/steel-browser-commands.md).
 
