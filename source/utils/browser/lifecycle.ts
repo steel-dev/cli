@@ -10,6 +10,10 @@ import {
 } from './lifecycle/api-client.js';
 import {parseBrowserPassthroughBootstrapFlags} from './lifecycle/bootstrap-flags.js';
 import {
+	readSteelProfile,
+	writeSteelProfile,
+} from './lifecycle/profile-store.js';
+import {
 	buildDeadSessionMessage,
 	getSessionId,
 	isNotFoundApiError,
@@ -159,21 +163,66 @@ export async function startBrowserSession(
 			continue;
 		}
 
-		const createdSession = await createSessionFromApi(
-			mode,
-			{
-				stealth: options.stealth,
-				proxyUrl: options.proxyUrl,
-				timeoutMs: options.timeoutMs,
-				headless: options.headless,
-				region: options.region,
-				solveCaptcha: options.solveCaptcha,
-				namespace: options.namespace,
-				credentials: options.credentials,
-			},
-			environment,
-			apiUrl,
+		let resolvedProfileId: string | undefined;
+		let storedChromeProfile: string | undefined;
+
+		if (options.profileName) {
+			const stored = await readSteelProfile(options.profileName, environment);
+			resolvedProfileId = stored?.profileId;
+			storedChromeProfile = stored?.chromeProfile;
+		}
+
+		const persistProfile = Boolean(
+			options.profileName && options.updateProfile,
 		);
+
+		let createdSession: UnknownRecord;
+		try {
+			createdSession = await createSessionFromApi(
+				mode,
+				{
+					stealth: options.stealth,
+					proxyUrl: options.proxyUrl,
+					timeoutMs: options.timeoutMs,
+					headless: options.headless,
+					region: options.region,
+					solveCaptcha: options.solveCaptcha,
+					profileId: resolvedProfileId,
+					persistProfile,
+					namespace: options.namespace,
+					credentials: options.credentials,
+				},
+				environment,
+				apiUrl,
+			);
+		} catch (error) {
+			if (
+				options.profileName &&
+				resolvedProfileId &&
+				isNotFoundApiError(error)
+			) {
+				console.error(`Warning: Profile not found. Creating a new profile.`);
+				createdSession = await createSessionFromApi(
+					mode,
+					{
+						stealth: options.stealth,
+						proxyUrl: options.proxyUrl,
+						timeoutMs: options.timeoutMs,
+						headless: options.headless,
+						region: options.region,
+						solveCaptcha: options.solveCaptcha,
+						persistProfile: true,
+						namespace: options.namespace,
+						credentials: options.credentials,
+					},
+					environment,
+					apiUrl,
+				);
+			} else {
+				throw error;
+			}
+		}
+
 		const createdSessionId = getSessionId(createdSession);
 
 		if (!createdSessionId) {
@@ -201,6 +250,18 @@ export async function startBrowserSession(
 		});
 
 		if (claimedCreatedSession) {
+			if (options.profileName) {
+				const returnedProfileId = createdSession['profileId'];
+				if (typeof returnedProfileId === 'string') {
+					await writeSteelProfile(
+						options.profileName,
+						returnedProfileId,
+						environment,
+						storedChromeProfile,
+					);
+				}
+			}
+
 			return toSessionSummary(createdSession, mode, sessionName, environment);
 		}
 
@@ -647,6 +708,7 @@ export async function bootstrapBrowserPassthroughArgv(
 		credentials: parsed.options.credentials || undefined,
 		deadSessionBehavior: 'error',
 		environment,
+		profileName: parsed.options.profileName || undefined,
 	});
 
 	if (!session.connectUrl) {

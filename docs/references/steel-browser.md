@@ -62,6 +62,8 @@ Main flags:
 - `--session-solve-captcha`
 - `--namespace <name>`
 - `--credentials`
+- `--profile <name>`
+- `--update-profile`
 
 Flag semantics:
 
@@ -78,7 +80,12 @@ Flag semantics:
   stored under this namespace will be available for injection.
 - `--credentials` enables credential injection for the session. Sends
   `credentials: {}` in the session creation payload.
-- `--stealth`, `--proxy`, `--namespace`, and `--credentials` are create-time flags.
+- `--profile <name>` loads a previously imported browser profile (cookies, local
+  storage, etc.) into the session.
+- `--update-profile` saves session state back to the profile when the session ends.
+  Requires `--profile`.
+- `--stealth`, `--proxy`, `--namespace`, `--credentials`, `--profile`, and
+  `--update-profile` are create-time flags.
   If `--session <name>` attaches to an existing live session, these values are not
   re-applied.
 
@@ -160,6 +167,28 @@ API mapping:
 - Endpoint: `POST /v1/sessions/{sessionId}/captchas/solve`
 - Request body: optional `pageId`, `url`, `taskId`
 - Response: `success` + optional `message`
+
+## Profile Persistence
+
+Profiles let sessions start with pre-existing browser state (cookies, local storage, IndexedDB, etc.) imported from a local Chrome installation.
+
+Setup (macOS only, run by user):
+
+```bash
+steel profile import --name myapp          # import Chrome profile to Steel
+steel profile sync --name myapp            # re-sync local changes to Steel
+steel profile list                         # list saved profiles
+steel profile delete --name myapp          # remove local metadata
+```
+
+Usage in sessions:
+
+```bash
+steel browser start --session job --profile myapp                # load profile
+steel browser start --session job --profile myapp --update-profile  # load + save back
+```
+
+Profile metadata is stored at `~/.config/steel/profiles/<name>.json`.
 
 ## Passthrough Bootstrap Rules
 

@@ -3,6 +3,7 @@ import {
 	parsePositiveIntegerFlagValue,
 	resolveExplicitApiUrl,
 } from './api-client.js';
+import {validateProfileName} from './profile-store.js';
 import type {ParsedBootstrapOptions} from './types.js';
 
 export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
@@ -21,6 +22,7 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		solveCaptcha: false,
 		autoConnect: false,
 		cdpTarget: null,
+		profileName: process.env['STEEL_PROFILE']?.trim() || null,
 		namespace: null,
 		credentials: false,
 	};
@@ -201,6 +203,34 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 				'INVALID_BROWSER_ARGS',
 				'`--auto-connect` does not accept a value. Use `--cdp <url|port>` for explicit endpoints.',
 			);
+		}
+
+		if (argument === '--profile' || argument.startsWith('--profile=')) {
+			const value =
+				argument === '--profile'
+					? browserArgv[index + 1]
+					: argument.slice('--profile='.length);
+
+			if (!value) {
+				throw new BrowserAdapterError(
+					'INVALID_BROWSER_ARGS',
+					'Missing value for --profile.',
+				);
+			}
+
+			const name = value.trim();
+			const validationError = validateProfileName(name);
+			if (validationError) {
+				throw new BrowserAdapterError('INVALID_BROWSER_ARGS', validationError);
+			}
+
+			options.profileName = name;
+
+			if (argument === '--profile') {
+				index++;
+			}
+
+			continue;
 		}
 
 		if (argument === '--namespace' || argument.startsWith('--namespace=')) {

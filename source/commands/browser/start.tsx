@@ -91,6 +91,24 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	profile: zod
+		.string()
+		.describe(
+			option({
+				description:
+					'Named profile to persist browser state across sessions (stored in ~/.config/steel/profiles/)',
+			}),
+		)
+		.optional(),
+	updateProfile: zod
+		.boolean()
+		.describe(
+			option({
+				description:
+					'Save session state back to the profile when the session ends (default: false — profile is loaded read-only)',
+			}),
+		)
+		.optional(),
 	namespace: zod
 		.string()
 		.describe(
@@ -127,6 +145,8 @@ export default function Start({options}: Props) {
 					headless: options.sessionHeadless,
 					region: options.sessionRegion,
 					solveCaptcha: options.sessionSolveCaptcha,
+					profileName: options.profile,
+					updateProfile: options.updateProfile,
 					namespace: options.namespace,
 					credentials: options.credentials,
 				});
@@ -167,6 +187,7 @@ export default function Start({options}: Props) {
 	}, [
 		options.apiUrl,
 		options.local,
+		options.profile,
 		options.proxy,
 		options.sessionHeadless,
 		options.sessionRegion,
@@ -174,6 +195,7 @@ export default function Start({options}: Props) {
 		options.sessionTimeout,
 		options.session,
 		options.stealth,
+		options.updateProfile,
 		options.namespace,
 		options.credentials,
 	]);

@@ -354,6 +354,14 @@ export async function createSessionFromApi(
 		payload['solveCaptcha'] = true;
 	}
 
+	if (options.profileId) {
+		payload['profileId'] = options.profileId;
+	}
+
+	if (options.persistProfile) {
+		payload['persistProfile'] = true;
+	}
+
 	if (options.namespace?.trim()) {
 		payload['namespace'] = options.namespace.trim();
 	}
