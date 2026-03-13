@@ -21,6 +21,8 @@ export type StartSessionRequestOptions = {
 	headless?: boolean;
 	region?: string;
 	solveCaptcha?: boolean;
+	profileId?: string;
+	persistProfile?: boolean;
 	namespace?: string;
 	credentials?: boolean;
 };
@@ -43,6 +45,8 @@ export type ParsedBootstrapOptions = {
 	solveCaptcha: boolean;
 	autoConnect: boolean;
 	cdpTarget: string | null;
+	profileName: string | null;
+	updateProfile: boolean;
 	namespace: string | null;
 	credentials: boolean;
 };
@@ -72,6 +76,8 @@ export type StartBrowserSessionOptions = {
 	credentials?: boolean;
 	deadSessionBehavior?: DeadSessionBehavior;
 	environment?: NodeJS.ProcessEnv;
+	profileName?: string;
+	updateProfile?: boolean;
 };
 
 export type StopBrowserSessionOptions = {

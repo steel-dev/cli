@@ -9,6 +9,7 @@ This folder contains both generated command docs and hand-maintained migration/r
 - `migration-agent-browser.md`: migration guide from `agent-browser` to `steel browser`.
 - `upstream-sync.md`: maintainer guide for vendored runtime updates.
 - `references/`: stable quick-reference docs and synced upstream command catalogs.
+  - Profile commands and persistence are documented in `references/steel-browser.md` and `references/steel-cli.md`.
 
 ## References Subfolder
 
