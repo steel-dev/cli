@@ -56,6 +56,15 @@ export const options = zod.object({
 			}),
 		)
 		.optional(),
+	useProxy: zod
+		.boolean()
+		.describe(
+			option({
+				description:
+					'Use a Steel-managed residential proxy for new sessions',
+			}),
+		)
+		.optional(),
 	sessionTimeout: zod.coerce
 		.number()
 		.int()
@@ -140,6 +149,7 @@ export default function Start({options}: Props) {
 					apiUrl: options.apiUrl,
 					sessionName: options.session,
 					stealth: options.stealth,
+					useProxy: options.useProxy,
 					proxyUrl: options.proxy,
 					timeoutMs: options.sessionTimeout,
 					headless: options.sessionHeadless,
@@ -189,6 +199,7 @@ export default function Start({options}: Props) {
 		options.local,
 		options.profile,
 		options.proxy,
+		options.useProxy,
 		options.sessionHeadless,
 		options.sessionRegion,
 		options.sessionSolveCaptcha,

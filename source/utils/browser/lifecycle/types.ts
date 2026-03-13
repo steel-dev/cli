@@ -16,6 +16,7 @@ export type BrowserSessionState = {
 
 export type StartSessionRequestOptions = {
 	stealth?: boolean;
+	useProxy?: boolean;
 	proxyUrl?: string;
 	timeoutMs?: number;
 	headless?: boolean;
@@ -38,6 +39,7 @@ export type ParsedBootstrapOptions = {
 	apiUrl: string | null;
 	sessionName: string | null;
 	stealth: boolean;
+	useProxy: boolean;
 	proxyUrl: string | null;
 	timeoutMs: number | null;
 	headless: boolean;
@@ -67,6 +69,7 @@ export type StartBrowserSessionOptions = {
 	apiUrl?: string;
 	sessionName?: string;
 	stealth?: boolean;
+	useProxy?: boolean;
 	proxyUrl?: string;
 	timeoutMs?: number;
 	headless?: boolean;

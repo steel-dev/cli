@@ -96,6 +96,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				apiUrl: null,
 				sessionName: 'daily',
 				stealth: true,
+				useProxy: false,
 				proxyUrl: 'http://proxy.local:8080',
 				timeoutMs: null,
 				headless: false,
@@ -181,6 +182,54 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 					'--auto-connect=ws://localhost:9222',
 				]),
 			).toThrow('`--auto-connect` does not accept a value.');
+			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags([
+					'open',
+					'--use-proxy=true',
+				]),
+			).toThrow('`--use-proxy` does not accept a value.');
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('parses --use-proxy bootstrap flag', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'https://steel.dev',
+				'--use-proxy',
+				'--wait-for',
+				'load',
+			]);
+
+			expect(parsed.options).toEqual({
+				local: false,
+				apiUrl: null,
+				sessionName: null,
+				stealth: false,
+				useProxy: true,
+				proxyUrl: null,
+				timeoutMs: null,
+				headless: false,
+				region: null,
+				solveCaptcha: false,
+				autoConnect: false,
+				cdpTarget: null,
+				profileName: null,
+				updateProfile: false,
+				namespace: null,
+				credentials: false,
+			});
+			expect(parsed.passthroughArgv).toEqual([
+				'open',
+				'https://steel.dev',
+				'--wait-for',
+				'load',
+			]);
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}
@@ -205,6 +254,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				apiUrl: 'https://steel.local.dev/v1',
 				sessionName: 'daily',
 				stealth: false,
+				useProxy: false,
 				proxyUrl: null,
 				timeoutMs: null,
 				headless: false,
@@ -246,6 +296,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				apiUrl: null,
 				sessionName: null,
 				stealth: false,
+				useProxy: false,
 				proxyUrl: null,
 				timeoutMs: 60000,
 				headless: true,
@@ -288,6 +339,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				apiUrl: null,
 				sessionName: null,
 				stealth: false,
+				useProxy: false,
 				proxyUrl: null,
 				timeoutMs: null,
 				headless: true,
@@ -455,6 +507,7 @@ describe('browser lifecycle session contract', () => {
 
 			const lifecycle = await loadBrowserLifecycle(configDirectory);
 			await lifecycle.startBrowserSession({
+				useProxy: true,
 				timeoutMs: 45_000,
 				headless: true,
 				region: 'us-east-1',
@@ -469,12 +522,35 @@ describe('browser lifecycle session contract', () => {
 			expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
 				method: 'POST',
 				body: JSON.stringify({
+					useProxy: true,
 					timeout: 45000,
 					headless: true,
 					region: 'us-east-1',
 					solveCaptcha: true,
 				}),
 			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('rejects conflicting proxy flags for session creation', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			await expect(
+				lifecycle.startBrowserSession({
+					useProxy: true,
+					proxyUrl: 'http://proxy.local:8080',
+					environment: {STEEL_API_KEY: 'env-api-key'},
+				}),
+			).rejects.toMatchObject({
+				code: 'INVALID_BROWSER_ARGS',
+				message: 'Cannot combine `--use-proxy` with `--proxy`. Choose one proxy mode.',
+			});
+
+			expect(fetchMock).not.toHaveBeenCalled();
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}
@@ -759,6 +835,76 @@ describe('browser lifecycle session contract', () => {
 					solveCaptcha: true,
 				}),
 			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('injects cdp URL and maps --use-proxy bootstrap flag', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-bootstrap-use-proxy',
+					status: 'live',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const passthroughArgv = await lifecycle.bootstrapBrowserPassthroughArgv(
+				['open', 'https://steel.dev', '--use-proxy'],
+				{
+					STEEL_API_KEY: 'env-api-key',
+				},
+			);
+
+			expect(passthroughArgv.argv).toEqual([
+				'open',
+				'https://steel.dev',
+				'--cdp',
+				'wss://connect.steel.dev?apiKey=env-api-key&sessionId=session-bootstrap-use-proxy',
+			]);
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0]?.[0]).toBe(
+				'https://api.steel.dev/v1/sessions',
+			);
+			expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+				method: 'POST',
+				body: JSON.stringify({
+					useProxy: true,
+				}),
+			});
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('rejects conflicting --use-proxy and --proxy bootstrap flags', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			await expect(
+				lifecycle.bootstrapBrowserPassthroughArgv(
+					[
+						'open',
+						'https://steel.dev',
+						'--use-proxy',
+						'--proxy',
+						'http://proxy.local:8080',
+					],
+					{
+						STEEL_API_KEY: 'env-api-key',
+					},
+				),
+			).rejects.toMatchObject({
+				code: 'INVALID_BROWSER_ARGS',
+				message: 'Cannot combine `--use-proxy` with `--proxy`. Choose one proxy mode.',
+			});
+
+			expect(fetchMock).not.toHaveBeenCalled();
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}

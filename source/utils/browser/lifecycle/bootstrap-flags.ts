@@ -15,6 +15,7 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		apiUrl: null,
 		sessionName: null,
 		stealth: false,
+		useProxy: false,
 		proxyUrl: null,
 		timeoutMs: null,
 		headless: false,
@@ -40,6 +41,18 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		if (argument === '--stealth') {
 			options.stealth = true;
 			continue;
+		}
+
+		if (argument === '--use-proxy') {
+			options.useProxy = true;
+			continue;
+		}
+
+		if (argument.startsWith('--use-proxy=')) {
+			throw new BrowserAdapterError(
+				'INVALID_BROWSER_ARGS',
+				'`--use-proxy` does not accept a value.',
+			);
 		}
 
 		if (argument === '--api-url' || argument.startsWith('--api-url=')) {

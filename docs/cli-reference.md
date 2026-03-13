@@ -397,6 +397,7 @@ steel browser start [options]
 - -s, **--session**: Named session key for create-or-attach behavior
 - **--stealth**: Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving / solveCaptcha=true)
 - -p, **--proxy**: Proxy URL for new sessions (for example, http://user:pass@host:port)
+- **--use-proxy**: Use a Steel-managed residential proxy for new sessions
 - **--session-timeout**: Session timeout in milliseconds (create-time only)
 - **--session-headless**: Create new sessions in headless mode (create-time only)
 - **--session-region**: Preferred session region (create-time only)

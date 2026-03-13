@@ -59,6 +59,7 @@ Main flags:
 - `--session <name>`
 - `--stealth`
 - `--proxy <url>`
+- `--use-proxy`
 - `--session-solve-captcha`
 - `--namespace <name>`
 - `--credentials`
@@ -76,6 +77,8 @@ Flag semantics:
   - `stealthConfig.autoCaptchaSolving` is not forced on
 - `--proxy <url>` sets `proxyUrl` on session creation. The Sessions API may return
   `proxySource: "external"` rather than echoing the proxy URL in responses.
+- `--use-proxy` requests a Steel-managed residential proxy for session creation.
+- `--proxy <url>` and `--use-proxy` are mutually exclusive.
 - `--namespace <name>` sets the credential namespace for the session. Credentials
   stored under this namespace will be available for injection.
 - `--credentials` enables credential injection for the session. Sends
@@ -84,8 +87,8 @@ Flag semantics:
   storage, etc.) into the session.
 - `--update-profile` saves session state back to the profile when the session ends.
   Requires `--profile`.
-- `--stealth`, `--proxy`, `--namespace`, `--credentials`, `--profile`, and
-  `--update-profile` are create-time flags.
+- `--stealth`, `--proxy`, `--use-proxy`, `--namespace`, `--credentials`,
+  `--profile`, and `--update-profile` are create-time flags.
   If `--session <name>` attaches to an existing live session, these values are not
   re-applied.
 

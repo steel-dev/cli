@@ -27,6 +27,7 @@ type SessionRestartOptions = Pick<
 	| 'headless'
 	| 'region'
 	| 'solveCaptcha'
+	| 'useProxy'
 > & {apiUrl: string | null; sessionName: string | null};
 
 function getConnectUrl(session: UnknownRecord): string | null {
@@ -241,6 +242,10 @@ function buildSessionRestartCommand(options: SessionRestartOptions): string {
 
 	if (options.solveCaptcha) {
 		args.push('--session-solve-captcha');
+	}
+
+	if (options.useProxy) {
+		args.push('--use-proxy');
 	}
 
 	return args.join(' ');

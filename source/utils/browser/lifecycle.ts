@@ -87,6 +87,13 @@ async function tryGetLiveSession(
 export async function startBrowserSession(
 	options: StartBrowserSessionOptions = {},
 ): Promise<BrowserSessionSummary> {
+	if (options.useProxy && options.proxyUrl?.trim()) {
+		throw new BrowserAdapterError(
+			'INVALID_BROWSER_ARGS',
+			'Cannot combine `--use-proxy` with `--proxy`. Choose one proxy mode.',
+		);
+	}
+
 	const environment = options.environment || process.env;
 	const apiUrl = resolveExplicitApiUrl(options.apiUrl);
 	const mode = resolveSessionMode(options.local, apiUrl, null, environment);
@@ -147,6 +154,7 @@ export async function startBrowserSession(
 						headless: options.headless,
 						region: options.region,
 						solveCaptcha: options.solveCaptcha,
+						useProxy: options.useProxy,
 					}),
 				);
 			}
@@ -188,6 +196,7 @@ export async function startBrowserSession(
 				mode,
 				{
 					stealth: options.stealth,
+					useProxy: options.useProxy,
 					proxyUrl: options.proxyUrl,
 					timeoutMs: options.timeoutMs,
 					headless: options.headless,
@@ -212,6 +221,7 @@ export async function startBrowserSession(
 					mode,
 					{
 						stealth: options.stealth,
+						useProxy: options.useProxy,
 						proxyUrl: options.proxyUrl,
 						timeoutMs: options.timeoutMs,
 						headless: options.headless,
@@ -705,6 +715,7 @@ export async function bootstrapBrowserPassthroughArgv(
 		apiUrl: parsed.options.apiUrl || undefined,
 		sessionName: parsed.options.sessionName || undefined,
 		stealth: parsed.options.stealth,
+		useProxy: parsed.options.useProxy || undefined,
 		proxyUrl: parsed.options.proxyUrl || undefined,
 		timeoutMs: parsed.options.timeoutMs || undefined,
 		headless: parsed.options.headless || undefined,

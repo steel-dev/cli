@@ -330,6 +330,10 @@ export async function createSessionFromApi(
 		payload['proxyUrl'] = options.proxyUrl.trim();
 	}
 
+	if (options.useProxy) {
+		payload['useProxy'] = true;
+	}
+
 	if (typeof options.timeoutMs === 'number') {
 		payload['timeout'] = options.timeoutMs;
 	}
