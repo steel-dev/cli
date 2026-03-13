@@ -46,6 +46,7 @@ export type ParsedBootstrapOptions = {
 	autoConnect: boolean;
 	cdpTarget: string | null;
 	profileName: string | null;
+	updateProfile: boolean;
 	namespace: string | null;
 	credentials: boolean;
 };

@@ -23,8 +23,8 @@ export function validateProfileName(name: string): string | null {
 		return 'Profile name cannot be empty.';
 	}
 
-	if (name.includes('/') || name.includes('\\')) {
-		return `Invalid profile name "${name}". Use a name like "myapp", not a path.`;
+	if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name)) {
+		return `Invalid profile name "${name}". Use alphanumeric characters, hyphens, or underscores (must start with alphanumeric).`;
 	}
 
 	return null;

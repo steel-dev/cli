@@ -116,56 +116,75 @@ function makeReencryptedCookiesBuffer(
 	macosKey: Buffer,
 	peanutsKey: Buffer,
 ): {buffer: Buffer; converted: number} {
-	const tmpPath = originalPath + '.steel_tmp';
+	const tmpPath = path.join(
+		os.tmpdir(),
+		`steel-cookies-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+	);
 	fs.copyFileSync(originalPath, tmpPath);
 
-	const db = new Database(tmpPath);
-	const metaVersion = Number(
-		(
-			db.prepare("SELECT value FROM meta WHERE key='version'").get() as
-				| {value: string}
-				| undefined
-		)?.value ?? 0,
-	);
-
-	const rows = db
-		.prepare(
-			'SELECT rowid, host_key, encrypted_value FROM cookies WHERE length(encrypted_value) > 3',
-		)
-		.all() as Array<{rowid: number; host_key: string; encrypted_value: Buffer}>;
-
-	const update = db.prepare(
-		'UPDATE cookies SET encrypted_value = ? WHERE rowid = ?',
-	);
-
-	let converted = 0;
-
-	db.transaction(() => {
-		for (const row of rows) {
-			const plaintext = decryptCookie(
-				row.encrypted_value,
-				macosKey,
-				row.host_key,
-				metaVersion,
+	try {
+		const db = new Database(tmpPath);
+		try {
+			const metaVersion = Number(
+				(
+					db.prepare("SELECT value FROM meta WHERE key='version'").get() as
+						| {value: string}
+						| undefined
+				)?.value ?? 0,
 			);
-			if (plaintext === null) continue;
 
-			const reencrypted = encryptCookie(
-				plaintext,
-				peanutsKey,
-				row.host_key,
-				metaVersion,
+			const rows = db
+				.prepare(
+					'SELECT rowid, host_key, encrypted_value FROM cookies WHERE length(encrypted_value) > 3',
+				)
+				.all() as Array<{
+				rowid: number;
+				host_key: string;
+				encrypted_value: Buffer;
+			}>;
+
+			const update = db.prepare(
+				'UPDATE cookies SET encrypted_value = ? WHERE rowid = ?',
 			);
-			update.run(reencrypted, row.rowid);
-			converted++;
+
+			let converted = 0;
+
+			db.transaction(() => {
+				for (const row of rows) {
+					const plaintext = decryptCookie(
+						row.encrypted_value,
+						macosKey,
+						row.host_key,
+						metaVersion,
+					);
+					if (plaintext === null) continue;
+
+					const reencrypted = encryptCookie(
+						plaintext,
+						peanutsKey,
+						row.host_key,
+						metaVersion,
+					);
+					update.run(reencrypted, row.rowid);
+					converted++;
+				}
+			})();
+
+			db.close();
+
+			const buffer = fs.readFileSync(tmpPath);
+			return {buffer, converted};
+		} catch (error) {
+			db.close();
+			throw error;
 		}
-	})();
-
-	db.close();
-
-	const buffer = fs.readFileSync(tmpPath);
-	fs.unlinkSync(tmpPath);
-	return {buffer, converted};
+	} finally {
+		try {
+			fs.unlinkSync(tmpPath);
+		} catch {
+			// best-effort cleanup
+		}
+	}
 }
 
 function collectFiles(

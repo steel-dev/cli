@@ -104,6 +104,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				autoConnect: false,
 				cdpTarget: null,
 				profileName: null,
+				updateProfile: false,
 				namespace: null,
 				credentials: false,
 			});
@@ -212,6 +213,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				autoConnect: false,
 				cdpTarget: null,
 				profileName: null,
+				updateProfile: false,
 				namespace: null,
 				credentials: false,
 			});
@@ -252,6 +254,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				autoConnect: false,
 				cdpTarget: null,
 				profileName: null,
+				updateProfile: false,
 				namespace: null,
 				credentials: false,
 			});
@@ -293,6 +296,7 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				autoConnect: false,
 				cdpTarget: null,
 				profileName: null,
+				updateProfile: false,
 				namespace: null,
 				credentials: false,
 			});
@@ -1448,6 +1452,44 @@ describe('browser lifecycle --profile flag parsing', () => {
 		}
 	});
 
+	test('parses --update-profile flag', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'https://steel.dev',
+				'--profile',
+				'myapp',
+				'--update-profile',
+			]);
+
+			expect(parsed.options.profileName).toBe('myapp');
+			expect(parsed.options.updateProfile).toBe(true);
+			expect(parsed.passthroughArgv).toEqual(['open', 'https://steel.dev']);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('updateProfile defaults to false', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'--profile',
+				'myapp',
+			]);
+
+			expect(parsed.options.updateProfile).toBe(false);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
 	test('profileName defaults to null when STEEL_PROFILE is not set', async () => {
 		const configDirectory = createTempConfigDirectory();
 
@@ -1586,6 +1628,7 @@ describe('browser lifecycle session profile contract', () => {
 			const lifecycle = await loadBrowserLifecycle(configDirectory);
 			const session = await lifecycle.startBrowserSession({
 				profileName: 'myapp',
+				updateProfile: true,
 				environment: {
 					STEEL_API_KEY: 'env-api-key',
 					STEEL_CONFIG_DIR: configDirectory,

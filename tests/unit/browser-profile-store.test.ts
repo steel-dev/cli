@@ -32,6 +32,16 @@ describe('validateProfileName', () => {
 		expect(validateProfileName('my\\app')).not.toBeNull();
 		expect(validateProfileName('../etc/passwd')).not.toBeNull();
 	});
+
+	test('rejects path traversal names', () => {
+		expect(validateProfileName('.')).not.toBeNull();
+		expect(validateProfileName('..')).not.toBeNull();
+		expect(validateProfileName('.hidden')).not.toBeNull();
+	});
+
+	test('rejects names with dots', () => {
+		expect(validateProfileName('my.app')).not.toBeNull();
+	});
 });
 
 describe('readSteelProfile', () => {

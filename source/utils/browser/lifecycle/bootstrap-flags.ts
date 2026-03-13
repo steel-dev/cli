@@ -23,6 +23,7 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 		autoConnect: false,
 		cdpTarget: null,
 		profileName: process.env['STEEL_PROFILE']?.trim() || null,
+		updateProfile: false,
 		namespace: null,
 		credentials: false,
 	};
@@ -230,6 +231,11 @@ export function parseBrowserPassthroughBootstrapFlags(browserArgv: string[]): {
 				index++;
 			}
 
+			continue;
+		}
+
+		if (argument === '--update-profile') {
+			options.updateProfile = true;
 			continue;
 		}
 

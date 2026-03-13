@@ -11,6 +11,7 @@ import {
 import {parseBrowserPassthroughBootstrapFlags} from './lifecycle/bootstrap-flags.js';
 import {
 	readSteelProfile,
+	validateProfileName,
 	writeSteelProfile,
 } from './lifecycle/profile-store.js';
 import {
@@ -167,6 +168,11 @@ export async function startBrowserSession(
 		let storedChromeProfile: string | undefined;
 
 		if (options.profileName) {
+			const nameError = validateProfileName(options.profileName);
+			if (nameError) {
+				throw new BrowserAdapterError('INVALID_BROWSER_ARGS', nameError);
+			}
+
 			const stored = await readSteelProfile(options.profileName, environment);
 			resolvedProfileId = stored?.profileId;
 			storedChromeProfile = stored?.chromeProfile;
@@ -211,7 +217,7 @@ export async function startBrowserSession(
 						headless: options.headless,
 						region: options.region,
 						solveCaptcha: options.solveCaptcha,
-						persistProfile: true,
+						persistProfile,
 						namespace: options.namespace,
 						credentials: options.credentials,
 					},
@@ -709,6 +715,7 @@ export async function bootstrapBrowserPassthroughArgv(
 		deadSessionBehavior: 'error',
 		environment,
 		profileName: parsed.options.profileName || undefined,
+		updateProfile: parsed.options.updateProfile || undefined,
 	});
 
 	if (!session.connectUrl) {
