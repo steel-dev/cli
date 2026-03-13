@@ -47,6 +47,7 @@ type Props = {
 type Phase =
 	| {tag: 'checking'}
 	| {tag: 'selecting'; profiles: ChromeProfile[]; chromeRunning: boolean}
+	| {tag: 'keychain'}
 	| {tag: 'importing'; chromeProfile: ChromeProfile; step: string}
 	| {tag: 'done'; profileId: string; cookiesReencrypted: number; zipMb: string}
 	| {tag: 'error'; message: string};
@@ -118,7 +119,7 @@ export default function Import({options}: Props) {
 			let zipMb: string;
 
 			try {
-				({zipBuffer, cookiesReencrypted} = packageChromeProfile(
+				({zipBuffer, cookiesReencrypted} = await packageChromeProfile(
 					chromeProfile.dirName,
 					msg => {
 						setPhase({
@@ -126,6 +127,9 @@ export default function Import({options}: Props) {
 							chromeProfile,
 							step: msg,
 						});
+					},
+					() => {
+						setPhase({tag: 'keychain'});
 					},
 				));
 				zipMb = (zipBuffer.length / 1024 / 1024).toFixed(1);
@@ -206,6 +210,17 @@ export default function Import({options}: Props) {
 				)}
 				<Text bold>Select Chrome profile to import:</Text>
 				<SelectInput items={items} onSelect={handleSelect} />
+			</Box>
+		);
+	}
+
+	if (phase.tag === 'keychain') {
+		return (
+			<Box>
+				<Text color="yellow">
+					macOS will ask for your password to read Chrome's cookie encryption
+					key from Keychain.
+				</Text>
 			</Box>
 		);
 	}

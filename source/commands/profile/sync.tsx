@@ -44,6 +44,7 @@ type Props = {
 };
 
 type Phase =
+	| {tag: 'keychain'}
 	| {tag: 'syncing'; chromeProfile: ChromeProfile; step: string}
 	| {tag: 'done'; cookiesReencrypted: number; zipMb: string}
 	| {tag: 'error'; message: string};
@@ -118,10 +119,13 @@ export default function Sync({options}: Props) {
 			let cookiesReencrypted: number;
 
 			try {
-				({zipBuffer, cookiesReencrypted} = packageChromeProfile(
+				({zipBuffer, cookiesReencrypted} = await packageChromeProfile(
 					chromeProfile.dirName,
 					msg => {
 						setPhase({tag: 'syncing', chromeProfile, step: msg});
+					},
+					() => {
+						setPhase({tag: 'keychain'});
 					},
 				));
 			} catch (error) {
@@ -175,6 +179,17 @@ export default function Sync({options}: Props) {
 					<Spinner type="dots" />
 				</Text>
 				<Text> Checking...</Text>
+			</Box>
+		);
+	}
+
+	if (phase.tag === 'keychain') {
+		return (
+			<Box>
+				<Text color="yellow">
+					macOS will ask for your password to read Chrome's cookie encryption
+					key from Keychain.
+				</Text>
 			</Box>
 		);
 	}

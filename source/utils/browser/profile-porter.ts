@@ -2,7 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {execSync} from 'node:child_process';
+import {exec, execSync} from 'node:child_process';
 import {zipSync} from 'fflate';
 import Database from 'better-sqlite3';
 
@@ -54,6 +54,22 @@ function getKeychainPassphrase(): string {
 			encoding: 'utf-8',
 		},
 	).trim();
+}
+
+function getKeychainPassphraseAsync(): Promise<string> {
+	return new Promise((resolve, reject) => {
+		exec(
+			'security find-generic-password -w -s "Chrome Safe Storage"',
+			{encoding: 'utf-8'},
+			(error, stdout) => {
+				if (error) {
+					reject(error);
+				} else {
+					resolve(stdout.trim());
+				}
+			},
+		);
+	});
 }
 
 function deriveKey(passphrase: string, iterations: number): Buffer {
@@ -261,10 +277,11 @@ export type PackageResult = {
 	cookiesReencrypted: number;
 };
 
-export function packageChromeProfile(
+export async function packageChromeProfile(
 	chromeProfile: string,
 	onProgress?: (msg: string) => void,
-): PackageResult {
+	onKeychainPrompt?: () => void,
+): Promise<PackageResult> {
 	const profileDir = path.join(CHROME_BASE_DIR, chromeProfile);
 
 	if (!fs.existsSync(path.join(profileDir, 'Cookies'))) {
@@ -273,8 +290,10 @@ export function packageChromeProfile(
 		);
 	}
 
-	onProgress?.('Reading Keychain passphrase...');
-	const passphrase = getKeychainPassphrase();
+	onKeychainPrompt?.();
+	// Let Ink render the message before the OS Keychain dialog appears
+	await new Promise(resolve => setTimeout(resolve, 100));
+	const passphrase = await getKeychainPassphraseAsync();
 	const macosKey = deriveKey(passphrase, 1003);
 	const peanutsKey = deriveKey('peanuts', 1);
 
