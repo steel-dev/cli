@@ -60,8 +60,7 @@ export const options = zod.object({
 		.boolean()
 		.describe(
 			option({
-				description:
-					'Use a Steel-managed residential proxy for new sessions',
+				description: 'Use a Steel-managed residential proxy for new sessions',
 			}),
 		)
 		.optional(),

@@ -547,7 +547,8 @@ describe('browser lifecycle session contract', () => {
 				}),
 			).rejects.toMatchObject({
 				code: 'INVALID_BROWSER_ARGS',
-				message: 'Cannot combine `--use-proxy` with `--proxy`. Choose one proxy mode.',
+				message:
+					'Cannot combine `--use-proxy` with `--proxy`. Choose one proxy mode.',
 			});
 
 			expect(fetchMock).not.toHaveBeenCalled();
@@ -901,7 +902,8 @@ describe('browser lifecycle session contract', () => {
 				),
 			).rejects.toMatchObject({
 				code: 'INVALID_BROWSER_ARGS',
-				message: 'Cannot combine `--use-proxy` with `--proxy`. Choose one proxy mode.',
+				message:
+					'Cannot combine `--use-proxy` with `--proxy`. Choose one proxy mode.',
 			});
 
 			expect(fetchMock).not.toHaveBeenCalled();
