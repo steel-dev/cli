@@ -20,6 +20,7 @@ function runCommand(command, arguments_, options = {}) {
 		cwd: options.cwd,
 		env: options.env,
 		encoding: 'utf-8',
+		shell: process.platform === 'win32',
 	});
 
 	if (result.status !== 0) {
