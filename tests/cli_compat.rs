@@ -4,11 +4,36 @@
 //! that the Rust clap parser exposes exactly those flags with correct names,
 //! short aliases, and required/optional status.
 
+use std::collections::BTreeSet;
+use std::path::Path;
+
 use clap::{ArgAction, Command, CommandFactory};
 
 // Re-use the clap-derived structs from the binary.
 // We need CommandFactory to introspect without running.
 use steel_cli::commands;
+
+/// Scan a Pastel commands directory and return the set of command names.
+/// Convention: .tsx files (excluding index.tsx) are commands, directories are parent commands.
+fn discover_pastel_commands(dir: &Path) -> BTreeSet<String> {
+    let mut commands = BTreeSet::new();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return commands,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+
+        if path.is_file() && name_str.ends_with(".tsx") && name_str != "index.tsx" {
+            commands.insert(name_str.trim_end_matches(".tsx").to_string());
+        } else if path.is_dir() {
+            commands.insert(name_str.to_string());
+        }
+    }
+    commands
+}
 
 /// Describes a single CLI flag as defined in the TypeScript source.
 #[derive(Debug)]
@@ -139,130 +164,99 @@ fn root_cmd() -> Command {
 }
 
 /// Verify the complete subcommand tree matches the TypeScript CLI.
+/// Commands are discovered dynamically from the Pastel source/commands/ directory.
 #[test]
 fn subcommand_tree_matches_ts() {
+    let ts_commands_dir =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("source/commands");
+
+    // Discover top-level TS commands from filesystem
+    let ts_top = discover_pastel_commands(&ts_commands_dir);
+    assert!(
+        !ts_top.is_empty(),
+        "Failed to discover TS commands from {}",
+        ts_commands_dir.display()
+    );
+
+    // Get Rust top-level commands
     let root = root_cmd();
-    let top_level: Vec<&str> = root
+    let rust_top: BTreeSet<String> = root
         .get_subcommands()
-        .map(|s| s.get_name())
-        .filter(|n| *n != "help")
+        .map(|s| s.get_name().to_string())
+        .filter(|n| n != "help")
         .collect();
 
-    let expected_top = vec![
-        "scrape",
-        "screenshot",
-        "pdf",
-        "browser",
-        "login",
-        "logout",
-        "credentials",
-        "dev",
-        "forge",
-        "run",
-        "config",
-        "update",
-        "cache",
-        "docs",
-        "star",
-        "support",
-        "settings",
-    ];
-
-    for name in &expected_top {
+    // Check both directions
+    for name in &ts_top {
         assert!(
-            top_level.contains(name),
-            "Missing top-level command: {name}"
+            rust_top.contains(name),
+            "TS has command '{name}' but Rust does not"
         );
     }
-    for name in &top_level {
+    for name in &rust_top {
         assert!(
-            expected_top.contains(name),
-            "Unexpected top-level command: {name}"
+            ts_top.contains(name),
+            "Rust has command '{name}' but TS does not"
         );
     }
 
-    // browser subcommands
-    let browser = get_subcommand(&root, &["browser"]);
-    let browser_subs: Vec<&str> = browser
-        .get_subcommands()
-        .map(|s| s.get_name())
-        .filter(|n| *n != "help")
-        .collect();
-    let expected_browser = vec!["start", "stop", "sessions", "live", "captcha"];
-    for name in &expected_browser {
-        assert!(
-            browser_subs.contains(name),
-            "Missing browser subcommand: {name}"
-        );
-    }
-    for name in &browser_subs {
-        assert!(
-            expected_browser.contains(name),
-            "Unexpected browser subcommand: {name}"
-        );
-    }
+    // Recurse into directories (subcommands)
+    for name in &ts_top {
+        let sub_dir = ts_commands_dir.join(name);
+        if !sub_dir.is_dir() {
+            continue;
+        }
 
-    // browser captcha subcommands
-    let captcha = get_subcommand(&root, &["browser", "captcha"]);
-    let captcha_subs: Vec<&str> = captcha
-        .get_subcommands()
-        .map(|s| s.get_name())
-        .filter(|n| *n != "help")
-        .collect();
-    let expected_captcha = vec!["solve", "status"];
-    for name in &expected_captcha {
-        assert!(
-            captcha_subs.contains(name),
-            "Missing captcha subcommand: {name}"
-        );
-    }
-    for name in &captcha_subs {
-        assert!(
-            expected_captcha.contains(name),
-            "Unexpected captcha subcommand: {name}"
-        );
-    }
+        let ts_subs = discover_pastel_commands(&sub_dir);
+        let rust_parent = get_subcommand(&root, &[name.as_str()]);
+        let rust_subs: BTreeSet<String> = rust_parent
+            .get_subcommands()
+            .map(|s| s.get_name().to_string())
+            .filter(|n| n != "help")
+            .collect();
 
-    // credentials subcommands
-    let creds = get_subcommand(&root, &["credentials"]);
-    let creds_subs: Vec<&str> = creds
-        .get_subcommands()
-        .map(|s| s.get_name())
-        .filter(|n| *n != "help")
-        .collect();
-    let expected_creds = vec!["list", "create", "update", "delete"];
-    for name in &expected_creds {
-        assert!(
-            creds_subs.contains(name),
-            "Missing credentials subcommand: {name}"
-        );
-    }
-    for name in &creds_subs {
-        assert!(
-            expected_creds.contains(name),
-            "Unexpected credentials subcommand: {name}"
-        );
-    }
+        for sub in &ts_subs {
+            assert!(
+                rust_subs.contains(sub),
+                "TS has '{name} {sub}' but Rust does not"
+            );
+        }
+        for sub in &rust_subs {
+            assert!(
+                ts_subs.contains(sub),
+                "Rust has '{name} {sub}' but TS does not"
+            );
+        }
 
-    // dev subcommands
-    let dev = get_subcommand(&root, &["dev"]);
-    let dev_subs: Vec<&str> = dev
-        .get_subcommands()
-        .map(|s| s.get_name())
-        .filter(|n| *n != "help")
-        .collect();
-    let expected_dev = vec!["install", "start", "stop"];
-    for name in &expected_dev {
-        assert!(
-            dev_subs.contains(name),
-            "Missing dev subcommand: {name}"
-        );
-    }
-    for name in &dev_subs {
-        assert!(
-            expected_dev.contains(name),
-            "Unexpected dev subcommand: {name}"
-        );
+        // One more level (e.g., browser/captcha/)
+        for sub in &ts_subs {
+            let nested_dir = sub_dir.join(sub);
+            if !nested_dir.is_dir() {
+                continue;
+            }
+
+            let ts_nested = discover_pastel_commands(&nested_dir);
+            let rust_nested_parent =
+                get_subcommand(&root, &[name.as_str(), sub.as_str()]);
+            let rust_nested: BTreeSet<String> = rust_nested_parent
+                .get_subcommands()
+                .map(|s| s.get_name().to_string())
+                .filter(|n| n != "help")
+                .collect();
+
+            for n in &ts_nested {
+                assert!(
+                    rust_nested.contains(n),
+                    "TS has '{name} {sub} {n}' but Rust does not"
+                );
+            }
+            for n in &rust_nested {
+                assert!(
+                    ts_nested.contains(n),
+                    "Rust has '{name} {sub} {n}' but TS does not"
+                );
+            }
+        }
     }
 }
 
