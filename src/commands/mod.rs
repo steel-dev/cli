@@ -8,6 +8,7 @@ pub mod forge;
 pub mod login;
 pub mod logout;
 pub mod pdf;
+pub mod profile;
 pub mod run;
 pub mod scrape;
 pub mod screenshot;
@@ -91,6 +92,12 @@ pub enum Command {
 
     /// Display and modify current settings
     Settings(settings::Args),
+
+    /// Manage named Steel browser profiles
+    Profile {
+        #[command(subcommand)]
+        command: profile::Command,
+    },
 }
 
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
@@ -112,5 +119,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Star(args) => star::run(args).await,
         Command::Support(args) => support::run(args).await,
         Command::Settings(args) => settings::run(args).await,
+        Command::Profile { command } => profile::run(command).await,
     }
 }

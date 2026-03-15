@@ -75,6 +75,15 @@ fn flag_short(long: &'static str, short: char) -> ExpectedFlag {
     }
 }
 
+fn flag_val_required(long: &'static str) -> ExpectedFlag {
+    ExpectedFlag {
+        long,
+        short: None,
+        required: true,
+        takes_value: true,
+    }
+}
+
 fn flag_val_short(long: &'static str, short: char) -> ExpectedFlag {
     ExpectedFlag {
         long,
@@ -594,4 +603,36 @@ fn login_has_auth_alias() {
         "login command should have 'auth' alias, got: {:?}",
         aliases
     );
+}
+
+#[test]
+fn profile_list_flags() {
+    let cmd = get_subcommand(&root_cmd(), &["profile", "list"]);
+    assert_flags(&cmd, &[flag("json")], "profile list");
+}
+
+#[test]
+fn profile_import_flags() {
+    let cmd = get_subcommand(&root_cmd(), &["profile", "import"]);
+    assert_flags(
+        &cmd,
+        &[flag_val_required("name"), flag_val("from")],
+        "profile import",
+    );
+}
+
+#[test]
+fn profile_sync_flags() {
+    let cmd = get_subcommand(&root_cmd(), &["profile", "sync"]);
+    assert_flags(
+        &cmd,
+        &[flag_val_required("name"), flag_val("from")],
+        "profile sync",
+    );
+}
+
+#[test]
+fn profile_delete_flags() {
+    let cmd = get_subcommand(&root_cmd(), &["profile", "delete"]);
+    assert_flags(&cmd, &[flag_val_required("name")], "profile delete");
 }
