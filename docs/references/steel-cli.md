@@ -19,6 +19,13 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - `steel browser live`: print the active session live-view URL.
 - `steel browser <inherited-command>`: pass through to vendored `agent-browser` runtime.
 
+### Profile Commands
+
+- `steel profile import`: import a local Chrome profile into Steel (macOS only).
+- `steel profile sync`: sync a local Chrome profile to an existing Steel profile (macOS only).
+- `steel profile list`: list all saved Steel browser profiles.
+- `steel profile delete`: delete a saved Steel profile (local metadata only).
+
 ### Credentials Commands
 
 - `steel credentials create`: store a new credential for a given origin.
@@ -67,6 +74,7 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - Config directory: `~/.config/steel`
 - Main config: `~/.config/steel/config.json`
 - Browser session state: `~/.config/steel/browser-session-state.json`
+- Profile metadata: `~/.config/steel/profiles/<name>.json`
 
 ## Environment Variables (Common)
 
@@ -75,6 +83,7 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - `STEEL_BROWSER_API_URL`: canonical self-hosted local endpoint override.
 - `STEEL_LOCAL_API_URL`: backward-compatible self-hosted alias.
 - `STEEL_CONFIG_DIR`: override config directory root.
+- `STEEL_PROFILE`: default profile name for browser sessions.
 
 ## Key References
 

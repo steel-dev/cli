@@ -1,6 +1,6 @@
 {
 	"name": "@steel-dev/cli",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"license": "MIT",
 	"bin": {
 		"steel": "./dist/steel.js"
@@ -36,6 +36,9 @@
 	],
 	"dependencies": {
 		"@babel/parser": "^7.27.2",
+		"@types/better-sqlite3": "^7.6.13",
+		"better-sqlite3": "^11.10.0",
+		"fflate": "^0.8.2",
 		"figures": "^6.1.0",
 		"ink": "^5.2.1",
 		"ink-big-text": "^2.0.0",

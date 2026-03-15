@@ -103,6 +103,8 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				solveCaptcha: false,
 				autoConnect: false,
 				cdpTarget: null,
+				profileName: null,
+				updateProfile: false,
 				namespace: null,
 				credentials: false,
 			});
@@ -210,6 +212,8 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				solveCaptcha: false,
 				autoConnect: false,
 				cdpTarget: null,
+				profileName: null,
+				updateProfile: false,
 				namespace: null,
 				credentials: false,
 			});
@@ -249,6 +253,8 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				solveCaptcha: true,
 				autoConnect: false,
 				cdpTarget: null,
+				profileName: null,
+				updateProfile: false,
 				namespace: null,
 				credentials: false,
 			});
@@ -289,6 +295,8 @@ describe('browser lifecycle passthrough bootstrap parsing', () => {
 				solveCaptcha: true,
 				autoConnect: false,
 				cdpTarget: null,
+				profileName: null,
+				updateProfile: false,
 				namespace: null,
 				credentials: false,
 			});
@@ -1368,6 +1376,347 @@ describe('browser lifecycle session contract', () => {
 			});
 
 			expect(fetchMock).not.toHaveBeenCalled();
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+});
+
+describe('browser lifecycle --profile flag parsing', () => {
+	test('parses --profile flag into profileName', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'https://steel.dev',
+				'--profile',
+				'myapp',
+			]);
+
+			expect(parsed.options.profileName).toBe('myapp');
+			expect(parsed.passthroughArgv).toEqual(['open', 'https://steel.dev']);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('parses --profile= (equals form) into profileName', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'https://steel.dev',
+				'--profile=myapp',
+			]);
+
+			expect(parsed.options.profileName).toBe('myapp');
+			expect(parsed.passthroughArgv).toEqual(['open', 'https://steel.dev']);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('throws when --profile has no value', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+
+			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags(['open', '--profile']),
+			).toThrow('Missing value for --profile.');
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('throws when --profile value contains a path separator', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+
+			expect(() =>
+				lifecycle.parseBrowserPassthroughBootstrapFlags([
+					'open',
+					'--profile',
+					'/tmp/my-profile',
+				]),
+			).toThrow('Invalid profile name');
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('parses --update-profile flag', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'https://steel.dev',
+				'--profile',
+				'myapp',
+				'--update-profile',
+			]);
+
+			expect(parsed.options.profileName).toBe('myapp');
+			expect(parsed.options.updateProfile).toBe(true);
+			expect(parsed.passthroughArgv).toEqual(['open', 'https://steel.dev']);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('updateProfile defaults to false', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'--profile',
+				'myapp',
+			]);
+
+			expect(parsed.options.updateProfile).toBe(false);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('profileName defaults to null when STEEL_PROFILE is not set', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			delete process.env['STEEL_PROFILE'];
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const parsed = lifecycle.parseBrowserPassthroughBootstrapFlags([
+				'open',
+				'https://steel.dev',
+			]);
+
+			expect(parsed.options.profileName).toBeNull();
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+});
+
+describe('browser lifecycle session profile contract', () => {
+	test('creates new session with persistProfile when no profile file exists', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-new-profile',
+					status: 'live',
+					profileId: 'returned-profile-uuid',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const session = await lifecycle.startBrowserSession({
+				profileName: 'myapp',
+				updateProfile: true,
+				environment: {
+					STEEL_API_KEY: 'env-api-key',
+					STEEL_CONFIG_DIR: configDirectory,
+				},
+			});
+
+			expect(session.id).toBe('session-new-profile');
+
+			// Should pass persistProfile: true but no profileId
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			const body = JSON.parse(
+				fetchMock.mock.calls[0]?.[1]?.body as string,
+			) as Record<string, unknown>;
+			expect(body['persistProfile']).toBe(true);
+			expect(body['profileId']).toBeUndefined();
+
+			// Should write the returned profileId to profiles/myapp.json
+			const profileFile = path.join(configDirectory, 'profiles', 'myapp.json');
+			expect(fs.existsSync(profileFile)).toBe(true);
+			const written = JSON.parse(fs.readFileSync(profileFile, 'utf-8')) as {
+				profileId: string;
+			};
+			expect(written.profileId).toBe('returned-profile-uuid');
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('reuses stored profileId from profile file on subsequent start', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			// Pre-seed profiles/myapp.json with an existing profileId
+			const profilesDir = path.join(configDirectory, 'profiles');
+			fs.mkdirSync(profilesDir, {recursive: true});
+			fs.writeFileSync(
+				path.join(profilesDir, 'myapp.json'),
+				JSON.stringify({profileId: 'existing-profile-uuid'}),
+				'utf-8',
+			);
+
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-with-profile',
+					status: 'live',
+					profileId: 'existing-profile-uuid',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const session = await lifecycle.startBrowserSession({
+				profileName: 'myapp',
+				updateProfile: true,
+				environment: {
+					STEEL_API_KEY: 'env-api-key',
+					STEEL_CONFIG_DIR: configDirectory,
+				},
+			});
+
+			expect(session.id).toBe('session-with-profile');
+
+			const body = JSON.parse(
+				fetchMock.mock.calls[0]?.[1]?.body as string,
+			) as Record<string, unknown>;
+			expect(body['profileId']).toBe('existing-profile-uuid');
+			expect(body['persistProfile']).toBe(true);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('recovers from expired profileId: warns and retries without profileId', async () => {
+		const configDirectory = createTempConfigDirectory();
+		const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		try {
+			const profilesDir = path.join(configDirectory, 'profiles');
+			fs.mkdirSync(profilesDir, {recursive: true});
+			fs.writeFileSync(
+				path.join(profilesDir, 'myapp.json'),
+				JSON.stringify({profileId: 'expired-profile-uuid'}),
+				'utf-8',
+			);
+
+			// First call: 404 for expired profileId
+			fetchMock
+				.mockResolvedValueOnce(
+					createJsonResponse(404, {
+						message: "Profile with ID 'expired-profile-uuid' not found",
+					}),
+				)
+				// Second call: success with new profileId
+				.mockResolvedValueOnce(
+					createJsonResponse(201, {
+						id: 'session-recovered',
+						status: 'live',
+						profileId: 'new-profile-uuid',
+					}),
+				);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const session = await lifecycle.startBrowserSession({
+				profileName: 'myapp',
+				updateProfile: true,
+				environment: {
+					STEEL_API_KEY: 'env-api-key',
+					STEEL_CONFIG_DIR: configDirectory,
+				},
+			});
+
+			expect(session.id).toBe('session-recovered');
+
+			expect(warnSpy).toHaveBeenCalledWith(
+				expect.stringContaining('Profile not found'),
+			);
+
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			const retryBody = JSON.parse(
+				fetchMock.mock.calls[1]?.[1]?.body as string,
+			) as Record<string, unknown>;
+			expect(retryBody['profileId']).toBeUndefined();
+			expect(retryBody['persistProfile']).toBe(true);
+
+			// New profileId should be written to profiles/myapp.json
+			const written = JSON.parse(
+				fs.readFileSync(
+					path.join(configDirectory, 'profiles', 'myapp.json'),
+					'utf-8',
+				),
+			) as {profileId: string};
+			expect(written.profileId).toBe('new-profile-uuid');
+		} finally {
+			warnSpy.mockRestore();
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('does not write profile file when API does not return profileId', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-no-profile-returned',
+					status: 'live',
+					// no profileId field
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			await lifecycle.startBrowserSession({
+				profileName: 'myapp',
+				environment: {
+					STEEL_API_KEY: 'env-api-key',
+					STEEL_CONFIG_DIR: configDirectory,
+				},
+			});
+
+			expect(
+				fs.existsSync(path.join(configDirectory, 'profiles', 'myapp.json')),
+			).toBe(false);
+		} finally {
+			fs.rmSync(configDirectory, {recursive: true, force: true});
+		}
+	});
+
+	test('bootstrap passthrough passes profileName from --profile flag', async () => {
+		const configDirectory = createTempConfigDirectory();
+
+		try {
+			fetchMock.mockResolvedValueOnce(
+				createJsonResponse(201, {
+					id: 'session-bootstrap-profile',
+					status: 'live',
+					profileId: 'bootstrap-profile-uuid',
+				}),
+			);
+
+			const lifecycle = await loadBrowserLifecycle(configDirectory);
+			const result = await lifecycle.bootstrapBrowserPassthroughArgv(
+				['open', 'https://steel.dev', '--profile', 'myapp'],
+				{STEEL_API_KEY: 'env-api-key', STEEL_CONFIG_DIR: configDirectory},
+			);
+
+			expect(result.argv[0]).toBe('open');
+			expect(result.argv).toContain('--cdp');
+
+			const body = JSON.parse(
+				fetchMock.mock.calls[0]?.[1]?.body as string,
+			) as Record<string, unknown>;
+			// --profile without --update-profile should not persist
+			expect(body['persistProfile']).toBeFalsy();
 		} finally {
 			fs.rmSync(configDirectory, {recursive: true, force: true});
 		}

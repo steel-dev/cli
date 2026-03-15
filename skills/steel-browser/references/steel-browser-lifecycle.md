@@ -49,6 +49,8 @@ Main flags:
 - `--session-solve-captcha`
 - `--namespace <name>` — credential namespace for the session
 - `--credentials` — enable credential injection for the session
+- `--profile <name>` — load a named browser profile into the session
+- `--update-profile` — save session state back to the profile on end
 
 Parse these output fields:
 
@@ -136,6 +138,17 @@ Main flags:
 - `--session <name>`
 - `--local`
 - `--api-url <url>`
+
+## Profile persistence
+
+```bash
+steel browser start --session "$SESSION" --profile myapp --update-profile
+```
+
+- `--profile <name>`: Load a previously imported browser profile (cookies, storage, etc.) into the session.
+- `--update-profile`: Save session state back to the profile when the session ends.
+
+Profiles are created outside agent workflows via `steel profile import`. Agents should only consume them with the flags above.
 
 ## Passthrough bootstrap behavior
 
