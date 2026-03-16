@@ -20,6 +20,7 @@ pub struct SessionSummary {
     pub status: Option<String>,
     pub connect_url: Option<String>,
     pub viewer_url: Option<String>,
+    pub profile_id: Option<String>,
 }
 
 /// Result of stopping browser sessions.
@@ -225,6 +226,7 @@ pub fn to_session_summary(
         status: get_session_status(session),
         connect_url,
         viewer_url: get_viewer_url(session, mode, &session_id),
+        profile_id: session.get("profileId").and_then(|v| v.as_str()).map(|s| s.to_string()),
     })
 }
 

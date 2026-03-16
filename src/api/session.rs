@@ -16,6 +16,8 @@ pub struct CreateSessionOptions {
     pub headless: Option<bool>,
     pub region: Option<String>,
     pub solve_captcha: bool,
+    pub profile_id: Option<String>,
+    pub persist_profile: bool,
     pub namespace: Option<String>,
     pub credentials: bool,
 }
@@ -106,6 +108,14 @@ fn build_create_body(options: &CreateSessionOptions) -> Value {
 
     if options.solve_captcha {
         obj.insert("solveCaptcha".into(), json!(true));
+    }
+
+    if let Some(ref profile_id) = options.profile_id {
+        obj.insert("profileId".into(), json!(profile_id));
+    }
+
+    if options.persist_profile {
+        obj.insert("persistProfile".into(), json!(true));
     }
 
     if let Some(ref namespace) = options.namespace {

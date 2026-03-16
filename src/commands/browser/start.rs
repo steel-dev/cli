@@ -3,6 +3,7 @@ use clap::Parser;
 use crate::api::client::SteelClient;
 use crate::api::session::CreateSessionOptions;
 use crate::browser::lifecycle::{sanitize_connect_url, start_session};
+use crate::browser::profile_store;
 use crate::config::auth;
 use crate::config::session_state::SessionStatePaths;
 use crate::config::settings::{ApiMode, EnvVars};
@@ -45,6 +46,14 @@ pub struct Args {
     #[arg(long = "session-solve-captcha")]
     pub session_solve_captcha: bool,
 
+    /// Named profile to persist browser state across sessions
+    #[arg(long)]
+    pub profile: Option<String>,
+
+    /// Save session state back to the profile when the session ends
+    #[arg(long = "update-profile")]
+    pub update_profile: bool,
+
     /// Credential namespace
     #[arg(long)]
     pub namespace: Option<String>,
@@ -65,6 +74,21 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let client = SteelClient::new()?;
     let paths = SessionStatePaths::default_paths();
 
+    // Resolve profile
+    let mut resolved_profile_id = None;
+    let mut stored_chrome_profile = None;
+    if let Some(ref profile_name) = args.profile {
+        if let Some(err) = profile_store::validate_profile_name(profile_name) {
+            anyhow::bail!("{err}");
+        }
+        if let Some(data) = profile_store::read_profile(profile_name)? {
+            resolved_profile_id = Some(data.profile_id);
+            stored_chrome_profile = data.chrome_profile;
+        }
+    }
+
+    let persist_profile = args.profile.is_some() && args.update_profile;
+
     let options = CreateSessionOptions {
         stealth: args.stealth,
         proxy_url: args.proxy,
@@ -72,6 +96,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         headless: args.session_headless,
         region: args.session_region,
         solve_captcha: args.session_solve_captcha,
+        profile_id: resolved_profile_id,
+        persist_profile,
         namespace: args.namespace,
         credentials: args.credentials,
     };
@@ -86,6 +112,17 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         &options,
     )
     .await?;
+
+    // Write profile mapping back if a profile was specified
+    if let Some(ref profile_name) = args.profile {
+        if let Some(ref returned_profile_id) = session.profile_id {
+            profile_store::write_profile(
+                profile_name,
+                returned_profile_id,
+                stored_chrome_profile.as_deref(),
+            )?;
+        }
+    }
 
     println!("id: {}", session.id);
     println!("mode: {:?}", session.mode);

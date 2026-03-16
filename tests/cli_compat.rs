@@ -351,6 +351,8 @@ fn browser_start_flags() {
             flag_val("session-headless"),
             flag_val("session-region"),
             flag("session-solve-captcha"),
+            flag_val("profile"),
+            flag("update-profile"),
             flag_val("namespace"),
             flag("credentials"),
         ],
