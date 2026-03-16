@@ -97,6 +97,19 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     }
     if let Some(ref url) = session.connect_url {
         println!("connect_url: {}", sanitize_connect_url(url));
+
+        // Eagerly spawn daemon so subsequent commands are fast
+        use crate::browser::daemon::process;
+        if !process::socket_path(&session.id).exists() {
+            if let Err(e) = process::spawn_daemon(&session.id, url) {
+                eprintln!("Warning: failed to start browser daemon: {e}");
+            } else if let Err(e) = process::wait_for_daemon(
+                &session.id,
+                std::time::Duration::from_secs(10),
+            ).await {
+                eprintln!("Warning: browser daemon did not become ready: {e}");
+            }
+        }
     }
 
     Ok(())

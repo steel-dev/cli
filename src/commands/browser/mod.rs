@@ -1,3 +1,4 @@
+pub mod action;
 pub mod captcha;
 pub mod live;
 pub mod sessions;
@@ -25,6 +26,10 @@ pub enum Command {
         #[command(subcommand)]
         command: captcha::Command,
     },
+
+    /// Browser actions (navigate, click, fill, snapshot, screenshot, …)
+    #[command(flatten)]
+    Action(action::ActionCommand),
 }
 
 pub async fn run(command: Command) -> anyhow::Result<()> {
@@ -34,5 +39,6 @@ pub async fn run(command: Command) -> anyhow::Result<()> {
         Command::Sessions(args) => sessions::run(args).await,
         Command::Live(args) => live::run(args).await,
         Command::Captcha { command } => captcha::run(command).await,
+        Command::Action(action) => action::run(action).await,
     }
 }

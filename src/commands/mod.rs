@@ -32,6 +32,13 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Internal daemon process
+    #[command(name = "__daemon", hide = true)]
+    Daemon {
+        #[arg(long)]
+        session_id: String,
+    },
+
     /// Scrape webpage content (markdown output by default)
     Scrape(scrape::Args),
 
@@ -102,6 +109,11 @@ pub enum Command {
 
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
+        Command::Daemon { session_id } => {
+            let cdp_url = std::env::var("STEEL_DAEMON_CDP_URL")
+                .map_err(|_| anyhow::anyhow!("Missing STEEL_DAEMON_CDP_URL"))?;
+            crate::browser::daemon::server::run(session_id, cdp_url).await
+        }
         Command::Scrape(args) => scrape::run(args).await,
         Command::Screenshot(args) => screenshot::run(args).await,
         Command::Pdf(args) => pdf::run(args).await,

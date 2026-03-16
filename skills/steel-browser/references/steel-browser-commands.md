@@ -2,66 +2,66 @@
 
 Use this reference when you need command-level patterns for navigation, interaction, extraction, and debugging.
 
+For any command, run `steel browser <command> --help` for full flag details.
+
 ## Navigation
 
 ```bash
 steel browser open <url>
+steel browser navigate <url> --wait-until networkidle
+steel browser navigate <url> --header "Authorization: Bearer ..."
 steel browser back
 steel browser forward
 steel browser reload
 steel browser close
-steel browser connect 9222
 ```
+
+`open` is an alias for `navigate`.
 
 ## Snapshot and element discovery
 
 ```bash
-steel browser snapshot
-steel browser snapshot -i
-steel browser snapshot -c
-steel browser snapshot -d 3
-steel browser snapshot -s "#main"
+steel browser snapshot                      # all elements (default)
+steel browser snapshot -i                   # interactive elements only
+steel browser snapshot -c                   # compact output
+steel browser snapshot -d 3                 # limit tree depth
+steel browser snapshot -s "#main"           # scope to subtree
+steel browser snapshot -i -c -d 3           # combine short flags
 ```
+
+Snapshot returns an accessibility tree with element refs (`@e1`, `@e2`, ...).
+Use these refs in subsequent commands instead of CSS selectors.
 
 ## Interactions with element refs
 
 ```bash
 steel browser click @e1
 steel browser click @e1 --new-tab
+steel browser click @e1 --button right
+steel browser click @e1 --count 2
 steel browser dblclick @e1
 steel browser focus @e1
 steel browser fill @e2 "text"
 steel browser type @e2 "text"
+steel browser type @e2 "text" --clear
 steel browser press Enter
 steel browser press Control+a
-steel browser keydown Shift
-steel browser keyup Shift
 steel browser hover @e1
 steel browser check @e1
 steel browser uncheck @e1
 steel browser select @e1 "value"
 steel browser select @e1 "a" "b"
+steel browser clear @e1
+steel browser selectall @e1
 steel browser scroll down 500
+steel browser scroll up
+steel browser scroll down 200 --selector ".panel"
 steel browser scrollintoview @e1
-steel browser drag @e1 @e2
-steel browser upload @e1 ./file.pdf
+steel browser setvalue @e1 "raw value"
 ```
 
-## Semantic locator alternatives
-
-```bash
-steel browser find role button click --name "Submit"
-steel browser find text "Sign In" click
-steel browser find text "Sign In" click --exact
-steel browser find label "Email" fill "user@test.com"
-steel browser find placeholder "Search" type "query"
-steel browser find alt "Logo" click
-steel browser find title "Close" click
-steel browser find testid "submit-btn" click
-steel browser find first ".item" click
-steel browser find last ".item" click
-steel browser find nth 2 "a" hover
-```
+`setvalue` sets the DOM value property directly without triggering input events.
+Use `fill` or `type` for normal form interaction.
 
 ## Information extraction
 
@@ -75,6 +75,7 @@ steel browser get url
 steel browser get count ".item"
 steel browser get box @e1
 steel browser get styles @e1
+steel browser get styles @e1 --property color --property font-size
 ```
 
 There is no top-level `steel browser extract` command.
@@ -88,132 +89,92 @@ steel browser is enabled @e1
 steel browser is checked @e1
 ```
 
+## Find elements
+
+```bash
+steel browser find ".item"
+steel browser find "a[href*=login]"
+```
+
+Returns a list of matching elements with index, tag name, text, and visibility.
+
 ## Waiting and synchronization
 
 ```bash
-steel browser wait @e1
-steel browser wait 2000
 steel browser wait --text "Success"
-steel browser wait --url "**/dashboard"
-steel browser wait --load networkidle
-steel browser wait --fn "window.ready"
+steel browser wait --selector ".loaded"
+steel browser wait --selector ".modal" --state hidden
+steel browser wait --url "/dashboard"
+steel browser wait --function "window.ready"
+steel browser wait --load-state networkidle
+steel browser wait --timeout 5000 --text "Done"
 ```
 
-## Screenshots, PDFs, and recording
+All wait conditions default to 30 second timeout. Override with `--timeout <ms>`.
+
+## Screenshots
 
 ```bash
 steel browser screenshot
-steel browser screenshot ./page.png
-steel browser screenshot --full
-steel browser pdf ./output.pdf
-steel browser record start ./demo.webm
-steel browser record stop
-steel browser record restart ./take2.webm
+steel browser screenshot -o ./page.png
+steel browser screenshot --full-page
+steel browser screenshot --selector "#chart"
+steel browser screenshot --annotate
+steel browser screenshot --format jpeg --quality 80
 ```
 
-Use a positional file path for screenshot output.
-Do not use `-o`/`--output` with `steel browser screenshot`.
-
-## Browser settings
+## Page content
 
 ```bash
-steel browser set viewport 1920 1080
-steel browser set device "iPhone 14"
-steel browser set geo 37.7749 -122.4194
-steel browser set offline on
-steel browser set headers '{"X-Key":"v"}'
-steel browser set credentials user pass
-steel browser set media dark
-steel browser set media light reduced-motion
+steel browser content
+steel browser eval "document.title"
+steel browser eval "document.querySelectorAll('a').length"
 ```
 
-## Cookies and storage
+## Tabs
 
 ```bash
-steel browser cookies
-steel browser cookies set name value
-steel browser cookies clear
-steel browser storage local
-steel browser storage local key
-steel browser storage local set k v
-steel browser storage local clear
-```
-
-## Network controls
-
-```bash
-steel browser network route <url>
-steel browser network route <url> --abort
-steel browser network route <url> --body '{}'
-steel browser network unroute [url]
-steel browser network requests
-steel browser network requests --filter api
-```
-
-## Tabs, windows, frames, and dialogs
-
-```bash
-steel browser tab
-steel browser tab new [url]
-steel browser tab 2
+steel browser tab list
+steel browser tab new
+steel browser tab new https://example.com
+steel browser tab switch 2
 steel browser tab close
 steel browser tab close 2
-steel browser window new
-steel browser frame "#iframe"
-steel browser frame main
-steel browser dialog accept [text]
-steel browser dialog dismiss
 ```
 
-## JavaScript evaluation
+## Window
 
 ```bash
-steel browser eval "document.title"
-steel browser eval -b "<base64-script>"
-steel browser eval --stdin
+steel browser bringtofront
 ```
 
-Prefer `-b` or `--stdin` when script complexity makes shell escaping brittle.
-
-## Session and global options
+## Session lifecycle
 
 ```bash
-steel browser --session <name> ...
-steel browser --json ...
-steel browser --headed ...
-steel browser --full ...
-steel browser --cdp <port-or-url> ...
-steel browser --proxy <url> ...
-steel browser --proxy-bypass <hosts> ...
-steel browser --headers <json> ...
-steel browser --ignore-https-errors ...
-steel browser --help
-steel browser --version
-steel browser <command> --help
-```
-
-## Debugging quick set
-
-```bash
-steel browser --headed open example.com
-steel browser --cdp 9222 snapshot
-steel browser console
-steel browser console --clear
-steel browser errors
-steel browser errors --clear
-steel browser highlight @e1
+steel browser start
+steel browser start --session <name>
+steel browser sessions
+steel browser live
+steel browser stop
+steel browser stop --all
 ```
 
 ## CAPTCHA control
 
 ```bash
-steel browser start --session <name> --session-solve-captcha
 steel browser start --session <name> --stealth
 steel browser captcha status
 steel browser captcha status --wait
 steel browser captcha status --wait --timeout 120000
-steel browser captcha status --raw
 steel browser captcha solve --session <name>
-steel browser captcha solve --session <name> --page-id <id> --task-id <id>
-steel browser screenshot /tmp/captcha-progress.png --session <name>
+```
+
+## Quick help
+
+```bash
+steel browser --help
+steel browser <command> --help
+steel browser get --help
+steel browser is --help
+steel browser tab --help
 ```

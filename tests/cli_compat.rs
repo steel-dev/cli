@@ -191,6 +191,7 @@ fn subcommand_tree_matches_ts() {
     let root = root_cmd();
     let rust_top: BTreeSet<String> = root
         .get_subcommands()
+        .filter(|s| !s.is_hide_set())
         .map(|s| s.get_name().to_string())
         .filter(|n| n != "help")
         .collect();
@@ -231,6 +232,11 @@ fn subcommand_tree_matches_ts() {
             );
         }
         for sub in &rust_subs {
+            // Browser action subcommands (navigate, click, …) are Rust-native
+            // and have no TS equivalent — skip the reverse check for them.
+            if name == "browser" && !ts_subs.contains(sub) {
+                continue;
+            }
             assert!(
                 ts_subs.contains(sub),
                 "Rust has '{name} {sub}' but TS does not"

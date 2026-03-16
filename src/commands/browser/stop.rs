@@ -51,6 +51,11 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     )
     .await?;
 
+    // Stop daemons for released sessions
+    for id in &result.stopped_session_ids {
+        let _ = crate::browser::daemon::process::stop_daemon(id).await;
+    }
+
     if result.stopped_session_ids.is_empty() {
         println!("No active browser sessions to stop.");
     } else if result.all {

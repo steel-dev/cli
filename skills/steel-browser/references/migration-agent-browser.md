@@ -4,24 +4,46 @@ Use this reference when users bring existing upstream scripts or habits.
 
 ## Core migration rule
 
-For most scripts, replace command prefix only:
+Replace the command prefix:
 
 - Before: `agent-browser <command> ...`
 - After: `steel browser <command> ...`
 
-Steel keeps inherited runtime command behavior and adds lifecycle controls.
+Steel keeps the same CLI interface as agent-browser and adds lifecycle controls.
 
-## Recommended migration process
+## Command mapping
 
-1. Ensure Steel CLI is installed and authenticated (`steel login` or `STEEL_API_KEY`).
-2. Replace command prefixes in scripts.
-3. Run smoke validation:
-   - `start`
-   - `open`
-   - `snapshot -i`
-   - `stop`
-4. Add explicit `--session <name>` for multi-step scripts.
-5. If self-hosted, set `--api-url` for deterministic endpoint selection.
+Most commands work with a direct prefix swap. Key equivalences:
+
+| agent-browser             | steel browser                             |
+| ------------------------- | ----------------------------------------- |
+| `open <url>`              | `open <url>` (alias for `navigate`)       |
+| `snapshot`                | `snapshot` (both default to all elements) |
+| `snapshot -i`             | `snapshot -i` (interactive-only)          |
+| `get text @e1`            | `get text @e1`                            |
+| `get html @e1`            | `get html @e1`                            |
+| `get url`                 | `get url`                                 |
+| `is visible @e1`          | `is visible @e1`                          |
+| `tab new`                 | `tab new`                                 |
+| `tab 2`                   | `tab switch 2`                            |
+| `scroll down 500`         | `scroll down 500`                         |
+| `wait @e1`                | `wait --selector @e1`                     |
+| `wait 2000`               | `wait --timeout 2000`                     |
+| `wait --load networkidle` | `wait --load-state networkidle`           |
+| `wait --fn "expr"`        | `wait --function "expr"`                  |
+| `screenshot ./page.png`   | `screenshot -o ./page.png`                |
+| `screenshot --full`       | `screenshot --full-page`                  |
+
+## Snapshot flag differences
+
+Snapshot flags now match agent-browser 1:1:
+
+| agent-browser       | steel browser          |
+| ------------------- | ---------------------- |
+| `-i, --interactive` | `-i, --interactive`    |
+| `-c`                | `-c, --compact`        |
+| `-d <n>`            | `-d, --max-depth <n>`  |
+| `-s <sel>`          | `-s, --selector <sel>` |
 
 ## Example conversion
 
@@ -31,40 +53,45 @@ agent-browser open https://example.com
 agent-browser snapshot -i
 agent-browser click @e3
 agent-browser get text @e7
+agent-browser wait --load networkidle
+agent-browser screenshot ./page.png
 
 # After
+steel browser start
 steel browser open https://example.com
 steel browser snapshot -i
 steel browser click @e3
 steel browser get text @e7
+steel browser wait --load-state networkidle
+steel browser screenshot -o ./page.png
+steel browser stop
 ```
 
-## Steel-native commands to introduce when helpful
+## Steel-only commands
 
-- `steel browser start`
-- `steel browser stop`
-- `steel browser sessions`
-- `steel browser live`
+These are Steel additions not present in agent-browser:
 
-These are helpful for explicit session lifecycle management and debugging.
+- `steel browser start` — create/attach a cloud browser session
+- `steel browser stop` — release the session
+- `steel browser sessions` — list active sessions
+- `steel browser live` — open the live session viewer
+- `steel browser captcha status/solve` — CAPTCHA management
 
-## Auth and environment differences
+## Not yet implemented
 
-Cloud mode:
+These agent-browser commands are not yet available in Steel:
 
-- Use `steel login` locally.
-- Use `STEEL_API_KEY` in CI/automation.
+- `set viewport/device/geo/offline/headers/credentials/media` — browser configuration
+- `cookies get/set/clear` — cookie management
+- `storage local/session` — web storage
+- `network route/unroute/requests` — network interception
+- `find role/text/label/...` — semantic locators (Steel `find` uses CSS selectors only)
+- `dialog accept/dismiss` — dialog handling
+- `upload`, `drag` — file upload, drag and drop
+- `pdf` — PDF export
+- `console`, `errors` — debug log capture
+- `frame`, `window new` — frame/window management
+- `keydown`, `keyup` — low-level keyboard input
+- `record start/stop` — video recording
 
-Self-hosted mode:
-
-- Prefer `--api-url <url>`.
-- Alternative precedence still applies through env/config:
-  `STEEL_BROWSER_API_URL`, `STEEL_LOCAL_API_URL`, config file.
-
-## Attach behavior note
-
-If a command already provides `--cdp` or `--auto-connect`, Steel forwards passthrough without adding bootstrap attach flags. Do not combine both flags in one call.
-
-## Security note for logs
-
-`steel browser start` and `steel browser sessions` output display-safe connect URLs with sensitive values redacted. Use session `id` + environment secrets for raw credentialed URLs when needed.
+Use `steel browser --help` to see all currently available commands.
