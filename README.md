@@ -15,20 +15,21 @@ This package now integrates `agent-browser` directly into `steel browser`, so yo
 
 ## Install
 
-Requirements:
-
-- Node.js `>=18`
-
-Install globally:
-
 ```bash
-npm i -g @steel-dev/cli
+curl -LsSf https://steel.dev/install.sh | sh
 ```
 
-Or run without installing globally:
+Or download directly from [GitHub Releases](https://github.com/steel-dev/cli/releases).
+
+### Upgrading from npm
+
+If you previously installed via `npm i -g @steel-dev/cli`:
 
 ```bash
-npx @steel-dev/cli --help
+npm update -g @steel-dev/cli   # auto-installs native binary
+# Then optionally:
+npm uninstall -g @steel-dev/cli
+export PATH="$HOME/.steel/bin:$PATH"
 ```
 
 ## Quick Start
@@ -128,30 +129,6 @@ Attach-flag override rule:
 - `steel scrape` defaults to markdown-first output for token efficiency; use `--raw` for full JSON payload.
 - `steel browser start` and `steel browser sessions` emit display-safe connect URLs with sensitive query values redacted.
 - Browser command paths bypass auto-update checks for lower interactive latency.
-
-## Auto-Update
-
-```bash
-# Update to latest
-steel update
-
-# Check without installing
-steel update --check
-
-# Force update
-steel update --force
-```
-
-Disable automatic update checks:
-
-```bash
-steel run --no-update-check
-STEEL_CLI_SKIP_UPDATE_CHECK=true steel run
-CI=true steel run
-NODE_ENV=test steel run
-```
-
-Update checks are cached for 24 hours.
 
 ## Documentation Map
 

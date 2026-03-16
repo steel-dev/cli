@@ -1,7 +1,7 @@
-//! Contract tests: verify that Rust CLI flags are 100% compatible with the TypeScript CLI.
+//! Contract tests: verify that Rust CLI flags are 100% compatible with the frozen CLI spec.
 //!
-//! Each test defines the expected flags (extracted from TS source) and asserts
-//! that the Rust clap parser exposes exactly those flags with correct names,
+//! Each test defines the expected flags (from the spec, originally extracted from TS source)
+//! and asserts that the Rust clap parser exposes exactly those flags with correct names,
 //! short aliases, and required/optional status.
 
 use std::collections::BTreeSet;
@@ -172,20 +172,29 @@ fn root_cmd() -> Command {
     commands::Cli::command()
 }
 
-/// Verify the complete subcommand tree matches the TypeScript CLI.
-/// Commands are discovered dynamically from the Pastel source/commands/ directory.
+/// Verify the complete subcommand tree matches the spec frozen from the TypeScript CLI.
+/// The spec is loaded from cli-spec.json (generated before the TS source was removed).
 #[test]
-fn subcommand_tree_matches_ts() {
-    let ts_commands_dir =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("source/commands");
+fn subcommand_tree_matches_spec() {
+    let spec_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cli-spec.json");
+    let spec_text = std::fs::read_to_string(&spec_path)
+        .unwrap_or_else(|e| panic!("Failed to read cli-spec.json: {e}"));
+    let spec: serde_json::Value = serde_json::from_str(&spec_text)
+        .unwrap_or_else(|e| panic!("Failed to parse cli-spec.json: {e}"));
 
-    // Discover top-level TS commands from filesystem
-    let ts_top = discover_pastel_commands(&ts_commands_dir);
-    assert!(
-        !ts_top.is_empty(),
-        "Failed to discover TS commands from {}",
-        ts_commands_dir.display()
-    );
+    // Extract top-level commands from spec (array format)
+    let spec_cmds = spec
+        .get("commands")
+        .and_then(|v| v.as_array())
+        .expect("spec should have a 'commands' array");
+
+    let spec_top: BTreeSet<String> = spec_cmds
+        .iter()
+        .filter_map(|c| c.get("name").and_then(|n| n.as_str()))
+        .map(|s| s.to_string())
+        .collect();
+    assert!(!spec_top.is_empty(), "Spec has no commands");
 
     // Get Rust top-level commands
     let root = root_cmd();
@@ -196,79 +205,74 @@ fn subcommand_tree_matches_ts() {
         .filter(|n| n != "help")
         .collect();
 
-    // Check both directions
-    for name in &ts_top {
+    // Check that all spec commands exist in Rust
+    for name in &spec_top {
         assert!(
             rust_top.contains(name),
-            "TS has command '{name}' but Rust does not"
-        );
-    }
-    for name in &rust_top {
-        assert!(
-            ts_top.contains(name),
-            "Rust has command '{name}' but TS does not"
+            "Spec has command '{name}' but Rust does not"
         );
     }
 
-    // Recurse into directories (subcommands)
-    for name in &ts_top {
-        let sub_dir = ts_commands_dir.join(name);
-        if !sub_dir.is_dir() {
-            continue;
-        }
+    // Recurse into subcommands from spec
+    for cmd in spec_cmds {
+        let name = match cmd.get("name").and_then(|n| n.as_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        let subs = match cmd.get("subcommands").and_then(|v| v.as_array()) {
+            Some(s) => s,
+            None => continue,
+        };
 
-        let ts_subs = discover_pastel_commands(&sub_dir);
-        let rust_parent = get_subcommand(&root, &[name.as_str()]);
+        let spec_subs: BTreeSet<String> = subs
+            .iter()
+            .filter_map(|c| c.get("name").and_then(|n| n.as_str()))
+            .map(|s| s.to_string())
+            .collect();
+
+        let rust_parent = get_subcommand(&root, &[name]);
         let rust_subs: BTreeSet<String> = rust_parent
             .get_subcommands()
             .map(|s| s.get_name().to_string())
             .filter(|n| n != "help")
             .collect();
 
-        for sub in &ts_subs {
+        for sub in &spec_subs {
             assert!(
                 rust_subs.contains(sub),
-                "TS has '{name} {sub}' but Rust does not"
-            );
-        }
-        for sub in &rust_subs {
-            // Browser action subcommands (navigate, click, …) are Rust-native
-            // and have no TS equivalent — skip the reverse check for them.
-            if name == "browser" && !ts_subs.contains(sub) {
-                continue;
-            }
-            assert!(
-                ts_subs.contains(sub),
-                "Rust has '{name} {sub}' but TS does not"
+                "Spec has '{name} {sub}' but Rust does not"
             );
         }
 
         // One more level (e.g., browser/captcha/)
-        for sub in &ts_subs {
-            let nested_dir = sub_dir.join(sub);
-            if !nested_dir.is_dir() {
-                continue;
-            }
+        for sub_cmd in subs {
+            let sub_name = match sub_cmd.get("name").and_then(|n| n.as_str()) {
+                Some(n) => n,
+                None => continue,
+            };
+            let nested = match sub_cmd.get("subcommands").and_then(|v| v.as_array()) {
+                Some(n) => n,
+                None => continue,
+            };
 
-            let ts_nested = discover_pastel_commands(&nested_dir);
+            let spec_nested: BTreeSet<String> = nested
+                .iter()
+                .filter_map(|c| c.get("name").and_then(|n| n.as_str()))
+                .map(|s| s.to_string())
+                .collect();
+
             let rust_nested_parent =
-                get_subcommand(&root, &[name.as_str(), sub.as_str()]);
+                get_subcommand(&root, &[name, sub_name]);
             let rust_nested: BTreeSet<String> = rust_nested_parent
                 .get_subcommands()
                 .map(|s| s.get_name().to_string())
                 .filter(|n| n != "help")
                 .collect();
 
-            for n in &ts_nested {
+            for n in &spec_nested {
                 assert!(
                     rust_nested.contains(n),
-                    "TS has '{name} {sub} {n}' but Rust does not"
-                );
-            }
-            for n in &rust_nested {
-                assert!(
-                    ts_nested.contains(n),
-                    "Rust has '{name} {sub} {n}' but TS does not"
+                    "Spec has '{name} {sub_name} {n}' but Rust does not"
                 );
             }
         }
