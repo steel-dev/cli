@@ -81,7 +81,7 @@ Migration from upstream `agent-browser` is typically command-prefix only:
 
 Read more:
 
-- [Migration guide](docs/migration-agent-browser.md)
+- [Migration guide](skills/steel-browser/references/migration-agent-browser.md)
 - [Compatibility matrix](docs/browser-compat.md)
 - [Steel browser reference](docs/references/steel-browser.md)
 - [Synced command catalog](docs/references/steel-browser-commands.md)
@@ -160,7 +160,7 @@ Primary docs:
 - [Docs index](docs/README.md)
 - [Generated CLI reference](docs/cli-reference.md)
 - [Browser compatibility](docs/browser-compat.md)
-- [agent-browser migration guide](docs/migration-agent-browser.md)
+- [agent-browser migration guide](skills/steel-browser/references/migration-agent-browser.md)
 - [Upstream sync guide](docs/upstream-sync.md)
 
 Reference docs:

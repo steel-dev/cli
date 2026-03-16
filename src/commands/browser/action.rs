@@ -188,7 +188,7 @@ pub struct NavigateArgs {
     #[arg(long)]
     pub wait_until: Option<String>,
     /// Set request header (repeatable, format: "Key: Value")
-    #[arg(long = "header")]
+    #[arg(long = "header", alias = "headers")]
     pub headers: Vec<String>,
 }
 
@@ -278,17 +278,17 @@ pub struct SnapshotArgs {
     #[arg(short, long)]
     pub compact: bool,
     /// Maximum nesting depth
-    #[arg(short = 'd', long)]
+    #[arg(short = 'd', long, alias = "depth")]
     pub max_depth: Option<usize>,
     /// Include cursor position
-    #[arg(long)]
+    #[arg(short = 'C', long)]
     pub cursor: bool,
 }
 
 #[derive(Parser)]
 pub struct ScreenshotArgs {
     /// Capture the full scrollable page
-    #[arg(long)]
+    #[arg(long, alias = "full")]
     pub full_page: bool,
     /// Output file path
     #[arg(short, long, default_value = "screenshot.png")]
@@ -297,10 +297,10 @@ pub struct ScreenshotArgs {
     #[arg(long)]
     pub selector: Option<String>,
     /// Image format: png, jpeg, webp
-    #[arg(long, alias = "type")]
+    #[arg(long, alias = "type", alias = "screenshot-format")]
     pub format: Option<String>,
     /// JPEG/WebP quality (0-100)
-    #[arg(long)]
+    #[arg(long, alias = "screenshot-quality")]
     pub quality: Option<i32>,
     /// Annotate interactive elements on the screenshot
     #[arg(long)]
@@ -337,7 +337,7 @@ pub struct WaitArgs {
     #[arg(long, default_value_t = 30000)]
     pub timeout: u64,
     /// Wait for text to appear on page
-    #[arg(long)]
+    #[arg(short = 't', long)]
     pub text: Option<String>,
     /// Wait for a CSS selector
     #[arg(long)]
@@ -346,13 +346,13 @@ pub struct WaitArgs {
     #[arg(long)]
     pub state: Option<String>,
     /// Wait for URL to contain this string
-    #[arg(long)]
+    #[arg(short = 'u', long)]
     pub url: Option<String>,
     /// Wait for a JS function to return truthy
-    #[arg(long)]
+    #[arg(short = 'f', long, alias = "fn")]
     pub function: Option<String>,
     /// Wait for load state: load, domcontentloaded, networkidle
-    #[arg(long)]
+    #[arg(short = 'l', long, alias = "load")]
     pub load_state: Option<String>,
 }
 

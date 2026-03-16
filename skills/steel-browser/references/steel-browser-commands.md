@@ -26,6 +26,7 @@ steel browser snapshot -i                   # interactive elements only
 steel browser snapshot -c                   # compact output
 steel browser snapshot -d 3                 # limit tree depth
 steel browser snapshot -s "#main"           # scope to subtree
+steel browser snapshot -C                   # include cursor position
 steel browser snapshot -i -c -d 3           # combine short flags
 ```
 
@@ -44,6 +45,7 @@ steel browser focus @e1
 steel browser fill @e2 "text"
 steel browser type @e2 "text"
 steel browser type @e2 "text" --clear
+steel browser type @e2 "text" --delay 50
 steel browser press Enter
 steel browser press Control+a
 steel browser hover @e1
@@ -101,15 +103,17 @@ Returns a list of matching elements with index, tag name, text, and visibility.
 ## Waiting and synchronization
 
 ```bash
-steel browser wait --text "Success"
+steel browser wait -t "Success"
 steel browser wait --selector ".loaded"
 steel browser wait --selector ".modal" --state hidden
-steel browser wait --url "/dashboard"
-steel browser wait --function "window.ready"
-steel browser wait --load-state networkidle
-steel browser wait --timeout 5000 --text "Done"
+steel browser wait -u "/dashboard"
+steel browser wait --fn "window.ready"
+steel browser wait --load networkidle
+steel browser wait --timeout 5000 -t "Done"
 ```
 
+Short flags: `-t` text, `-u` url, `-f` function, `-l` load state.
+Long aliases: `--fn` = `--function`, `--load` = `--load-state`.
 All wait conditions default to 30 second timeout. Override with `--timeout <ms>`.
 
 ## Screenshots
@@ -117,7 +121,7 @@ All wait conditions default to 30 second timeout. Override with `--timeout <ms>`
 ```bash
 steel browser screenshot
 steel browser screenshot -o ./page.png
-steel browser screenshot --full-page
+steel browser screenshot --full
 steel browser screenshot --selector "#chart"
 steel browser screenshot --annotate
 steel browser screenshot --format jpeg --quality 80
