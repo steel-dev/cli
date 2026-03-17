@@ -2,9 +2,7 @@ use clap::{Parser, Subcommand};
 use serde_json::json;
 
 use crate::api::client::SteelClient;
-use crate::config::auth;
-use crate::config::settings::{ApiMode, EnvVars};
-use crate::util::output;
+use crate::util::{api, output};
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -30,14 +28,6 @@ pub struct ListArgs {
     /// Filter by origin URL
     #[arg(long)]
     pub origin: Option<String>,
-
-    /// Use local runtime
-    #[arg(short, long)]
-    pub local: bool,
-
-    /// Explicit self-hosted API endpoint URL
-    #[arg(long)]
-    pub api_url: Option<String>,
 }
 
 #[derive(Parser)]
@@ -65,14 +55,6 @@ pub struct CreateArgs {
     /// Human-readable label
     #[arg(long)]
     pub label: Option<String>,
-
-    /// Use local runtime
-    #[arg(short, long)]
-    pub local: bool,
-
-    /// Explicit self-hosted API endpoint URL
-    #[arg(long)]
-    pub api_url: Option<String>,
 }
 
 #[derive(Parser)]
@@ -100,14 +82,6 @@ pub struct UpdateArgs {
     /// New human-readable label
     #[arg(long)]
     pub label: Option<String>,
-
-    /// Use local runtime
-    #[arg(short, long)]
-    pub local: bool,
-
-    /// Explicit self-hosted API endpoint URL
-    #[arg(long)]
-    pub api_url: Option<String>,
 }
 
 #[derive(Parser)]
@@ -119,24 +93,6 @@ pub struct DeleteArgs {
     /// Credential namespace
     #[arg(short, long)]
     pub namespace: Option<String>,
-
-    /// Use local runtime
-    #[arg(short, long)]
-    pub local: bool,
-
-    /// Explicit self-hosted API endpoint URL
-    #[arg(long)]
-    pub api_url: Option<String>,
-}
-
-fn resolve_common(local: bool, api_url: Option<&str>) -> (ApiMode, auth::Auth, String) {
-    let mode = ApiMode::resolve(local, api_url);
-    let auth_info = auth::resolve_auth();
-    let env_vars = EnvVars::from_env();
-    let config = crate::config::settings::read_config().ok();
-    let local_config_url = config.as_ref().and_then(|c| c.local_api_url());
-    let base_url = mode.resolve_base_url(api_url, &env_vars, local_config_url);
-    (mode, auth_info, base_url)
 }
 
 pub async fn run(command: Command) -> anyhow::Result<()> {
@@ -149,7 +105,7 @@ pub async fn run(command: Command) -> anyhow::Result<()> {
 }
 
 async fn run_list(args: ListArgs) -> anyhow::Result<()> {
-    let (mode, auth_info, base_url) = resolve_common(args.local, args.api_url.as_deref());
+    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut query_params = Vec::new();
@@ -205,7 +161,7 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --password"))?;
 
-    let (mode, auth_info, base_url) = resolve_common(args.local, args.api_url.as_deref());
+    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut value = json!({
@@ -275,7 +231,7 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --origin"))?;
 
-    let (mode, auth_info, base_url) = resolve_common(args.local, args.api_url.as_deref());
+    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut body = json!({"origin": origin});
@@ -349,7 +305,7 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --origin"))?;
 
-    let (mode, auth_info, base_url) = resolve_common(args.local, args.api_url.as_deref());
+    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut body = json!({"origin": origin});

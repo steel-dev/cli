@@ -13,7 +13,7 @@ use steel_cli::api::session::CreateSessionOptions;
 use steel_cli::browser::lifecycle::*;
 use steel_cli::config::auth::{Auth, AuthSource};
 use steel_cli::config::session_state::{
-    read_state, with_lock, SessionMode, SessionStatePaths,
+    read_state, with_lock, SessionStatePaths,
 };
 use steel_cli::config::settings::ApiMode;
 
@@ -117,13 +117,13 @@ async fn creates_cloud_session_and_persists_active_state() {
     .unwrap();
 
     assert_eq!(summary.id, "sess-cloud-1");
-    assert_eq!(summary.mode, SessionMode::Cloud);
+    assert_eq!(summary.mode, ApiMode::Cloud);
     assert!(summary.live);
 
     // Verify state was persisted
     let state = read_state(&paths.state_path);
     assert_eq!(state.active_session_id.as_deref(), Some("sess-cloud-1"));
-    assert_eq!(state.active_session_mode, Some(SessionMode::Cloud));
+    assert_eq!(state.active_api_mode, Some(ApiMode::Cloud));
 }
 
 // ===========================================================================
@@ -208,12 +208,12 @@ async fn creates_local_session_with_explicit_api_url() {
     .unwrap();
 
     assert_eq!(summary.id, "sess-local-1");
-    assert_eq!(summary.mode, SessionMode::Local);
+    assert_eq!(summary.mode, ApiMode::Local);
     assert!(summary.live);
 
     let state = read_state(&paths.state_path);
     assert_eq!(state.active_session_id.as_deref(), Some("sess-local-1"));
-    assert_eq!(state.active_session_mode, Some(SessionMode::Local));
+    assert_eq!(state.active_api_mode, Some(ApiMode::Local));
 }
 
 // ===========================================================================
@@ -252,7 +252,7 @@ async fn reattaches_named_live_session() {
     .unwrap();
 
     assert_eq!(summary.id, "existing-sess");
-    assert_eq!(summary.mode, SessionMode::Cloud);
+    assert_eq!(summary.mode, ApiMode::Cloud);
     assert!(summary.live);
 
     // Active state should point to the reattached session
@@ -327,7 +327,7 @@ async fn stops_active_session_by_releasing() {
 
     // Pre-seed active session
     with_lock(&paths, true, |state| {
-        state.set_active(SessionMode::Cloud, "sess-to-stop", None);
+        state.set_active(ApiMode::Cloud, "sess-to-stop", None);
     })
     .unwrap();
 
@@ -347,7 +347,7 @@ async fn stops_active_session_by_releasing() {
 
     assert_eq!(result.stopped_session_ids, vec!["sess-to-stop"]);
     assert!(!result.all);
-    assert_eq!(result.mode, SessionMode::Cloud);
+    assert_eq!(result.mode, ApiMode::Cloud);
 }
 
 // ===========================================================================
@@ -404,7 +404,7 @@ async fn stop_clears_session_from_state() {
 
     // Pre-seed with an active named session
     with_lock(&paths, true, |state| {
-        state.set_active(SessionMode::Cloud, "sess-named", Some("work"));
+        state.set_active(ApiMode::Cloud, "sess-named", Some("work"));
         state
             .named_sessions
             .cloud
@@ -429,7 +429,7 @@ async fn stop_clears_session_from_state() {
     // State should be cleared
     let state = read_state(&paths.state_path);
     assert!(state.active_session_id.is_none());
-    assert!(state.active_session_mode.is_none());
+    assert!(state.active_api_mode.is_none());
     assert!(state.active_session_name.is_none());
     assert!(state.named_sessions.cloud.get("work").is_none());
 }
@@ -490,70 +490,6 @@ async fn list_sessions_resolves_names_from_state() {
 }
 
 // ===========================================================================
-// 10. Session Mode Resolution: --local flag -> Local mode
-// ===========================================================================
-
-#[test]
-fn local_flag_resolves_to_local_mode() {
-    let mode = resolve_session_mode(true, None, None);
-    assert_eq!(mode, SessionMode::Local);
-}
-
-#[test]
-fn local_flag_overrides_api_url() {
-    let mode = resolve_session_mode(true, Some("https://api.steel.dev/v1"), None);
-    assert_eq!(mode, SessionMode::Local);
-}
-
-// ===========================================================================
-// 11. Session Mode Resolution: api-url containing steel.dev -> Cloud mode
-// ===========================================================================
-
-#[test]
-fn steel_dev_api_url_resolves_to_cloud() {
-    let mode = resolve_session_mode(false, Some("https://api.steel.dev/v1"), None);
-    assert_eq!(mode, SessionMode::Cloud);
-}
-
-#[test]
-fn steel_dev_api_url_case_insensitive() {
-    let mode = resolve_session_mode(false, Some("https://API.STEEL.DEV/v1"), None);
-    assert_eq!(mode, SessionMode::Cloud);
-}
-
-// ===========================================================================
-// 12. Session Mode Resolution: other api-url -> Local mode
-// ===========================================================================
-
-#[test]
-fn custom_api_url_resolves_to_local() {
-    let mode = resolve_session_mode(false, Some("http://localhost:3000/v1"), None);
-    assert_eq!(mode, SessionMode::Local);
-}
-
-#[test]
-fn non_steel_url_resolves_to_local() {
-    let mode = resolve_session_mode(false, Some("https://my-custom-server.com/api"), None);
-    assert_eq!(mode, SessionMode::Local);
-}
-
-// ===========================================================================
-// 13. Session Mode Resolution: default -> Cloud
-// ===========================================================================
-
-#[test]
-fn default_resolves_to_cloud() {
-    let mode = resolve_session_mode(false, None, None);
-    assert_eq!(mode, SessionMode::Cloud);
-}
-
-#[test]
-fn default_respects_active_mode_from_state() {
-    let mode = resolve_session_mode(false, None, Some(SessionMode::Local));
-    assert_eq!(mode, SessionMode::Local);
-}
-
-// ===========================================================================
 // 14. Connect URL Contract: injects apiKey into connect URL for cloud mode
 // ===========================================================================
 
@@ -566,7 +502,7 @@ fn injects_api_key_into_connect_url_for_cloud() {
         "websocketUrl": "wss://connect.steel.dev?sessionId=sess-1",
     });
     let auth = cloud_auth();
-    let summary = to_session_summary(&session, SessionMode::Cloud, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
 
     let url = summary.connect_url.unwrap();
     assert!(
@@ -588,7 +524,7 @@ fn does_not_inject_api_key_for_local_mode() {
         "websocketUrl": "ws://localhost:3000/ws?sessionId=sess-1",
     });
     let auth = cloud_auth();
-    let summary = to_session_summary(&session, SessionMode::Local, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Local, None, &auth).unwrap();
 
     let url = summary.connect_url.unwrap();
     assert!(
@@ -606,7 +542,7 @@ fn does_not_duplicate_api_key_if_already_present() {
         "websocketUrl": "wss://connect.steel.dev?apiKey=existing-key&sessionId=sess-1",
     });
     let auth = cloud_auth();
-    let summary = to_session_summary(&session, SessionMode::Cloud, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
 
     let url = summary.connect_url.unwrap();
     // Should keep existing key, not inject a second one
@@ -627,7 +563,7 @@ fn builds_fallback_connect_url_when_not_provided() {
         "isLive": true,
     });
     let auth = cloud_auth();
-    let summary = to_session_summary(&session, SessionMode::Cloud, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
 
     let url = summary.connect_url.unwrap();
     assert!(
@@ -652,7 +588,7 @@ fn no_fallback_connect_url_for_local_mode() {
         "isLive": true,
     });
     let auth = local_auth();
-    let summary = to_session_summary(&session, SessionMode::Local, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Local, None, &auth).unwrap();
 
     assert!(
         summary.connect_url.is_none(),
@@ -766,7 +702,7 @@ fn resolve_candidate_returns_named_session() {
 
     let id = with_lock(&paths, false, |state| {
         state
-            .resolve_candidate(SessionMode::Cloud, Some("work"))
+            .resolve_candidate(ApiMode::Cloud, Some("work"))
             .map(|s| s.to_string())
     })
     .unwrap();
@@ -787,7 +723,7 @@ fn resolve_name_from_state() {
     .unwrap();
 
     let state = read_state(&paths.state_path);
-    let name = state.resolve_name(SessionMode::Cloud, "sess-1");
+    let name = state.resolve_name(ApiMode::Cloud, "sess-1");
     assert_eq!(name, Some("work"));
 }
 
@@ -801,7 +737,7 @@ fn state_persists_across_calls() {
 
     // First call: write state
     with_lock(&paths, true, |state| {
-        state.set_active(SessionMode::Cloud, "sess-persist", Some("project-a"));
+        state.set_active(ApiMode::Cloud, "sess-persist", Some("project-a"));
         state
             .named_sessions
             .cloud
@@ -819,7 +755,7 @@ fn state_persists_across_calls() {
         state.active_session_name.as_deref(),
         Some("project-a")
     );
-    assert_eq!(state.active_session_mode, Some(SessionMode::Cloud));
+    assert_eq!(state.active_api_mode, Some(ApiMode::Cloud));
     assert_eq!(
         state
             .named_sessions
@@ -874,7 +810,7 @@ fn cross_process_state_write_then_read() {
 
     // Simulate "process 1": write state
     with_lock(&paths, true, |state| {
-        state.set_active(SessionMode::Local, "cross-sess", Some("shared"));
+        state.set_active(ApiMode::Local, "cross-sess", Some("shared"));
         state
             .named_sessions
             .local
@@ -889,8 +825,8 @@ fn cross_process_state_write_then_read() {
         Some("cross-sess")
     );
     assert_eq!(
-        fresh_state.active_session_mode,
-        Some(SessionMode::Local)
+        fresh_state.active_api_mode,
+        Some(ApiMode::Local)
     );
     assert_eq!(
         fresh_state
@@ -903,7 +839,7 @@ fn cross_process_state_write_then_read() {
 
     // "Process 2" can also resolve the candidate
     let candidate = fresh_state
-        .resolve_candidate(SessionMode::Local, Some("shared"))
+        .resolve_candidate(ApiMode::Local, Some("shared"))
         .map(|s| s.to_string());
     assert_eq!(candidate.as_deref(), Some("cross-sess"));
 }
@@ -914,7 +850,7 @@ fn cross_process_clear_visible_to_other_reader() {
 
     // Process 1: create session
     with_lock(&paths, true, |state| {
-        state.set_active(SessionMode::Cloud, "to-clear", Some("temp"));
+        state.set_active(ApiMode::Cloud, "to-clear", Some("temp"));
         state
             .named_sessions
             .cloud
@@ -924,7 +860,7 @@ fn cross_process_clear_visible_to_other_reader() {
 
     // Process 2: clear the session
     with_lock(&paths, true, |state| {
-        state.clear_active(SessionMode::Cloud, "to-clear");
+        state.clear_active(ApiMode::Cloud, "to-clear");
     })
     .unwrap();
 
@@ -968,7 +904,7 @@ async fn stop_named_session_releases_correct_session() {
 
     // Pre-seed two named sessions and an active one
     with_lock(&paths, true, |state| {
-        state.set_active(SessionMode::Cloud, "active-sess", None);
+        state.set_active(ApiMode::Cloud, "active-sess", None);
         state
             .named_sessions
             .cloud
@@ -1009,7 +945,7 @@ async fn start_session_with_dead_unnamed_active_creates_new() {
 
     // Pre-seed with a dead unnamed active session
     with_lock(&paths, true, |state| {
-        state.set_active(SessionMode::Cloud, "dead-active", None);
+        state.set_active(ApiMode::Cloud, "dead-active", None);
     })
     .unwrap();
 
@@ -1052,7 +988,7 @@ fn viewer_url_defaults_to_cloud_url() {
         "isLive": true,
     });
     let auth = cloud_auth();
-    let summary = to_session_summary(&session, SessionMode::Cloud, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
 
     assert_eq!(
         summary.viewer_url.as_deref(),
@@ -1068,7 +1004,7 @@ fn viewer_url_none_for_local_without_explicit() {
         "isLive": true,
     });
     let auth = local_auth();
-    let summary = to_session_summary(&session, SessionMode::Local, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Local, None, &auth).unwrap();
 
     assert!(summary.viewer_url.is_none());
 }
@@ -1082,7 +1018,7 @@ fn viewer_url_uses_api_response_when_present() {
         "sessionViewerUrl": "https://custom-viewer.example.com/view/sess-1",
     });
     let auth = cloud_auth();
-    let summary = to_session_summary(&session, SessionMode::Cloud, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
 
     assert_eq!(
         summary.viewer_url.as_deref(),
@@ -1094,7 +1030,7 @@ fn viewer_url_uses_api_response_when_present() {
 fn to_session_summary_requires_id() {
     let session = json!({"status": "live"});
     let auth = cloud_auth();
-    let result = to_session_summary(&session, SessionMode::Cloud, None, &auth);
+    let result = to_session_summary(&session, ApiMode::Cloud, None, &auth);
     assert!(result.is_err());
 }
 
@@ -1107,28 +1043,8 @@ fn to_session_summary_passes_name_through() {
     });
     let auth = cloud_auth();
     let summary =
-        to_session_summary(&session, SessionMode::Cloud, Some("my-session"), &auth).unwrap();
+        to_session_summary(&session, ApiMode::Cloud, Some("my-session"), &auth).unwrap();
     assert_eq!(summary.name.as_deref(), Some("my-session"));
-}
-
-#[test]
-fn session_mode_api_mode_round_trip() {
-    assert_eq!(
-        session_mode_to_api_mode(SessionMode::Cloud),
-        ApiMode::Cloud
-    );
-    assert_eq!(
-        session_mode_to_api_mode(SessionMode::Local),
-        ApiMode::Local
-    );
-    assert_eq!(
-        api_mode_to_session_mode(ApiMode::Cloud),
-        SessionMode::Cloud
-    );
-    assert_eq!(
-        api_mode_to_session_mode(ApiMode::Local),
-        SessionMode::Local
-    );
 }
 
 #[tokio::test]
@@ -1196,7 +1112,7 @@ async fn stop_all_clears_all_from_state() {
 
     // Pre-seed with an active session
     with_lock(&paths, true, |state| {
-        state.set_active(SessionMode::Cloud, "all-1", Some("work"));
+        state.set_active(ApiMode::Cloud, "all-1", Some("work"));
         state
             .named_sessions
             .cloud

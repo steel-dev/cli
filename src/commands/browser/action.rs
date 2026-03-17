@@ -11,13 +11,9 @@ use crate::api::client::SteelClient;
 use crate::browser::daemon::client::DaemonClient;
 use crate::browser::daemon::process;
 use crate::browser::daemon::protocol::DaemonCommand;
-use crate::browser::lifecycle::{
-    api_mode_to_session_mode, session_mode_to_api_mode, to_session_summary,
-};
-use crate::config::auth;
+use crate::browser::lifecycle::to_session_summary;
 use crate::config::session_state::{SessionStatePaths, read_state};
-use crate::config::settings::EnvVars;
-use crate::util::output;
+use crate::util::{api, output};
 
 // ── Shared arg types ────────────────────────────────────────────────
 
@@ -377,8 +373,8 @@ pub struct TabCloseArgs {
 
 // ── Command dispatch ────────────────────────────────────────────────
 
-pub async fn run(action: ActionCommand) -> Result<()> {
-    let mut client = ensure_daemon().await?;
+pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
+    let mut client = ensure_daemon(session).await?;
 
     match action {
         // --- Navigation ---
@@ -570,11 +566,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     cursor: args.cursor,
                 })
                 .await?;
-            if output::is_json() {
-                output::success_data(data);
-            } else if let Some(s) = data.as_str() {
-                println!("{s}");
-            }
+            output::success_text(data);
         }
         ActionCommand::Screenshot(args) => {
             let path = std::path::Path::new(&args.output);
@@ -607,11 +599,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
         ActionCommand::Eval(args) => {
             let script = args.script.join(" ");
             let data = client.send(DaemonCommand::Eval { script }).await?;
-            if output::is_json() {
-                output::success_data(data);
-            } else {
-                println!("{data}");
-            }
+            output::success_data(data);
         }
         ActionCommand::Find(args) => {
             let data = client
@@ -634,11 +622,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
         }
         ActionCommand::Content => {
             let data = client.send(DaemonCommand::Content).await?;
-            if output::is_json() {
-                output::success_data(data);
-            } else if let Some(s) = data.as_str() {
-                println!("{s}");
-            }
+            output::success_text(data);
         }
 
         // --- Get info ---
@@ -649,11 +633,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else if let Some(s) = data["text"].as_str() {
-                    println!("{s}");
-                }
+                output::success_field(data, "text");
             }
             GetCommand::Html(args) => {
                 let data = client
@@ -661,11 +641,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else if let Some(s) = data["html"].as_str() {
-                    println!("{s}");
-                }
+                output::success_field(data, "html");
             }
             GetCommand::Value(args) => {
                 let data = client
@@ -673,11 +649,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else if let Some(s) = data["value"].as_str() {
-                    println!("{s}");
-                }
+                output::success_field(data, "value");
             }
             GetCommand::Attr(args) => {
                 let data = client
@@ -686,27 +658,15 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         attribute: args.attribute,
                     })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else {
-                    println!("{}", data["value"]);
-                }
+                output::success_field(data, "value");
             }
             GetCommand::Url => {
                 let data = client.send(DaemonCommand::Url).await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else if let Some(s) = data.as_str() {
-                    println!("{s}");
-                }
+                output::success_text(data);
             }
             GetCommand::Title => {
                 let data = client.send(DaemonCommand::Title).await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else if let Some(s) = data.as_str() {
-                    println!("{s}");
-                }
+                output::success_text(data);
             }
             GetCommand::Count(args) => {
                 let data = client
@@ -714,11 +674,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else {
-                    println!("{}", data["count"]);
-                }
+                output::success_field(data, "count");
             }
             GetCommand::Box(args) => {
                 let data = client
@@ -752,11 +708,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else {
-                    println!("{}", data["visible"]);
-                }
+                output::success_field(data, "visible");
             }
             IsCommand::Enabled(args) => {
                 let data = client
@@ -764,11 +716,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else {
-                    println!("{}", data["enabled"]);
-                }
+                output::success_field(data, "enabled");
             }
             IsCommand::Checked(args) => {
                 let data = client
@@ -776,11 +724,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else {
-                    println!("{}", data["checked"]);
-                }
+                output::success_field(data, "checked");
             }
         },
 
@@ -797,11 +741,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     load_state: args.load_state,
                 })
                 .await?;
-            if output::is_json() {
-                output::success_data(data);
-            } else if let Some(s) = data["waited"].as_str() {
-                println!("{s}");
-            }
+            output::success_field(data, "waited");
         }
 
         // --- Tabs ---
@@ -825,21 +765,13 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                 let data = client
                     .send(DaemonCommand::TabNew { url: args.url })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else if let Some(url) = data["url"].as_str() {
-                    println!("{url}");
-                }
+                output::success_field(data, "url");
             }
             TabCommand::Switch(args) => {
                 let data = client
                     .send(DaemonCommand::TabSwitch { index: args.index })
                     .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else if let Some(url) = data["url"].as_str() {
-                    println!("{url}");
-                }
+                output::success_field(data, "url");
             }
             TabCommand::Close(args) => {
                 client
@@ -865,16 +797,29 @@ pub async fn run(action: ActionCommand) -> Result<()> {
     Ok(())
 }
 
-/// Ensure a daemon is running for the active session and return a connected client.
+/// Ensure a daemon is running for the target session and return a connected client.
 /// If no daemon exists, resolves the CDP URL via the API and spawns one.
-async fn ensure_daemon() -> Result<DaemonClient> {
+///
+/// When `session_name` is Some, resolves the named session from state.
+/// Otherwise falls back to the active session.
+async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
     let paths = SessionStatePaths::default_paths();
     let state = read_state(&paths.state_path);
 
-    let session_id = state
-        .active_session_id
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("No active browser session. Run `steel browser start` first."))?;
+    let session_id = if let Some(name) = session_name {
+        state
+            .resolve_candidate(api::mode(), Some(name))
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No session found for \"{name}\". Start one with `steel browser start --session {name}`."
+                )
+            })?
+    } else {
+        state
+            .active_session_id
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("No active browser session. Run `steel browser start` first."))?
+    };
 
     // Fast path: daemon already running
     if let Ok(client) = DaemonClient::connect(session_id).await {
@@ -882,24 +827,14 @@ async fn ensure_daemon() -> Result<DaemonClient> {
     }
 
     // Slow path: resolve CDP URL and spawn daemon
-    let session_mode = state
-        .active_session_mode
-        .ok_or_else(|| anyhow::anyhow!("No active browser session. Run `steel browser start` first."))?;
-
-    let api_mode = session_mode_to_api_mode(session_mode);
-    let auth_info = auth::resolve_auth();
-    let env_vars = EnvVars::from_env();
-    let config = crate::config::settings::read_config().ok();
-    let local_config_url = config.as_ref().and_then(|c| c.local_api_url());
-    let base_url = api_mode.resolve_base_url(None, &env_vars, local_config_url);
+    let (mode, base_url, auth_info) = api::resolve_with_auth();
 
     let api_client = SteelClient::new()?;
     let session = api_client
-        .get_session(&base_url, api_mode, session_id, &auth_info)
+        .get_session(&base_url, mode, session_id, &auth_info)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    let mode = api_mode_to_session_mode(api_mode);
     let summary = to_session_summary(&session, mode, None, &auth_info)?;
     let cdp_url = summary
         .connect_url

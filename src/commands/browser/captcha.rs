@@ -3,10 +3,8 @@ use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::browser::lifecycle;
-use crate::config::auth;
 use crate::config::session_state::SessionStatePaths;
-use crate::config::settings::{ApiMode, EnvVars};
-use crate::util::output;
+use crate::util::{api, output};
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -19,11 +17,7 @@ pub enum Command {
 
 #[derive(Parser)]
 pub struct SolveArgs {
-    /// Session name
-    #[arg(short, long)]
-    pub session: Option<String>,
-
-    /// Session ID
+    /// Explicit session ID (overrides --session name lookup)
     #[arg(long)]
     pub session_id: Option<String>,
 
@@ -38,23 +32,11 @@ pub struct SolveArgs {
     /// CAPTCHA task ID for targeted solving
     #[arg(long)]
     pub task_id: Option<String>,
-
-    /// Use local runtime
-    #[arg(short, long)]
-    pub local: bool,
-
-    /// Explicit self-hosted API endpoint URL
-    #[arg(long)]
-    pub api_url: Option<String>,
 }
 
 #[derive(Parser)]
 pub struct StatusArgs {
-    /// Session name
-    #[arg(short, long)]
-    pub session: Option<String>,
-
-    /// Session ID
+    /// Explicit session ID (overrides --session name lookup)
     #[arg(long)]
     pub session_id: Option<String>,
 
@@ -73,35 +55,17 @@ pub struct StatusArgs {
     /// Poll interval in milliseconds for --wait mode
     #[arg(long)]
     pub interval: Option<u64>,
-
-    /// Use local runtime
-    #[arg(short, long)]
-    pub local: bool,
-
-    /// Explicit self-hosted API endpoint URL
-    #[arg(long)]
-    pub api_url: Option<String>,
 }
 
-fn resolve_common(local: bool, api_url: Option<&str>) -> (ApiMode, auth::Auth, String) {
-    let mode = ApiMode::resolve(local, api_url);
-    let auth = auth::resolve_auth();
-    let env_vars = EnvVars::from_env();
-    let config = crate::config::settings::read_config().ok();
-    let local_config_url = config.as_ref().and_then(|c| c.local_api_url());
-    let base_url = mode.resolve_base_url(api_url, &env_vars, local_config_url);
-    (mode, auth, base_url)
-}
-
-pub async fn run(command: Command) -> anyhow::Result<()> {
+pub async fn run(command: Command, session: Option<&str>) -> anyhow::Result<()> {
     match command {
-        Command::Solve(args) => run_solve(args).await,
-        Command::Status(args) => run_status(args).await,
+        Command::Solve(args) => run_solve(args, session).await,
+        Command::Status(args) => run_status(args, session).await,
     }
 }
 
-async fn run_solve(args: SolveArgs) -> anyhow::Result<()> {
-    let (mode, auth, base_url) = resolve_common(args.local, args.api_url.as_deref());
+async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()> {
+    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
     let paths = SessionStatePaths::default_paths();
 
@@ -112,7 +76,7 @@ async fn run_solve(args: SolveArgs) -> anyhow::Result<()> {
         &auth,
         &paths,
         args.session_id.as_deref(),
-        args.session.as_deref(),
+        session,
         args.page_id.as_deref(),
         args.url.as_deref(),
         args.task_id.as_deref(),
@@ -145,8 +109,8 @@ async fn run_solve(args: SolveArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_status(args: StatusArgs) -> anyhow::Result<()> {
-    let (mode, auth, base_url) = resolve_common(args.local, args.api_url.as_deref());
+async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<()> {
+    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
     let paths = SessionStatePaths::default_paths();
 
@@ -157,7 +121,7 @@ async fn run_status(args: StatusArgs) -> anyhow::Result<()> {
         &auth,
         &paths,
         args.session_id.as_deref(),
-        args.session.as_deref(),
+        session,
         args.page_id.as_deref(),
         args.wait,
         args.timeout,

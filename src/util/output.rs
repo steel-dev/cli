@@ -43,12 +43,36 @@ pub fn success_silent() {
     }
 }
 
-/// Print an error response. In JSON mode, outputs structured error.
-/// In text mode, prints to stderr. Returns the error for propagation.
-pub fn error(msg: &str) -> anyhow::Error {
+/// Print success: JSON wraps in envelope, text prints `data[field]`.
+/// Strings are printed without quotes; numbers/bools are printed as-is.
+pub fn success_field(data: Value, field: &str) {
     if is_json() {
-        println!("{}", json!({"success": false, "error": msg}));
-        std::process::exit(1);
+        success_data(data);
+    } else {
+        let v = &data[field];
+        if let Some(s) = v.as_str() {
+            println!("{s}");
+        } else if !v.is_null() {
+            println!("{v}");
+        }
     }
-    anyhow::anyhow!("{msg}")
+}
+
+/// Print success: JSON wraps in envelope, text prints data as a string.
+pub fn success_text(data: Value) {
+    if is_json() {
+        success_data(data);
+    } else if let Some(s) = data.as_str() {
+        println!("{s}");
+    }
+}
+
+/// Format a top-level error for output, then exit. Called from main.
+pub fn handle_error(err: &anyhow::Error) -> ! {
+    if is_json() {
+        println!("{}", json!({"success": false, "error": format!("{err:#}")}));
+    } else {
+        eprintln!("Error: {err:#}");
+    }
+    std::process::exit(1);
 }

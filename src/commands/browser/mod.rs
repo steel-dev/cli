@@ -5,7 +5,17 @@ pub mod sessions;
 pub mod start;
 pub mod stop;
 
-use clap::Subcommand;
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+pub struct BrowserArgs {
+    /// Named session to target
+    #[arg(short, long, global = true)]
+    pub session: Option<String>,
+
+    #[command(subcommand)]
+    pub command: Command,
+}
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -32,13 +42,14 @@ pub enum Command {
     Action(action::ActionCommand),
 }
 
-pub async fn run(command: Command) -> anyhow::Result<()> {
-    match command {
-        Command::Start(args) => start::run(args).await,
-        Command::Stop(args) => stop::run(args).await,
+pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
+    let session = args.session;
+    match args.command {
+        Command::Start(args) => start::run(args, session.as_deref()).await,
+        Command::Stop(args) => stop::run(args, session.as_deref()).await,
         Command::Sessions(args) => sessions::run(args).await,
-        Command::Live(args) => live::run(args).await,
-        Command::Captcha { command } => captcha::run(command).await,
-        Command::Action(action) => action::run(action).await,
+        Command::Live(args) => live::run(args, session.as_deref()).await,
+        Command::Captcha { command } => captcha::run(command, session.as_deref()).await,
+        Command::Action(action) => action::run(action, session.as_deref()).await,
     }
 }

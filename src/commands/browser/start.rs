@@ -6,25 +6,11 @@ use crate::api::client::SteelClient;
 use crate::api::session::CreateSessionOptions;
 use crate::browser::lifecycle::{sanitize_connect_url, start_session};
 use crate::browser::profile_store;
-use crate::config::auth;
 use crate::config::session_state::SessionStatePaths;
-use crate::config::settings::{ApiMode, EnvVars};
-use crate::util::output;
+use crate::util::{api, output};
 
 #[derive(Parser)]
 pub struct Args {
-    /// Named session for reuse
-    #[arg(short, long)]
-    pub session: Option<String>,
-
-    /// Use local runtime
-    #[arg(short, long)]
-    pub local: bool,
-
-    /// Explicit self-hosted API endpoint URL
-    #[arg(long)]
-    pub api_url: Option<String>,
-
     /// Enable stealth mode (humanize interactions + auto CAPTCHA)
     #[arg(long)]
     pub stealth: bool,
@@ -66,13 +52,8 @@ pub struct Args {
     pub credentials: bool,
 }
 
-pub async fn run(args: Args) -> anyhow::Result<()> {
-    let mode = ApiMode::resolve(args.local, args.api_url.as_deref());
-    let auth = auth::resolve_auth();
-    let env_vars = EnvVars::from_env();
-    let config = crate::config::settings::read_config().ok();
-    let local_config_url = config.as_ref().and_then(|c| c.local_api_url());
-    let base_url = mode.resolve_base_url(args.api_url.as_deref(), &env_vars, local_config_url);
+pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
+    let (mode, base_url, auth) = api::resolve_with_auth();
 
     let client = SteelClient::new()?;
     let paths = SessionStatePaths::default_paths();
@@ -113,7 +94,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         mode,
         &auth,
         &paths,
-        args.session.as_deref(),
+        session,
         &options,
     )
     .await?;

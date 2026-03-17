@@ -371,15 +371,6 @@ pub fn is_browser_running(browser: BrowserId) -> bool {
     }
 }
 
-// Backward compat wrappers used by existing callers
-pub fn find_chrome_profiles() -> Vec<BrowserProfile> {
-    find_browser_profiles(BrowserId::Chrome)
-}
-
-pub fn is_chrome_running() -> bool {
-    is_browser_running(BrowserId::Chrome)
-}
-
 // ─── Key providers ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy)]
@@ -837,14 +828,6 @@ pub fn package_profile(
         zip_buffer: cursor.into_inner(),
         cookies_reencrypted,
     })
-}
-
-/// Backward compat wrapper.
-pub fn package_chrome_profile(
-    chrome_profile: &str,
-    on_progress: &dyn Fn(&str),
-) -> Result<PackageResult> {
-    package_profile(BrowserId::Chrome, chrome_profile, on_progress)
 }
 
 // ─── Steel API ───────────────────────────────────────────────────────────────

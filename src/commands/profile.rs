@@ -2,9 +2,7 @@ use clap::{Parser, Subcommand};
 use serde_json::json;
 
 use crate::browser::{profile_porter, profile_store};
-use crate::config::auth;
-use crate::config::settings::{ApiMode, EnvVars};
-use crate::util::output;
+use crate::util::{api, output};
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -121,25 +119,18 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
             &format!("Deleted profile \"{}\". Note: Browser state on Steel servers is not affected.\n", args.name),
         );
     } else {
-        return Err(output::error(&format!("Profile \"{}\" not found.", args.name)));
+        anyhow::bail!("Profile \"{}\" not found.", args.name);
     }
 
     Ok(())
 }
 
-fn resolve_api_key() -> anyhow::Result<String> {
-    let auth_info = auth::resolve_auth();
-    auth_info
+fn resolve_api() -> anyhow::Result<(String, String)> {
+    let (_, base_url, auth) = api::resolve_with_auth();
+    let api_key = auth
         .api_key
-        .ok_or_else(|| anyhow::anyhow!("Not authenticated. Run `steel login` or set STEEL_API_KEY."))
-}
-
-fn resolve_api_base() -> String {
-    let mode = ApiMode::Cloud;
-    let env_vars = EnvVars::from_env();
-    let config = crate::config::settings::read_config().ok();
-    let local_url = config.as_ref().and_then(|c| c.local_api_url());
-    mode.resolve_base_url(None, &env_vars, local_url)
+        .ok_or_else(|| anyhow::anyhow!("Not authenticated. Run `steel login` or set STEEL_API_KEY."))?;
+    Ok((api_key, base_url))
 }
 
 fn resolve_browser(browser_arg: Option<&str>) -> anyhow::Result<profile_porter::BrowserId> {
@@ -178,8 +169,7 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    let api_key = resolve_api_key()?;
-    let api_base = resolve_api_base();
+    let (api_key, api_base) = resolve_api()?;
 
     // Resolve browser
     let browser_id = resolve_browser(args.browser.as_deref())?;
@@ -283,8 +273,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    let api_key = resolve_api_key()?;
-    let api_base = resolve_api_base();
+    let (api_key, api_base) = resolve_api()?;
 
     // Read existing profile
     let stored = profile_store::read_profile(&args.name)?.ok_or_else(|| {

@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{DEFAULT_API_URL, DEFAULT_LOCAL_API_URL};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ApiMode {
     Cloud,
     Local,

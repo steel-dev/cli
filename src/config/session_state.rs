@@ -5,23 +5,18 @@ use std::time::{Duration, SystemTime};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
+use crate::config::settings::ApiMode;
+
 const LOCK_TIMEOUT: Duration = Duration::from_millis(5000);
 const LOCK_RETRY: Duration = Duration::from_millis(50);
 const LOCK_STALE: Duration = Duration::from_millis(15_000);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SessionMode {
-    Cloud,
-    Local,
-}
 
 /// Persistent session state. Matches TS `BrowserSessionState`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionState {
     pub active_session_id: Option<String>,
-    pub active_session_mode: Option<SessionMode>,
+    pub active_api_mode: Option<ApiMode>,
     pub active_session_name: Option<String>,
     pub named_sessions: NamedSessions,
     pub updated_at: Option<String>,
@@ -34,17 +29,17 @@ pub struct NamedSessions {
 }
 
 impl NamedSessions {
-    pub fn get(&self, mode: SessionMode) -> &HashMap<String, String> {
+    pub fn get(&self, mode: ApiMode) -> &HashMap<String, String> {
         match mode {
-            SessionMode::Cloud => &self.cloud,
-            SessionMode::Local => &self.local,
+            ApiMode::Cloud => &self.cloud,
+            ApiMode::Local => &self.local,
         }
     }
 
-    pub fn get_mut(&mut self, mode: SessionMode) -> &mut HashMap<String, String> {
+    pub fn get_mut(&mut self, mode: ApiMode) -> &mut HashMap<String, String> {
         match mode {
-            SessionMode::Cloud => &mut self.cloud,
-            SessionMode::Local => &mut self.local,
+            ApiMode::Cloud => &mut self.cloud,
+            ApiMode::Local => &mut self.local,
         }
     }
 }
@@ -53,7 +48,7 @@ impl Default for SessionState {
     fn default() -> Self {
         Self {
             active_session_id: None,
-            active_session_mode: None,
+            active_api_mode: None,
             active_session_name: None,
             named_sessions: NamedSessions::default(),
             updated_at: None,
@@ -65,21 +60,21 @@ impl SessionState {
     /// Set the active session. Matches TS `setActiveSessionState()`.
     pub fn set_active(
         &mut self,
-        mode: SessionMode,
+        mode: ApiMode,
         session_id: &str,
         session_name: Option<&str>,
     ) {
-        self.active_session_mode = Some(mode);
+        self.active_api_mode = Some(mode);
         self.active_session_id = Some(session_id.to_string());
         self.active_session_name = session_name.map(|s| s.to_string());
     }
 
     /// Clear the active session. Matches TS `clearActiveSessionState()`.
-    pub fn clear_active(&mut self, mode: SessionMode, session_id: &str) {
-        if self.active_session_mode == Some(mode)
+    pub fn clear_active(&mut self, mode: ApiMode, session_id: &str) {
+        if self.active_api_mode == Some(mode)
             && self.active_session_id.as_deref() == Some(session_id)
         {
-            self.active_session_mode = None;
+            self.active_api_mode = None;
             self.active_session_id = None;
             self.active_session_name = None;
         }
@@ -93,14 +88,14 @@ impl SessionState {
     /// Find a candidate session ID. Matches TS `resolveCandidateSessionId()`.
     pub fn resolve_candidate(
         &self,
-        mode: SessionMode,
+        mode: ApiMode,
         session_name: Option<&str>,
     ) -> Option<&str> {
         if let Some(name) = session_name {
             return self.named_sessions.get(mode).get(name).map(|s| s.as_str());
         }
 
-        if self.active_session_mode == Some(mode) {
+        if self.active_api_mode == Some(mode) {
             return self.active_session_id.as_deref();
         }
 
@@ -108,14 +103,14 @@ impl SessionState {
     }
 
     /// Find the name for a session ID. Matches TS `resolveNameFromState()`.
-    pub fn resolve_name(&self, mode: SessionMode, session_id: &str) -> Option<&str> {
+    pub fn resolve_name(&self, mode: ApiMode, session_id: &str) -> Option<&str> {
         for (name, id) in self.named_sessions.get(mode) {
             if id == session_id {
                 return Some(name.as_str());
             }
         }
 
-        if self.active_session_mode == Some(mode)
+        if self.active_api_mode == Some(mode)
             && self.active_session_id.as_deref() == Some(session_id)
         {
             return self.active_session_name.as_deref();
@@ -263,7 +258,7 @@ mod tests {
     fn default_state() {
         let state = SessionState::default();
         assert!(state.active_session_id.is_none());
-        assert!(state.active_session_mode.is_none());
+        assert!(state.active_api_mode.is_none());
         assert!(state.named_sessions.cloud.is_empty());
         assert!(state.named_sessions.local.is_empty());
     }
@@ -271,23 +266,23 @@ mod tests {
     #[test]
     fn set_and_resolve_active() {
         let mut state = SessionState::default();
-        state.set_active(SessionMode::Cloud, "sess-1", Some("work"));
+        state.set_active(ApiMode::Cloud, "sess-1", Some("work"));
 
         assert_eq!(state.active_session_id.as_deref(), Some("sess-1"));
-        assert_eq!(state.active_session_mode, Some(SessionMode::Cloud));
+        assert_eq!(state.active_api_mode, Some(ApiMode::Cloud));
         assert_eq!(state.active_session_name.as_deref(), Some("work"));
     }
 
     #[test]
     fn clear_active_matching() {
         let mut state = SessionState::default();
-        state.set_active(SessionMode::Cloud, "sess-1", Some("work"));
+        state.set_active(ApiMode::Cloud, "sess-1", Some("work"));
         state
             .named_sessions
             .cloud
             .insert("work".into(), "sess-1".into());
 
-        state.clear_active(SessionMode::Cloud, "sess-1");
+        state.clear_active(ApiMode::Cloud, "sess-1");
 
         assert!(state.active_session_id.is_none());
         assert!(state.named_sessions.cloud.is_empty());
@@ -296,9 +291,9 @@ mod tests {
     #[test]
     fn clear_active_non_matching_mode_preserved() {
         let mut state = SessionState::default();
-        state.set_active(SessionMode::Cloud, "sess-1", None);
+        state.set_active(ApiMode::Cloud, "sess-1", None);
 
-        state.clear_active(SessionMode::Local, "sess-1");
+        state.clear_active(ApiMode::Local, "sess-1");
 
         assert_eq!(state.active_session_id.as_deref(), Some("sess-1"));
     }
@@ -312,11 +307,11 @@ mod tests {
             .insert("work".into(), "sess-1".into());
 
         assert_eq!(
-            state.resolve_candidate(SessionMode::Cloud, Some("work")),
+            state.resolve_candidate(ApiMode::Cloud, Some("work")),
             Some("sess-1")
         );
         assert_eq!(
-            state.resolve_candidate(SessionMode::Cloud, Some("missing")),
+            state.resolve_candidate(ApiMode::Cloud, Some("missing")),
             None
         );
     }
@@ -324,13 +319,13 @@ mod tests {
     #[test]
     fn resolve_candidate_by_active() {
         let mut state = SessionState::default();
-        state.set_active(SessionMode::Local, "sess-2", None);
+        state.set_active(ApiMode::Local, "sess-2", None);
 
         assert_eq!(
-            state.resolve_candidate(SessionMode::Local, None),
+            state.resolve_candidate(ApiMode::Local, None),
             Some("sess-2")
         );
-        assert_eq!(state.resolve_candidate(SessionMode::Cloud, None), None);
+        assert_eq!(state.resolve_candidate(ApiMode::Cloud, None), None);
     }
 
     #[test]
@@ -342,19 +337,19 @@ mod tests {
             .insert("work".into(), "sess-1".into());
 
         assert_eq!(
-            state.resolve_name(SessionMode::Cloud, "sess-1"),
+            state.resolve_name(ApiMode::Cloud, "sess-1"),
             Some("work")
         );
-        assert_eq!(state.resolve_name(SessionMode::Cloud, "other"), None);
+        assert_eq!(state.resolve_name(ApiMode::Cloud, "other"), None);
     }
 
     #[test]
     fn resolve_name_falls_back_to_active() {
         let mut state = SessionState::default();
-        state.set_active(SessionMode::Cloud, "sess-1", Some("dev"));
+        state.set_active(ApiMode::Cloud, "sess-1", Some("dev"));
 
         assert_eq!(
-            state.resolve_name(SessionMode::Cloud, "sess-1"),
+            state.resolve_name(ApiMode::Cloud, "sess-1"),
             Some("dev")
         );
     }
@@ -364,7 +359,7 @@ mod tests {
     #[test]
     fn state_json_roundtrip() {
         let mut state = SessionState::default();
-        state.set_active(SessionMode::Cloud, "abc-123", Some("main"));
+        state.set_active(ApiMode::Cloud, "abc-123", Some("main"));
         state
             .named_sessions
             .cloud
@@ -374,7 +369,7 @@ mod tests {
         let parsed: SessionState = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.active_session_id.as_deref(), Some("abc-123"));
-        assert_eq!(parsed.active_session_mode, Some(SessionMode::Cloud));
+        assert_eq!(parsed.active_api_mode, Some(ApiMode::Cloud));
         assert_eq!(
             parsed.named_sessions.cloud.get("main").map(|s| s.as_str()),
             Some("abc-123")
@@ -385,7 +380,7 @@ mod tests {
     fn state_reads_ts_camel_case() {
         let json = r#"{
             "activeSessionId": "s1",
-            "activeSessionMode": "local",
+            "activeApiMode": "local",
             "activeSessionName": "test",
             "namedSessions": {
                 "cloud": {},
@@ -396,7 +391,7 @@ mod tests {
 
         let state: SessionState = serde_json::from_str(json).unwrap();
         assert_eq!(state.active_session_id.as_deref(), Some("s1"));
-        assert_eq!(state.active_session_mode, Some(SessionMode::Local));
+        assert_eq!(state.active_api_mode, Some(ApiMode::Local));
         assert_eq!(
             state.named_sessions.local.get("test").map(|s| s.as_str()),
             Some("s1")
@@ -427,7 +422,7 @@ mod tests {
 
         let result = with_lock(&paths, false, |state| {
             state
-                .resolve_candidate(SessionMode::Cloud, None)
+                .resolve_candidate(ApiMode::Cloud, None)
                 .map(|s| s.to_string())
         })
         .unwrap();
@@ -441,7 +436,7 @@ mod tests {
         let (_dir, paths) = tmp_paths();
 
         with_lock(&paths, true, |state| {
-            state.set_active(SessionMode::Cloud, "sess-1", Some("work"));
+            state.set_active(ApiMode::Cloud, "sess-1", Some("work"));
             state
                 .named_sessions
                 .cloud
@@ -462,7 +457,7 @@ mod tests {
         let (_dir, paths) = tmp_paths();
 
         with_lock(&paths, true, |state| {
-            state.set_active(SessionMode::Local, "s1", None);
+            state.set_active(ApiMode::Local, "s1", None);
         })
         .unwrap();
 
@@ -486,7 +481,7 @@ mod tests {
 
         let id = with_lock(&paths, false, |state| {
             state
-                .resolve_candidate(SessionMode::Local, Some("dev"))
+                .resolve_candidate(ApiMode::Local, Some("dev"))
                 .map(|s| s.to_string())
         })
         .unwrap();

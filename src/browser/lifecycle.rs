@@ -7,14 +7,14 @@ use serde_json::Value;
 use crate::api::client::{ApiError, SteelClient};
 use crate::api::session::CreateSessionOptions;
 use crate::config::auth::Auth;
-use crate::config::session_state::{SessionMode, SessionState, SessionStatePaths, read_state, with_lock};
+use crate::config::session_state::{SessionState, SessionStatePaths, read_state, with_lock};
 use crate::config::settings::ApiMode;
 
 /// Summary of a browser session, matching TS `BrowserSessionSummary`.
 #[derive(Debug)]
 pub struct SessionSummary {
     pub id: String,
-    pub mode: SessionMode,
+    pub mode: ApiMode,
     pub name: Option<String>,
     pub live: bool,
     pub status: Option<String>,
@@ -25,14 +25,14 @@ pub struct SessionSummary {
 
 /// Result of stopping browser sessions.
 pub struct StopResult {
-    pub mode: SessionMode,
+    pub mode: ApiMode,
     pub all: bool,
     pub stopped_session_ids: Vec<String>,
 }
 
 /// Result of solving a CAPTCHA.
 pub struct CaptchaSolveResult {
-    pub mode: SessionMode,
+    pub mode: ApiMode,
     pub session_id: String,
     pub success: bool,
     pub message: Option<String>,
@@ -41,7 +41,7 @@ pub struct CaptchaSolveResult {
 
 /// Result of checking CAPTCHA status.
 pub struct CaptchaStatusResult {
-    pub mode: SessionMode,
+    pub mode: ApiMode,
     pub session_id: String,
     pub status: String,
     pub types: Vec<String>,
@@ -57,45 +57,6 @@ const CLOSED_SESSION_STATUSES: &[&str] = &[
     "stopped",
     "terminated",
 ];
-
-/// Map `SessionMode` to `ApiMode`.
-pub fn session_mode_to_api_mode(mode: SessionMode) -> ApiMode {
-    match mode {
-        SessionMode::Cloud => ApiMode::Cloud,
-        SessionMode::Local => ApiMode::Local,
-    }
-}
-
-/// Map `ApiMode` to `SessionMode`.
-pub fn api_mode_to_session_mode(mode: ApiMode) -> SessionMode {
-    match mode {
-        ApiMode::Cloud => SessionMode::Cloud,
-        ApiMode::Local => SessionMode::Local,
-    }
-}
-
-/// Resolve session mode from options and active state.
-/// Matches TS `resolveSessionMode()`.
-pub fn resolve_session_mode(
-    local: bool,
-    api_url: Option<&str>,
-    active_mode: Option<SessionMode>,
-) -> SessionMode {
-    if local {
-        return SessionMode::Local;
-    }
-
-    if let Some(url) = api_url {
-        // If URL points to the cloud API, use cloud mode
-        let default_api = crate::config::DEFAULT_API_URL.to_lowercase();
-        if url.to_lowercase().contains(&default_api) || url.contains("api.steel.dev") {
-            return SessionMode::Cloud;
-        }
-        return SessionMode::Local;
-    }
-
-    active_mode.unwrap_or(SessionMode::Cloud)
-}
 
 /// Extract session ID from API response. Matches TS `getSessionId()`.
 pub fn get_session_id(session: &Value) -> Option<String> {
@@ -163,7 +124,7 @@ fn get_connect_url(session: &Value) -> Option<String> {
     None
 }
 
-fn get_viewer_url(session: &Value, mode: SessionMode, session_id: &str) -> Option<String> {
+fn get_viewer_url(session: &Value, mode: ApiMode, session_id: &str) -> Option<String> {
     let keys = ["sessionViewerUrl", "viewerUrl", "liveViewUrl"];
     for key in &keys {
         if let Some(v) = session.get(key) {
@@ -176,7 +137,7 @@ fn get_viewer_url(session: &Value, mode: SessionMode, session_id: &str) -> Optio
         }
     }
 
-    if mode == SessionMode::Cloud {
+    if mode == ApiMode::Cloud {
         return Some(format!("https://app.steel.dev/sessions/{session_id}"));
     }
 
@@ -186,7 +147,7 @@ fn get_viewer_url(session: &Value, mode: SessionMode, session_id: &str) -> Optio
 /// Build session summary from API response. Matches TS `toSessionSummary()`.
 pub fn to_session_summary(
     session: &Value,
-    mode: SessionMode,
+    mode: ApiMode,
     name: Option<&str>,
     auth: &Auth,
 ) -> anyhow::Result<SessionSummary> {
@@ -196,7 +157,7 @@ pub fn to_session_summary(
     let mut connect_url = get_connect_url(session);
 
     // Fallback: build connect URL for cloud mode
-    if connect_url.is_none() && mode == SessionMode::Cloud {
+    if connect_url.is_none() && mode == ApiMode::Cloud {
         if let Some(ref api_key) = auth.api_key {
             connect_url = Some(format!(
                 "wss://connect.steel.dev?apiKey={api_key}&sessionId={session_id}"
@@ -206,7 +167,7 @@ pub fn to_session_summary(
 
     // Inject apiKey into connect URL for cloud mode
     if let Some(ref url) = connect_url {
-        if mode == SessionMode::Cloud {
+        if mode == ApiMode::Cloud {
             if let Some(ref api_key) = auth.api_key {
                 if !url.contains("apiKey=") {
                     if let Ok(mut parsed) = url::Url::parse(url) {
@@ -254,7 +215,7 @@ async fn try_get_live_session(
 /// Resolve target session from state (for stop/live/captcha commands).
 fn resolve_target_session(
     state: &SessionState,
-    mode: SessionMode,
+    mode: ApiMode,
     session_name: Option<&str>,
 ) -> (Option<String>, Option<String>) {
     if let Some(name) = session_name {
@@ -269,7 +230,7 @@ fn resolve_target_session(
         }
     }
 
-    if state.active_session_mode == Some(mode) {
+    if state.active_api_mode == Some(mode) {
         if let Some(ref id) = state.active_session_id {
             return (Some(id.clone()), state.active_session_name.clone());
         }
@@ -281,7 +242,7 @@ fn resolve_target_session(
 /// Resolve session ID for captcha commands (supports explicit --session-id).
 fn resolve_captcha_session_id(
     state: &SessionState,
-    mode: SessionMode,
+    mode: ApiMode,
     session_id: Option<&str>,
     session_name: Option<&str>,
 ) -> Option<String> {
@@ -300,13 +261,12 @@ fn resolve_captcha_session_id(
 pub async fn start_session(
     client: &SteelClient,
     base_url: &str,
-    api_mode: ApiMode,
+    mode: ApiMode,
     auth: &Auth,
     paths: &SessionStatePaths,
     session_name: Option<&str>,
     options: &CreateSessionOptions,
 ) -> anyhow::Result<SessionSummary> {
-    let mode = api_mode_to_session_mode(api_mode);
     let session_name = session_name.map(|s| s.trim()).filter(|s| !s.is_empty());
 
     loop {
@@ -319,7 +279,7 @@ pub async fn start_session(
 
         if let Some(ref candidate_id) = candidate_id {
             // Try to attach to existing session
-            let existing = try_get_live_session(client, base_url, api_mode, candidate_id, auth)
+            let existing = try_get_live_session(client, base_url, mode, candidate_id, auth)
                 .await
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -356,7 +316,7 @@ pub async fn start_session(
 
         // No candidate — create new session
         let created = client
-            .create_session(base_url, api_mode, options, auth)
+            .create_session(base_url, mode, options, auth)
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -385,7 +345,7 @@ pub async fn start_session(
 
         // Race: another session appeared — release ours and retry
         let _ = client
-            .release_session(base_url, api_mode, &created_id, auth)
+            .release_session(base_url, mode, &created_id, auth)
             .await;
     }
 }
@@ -394,17 +354,15 @@ pub async fn start_session(
 pub async fn stop_session(
     client: &SteelClient,
     base_url: &str,
-    api_mode: ApiMode,
+    mode: ApiMode,
     auth: &Auth,
     paths: &SessionStatePaths,
     session_name: Option<&str>,
     all: bool,
 ) -> anyhow::Result<StopResult> {
-    let mode = api_mode_to_session_mode(api_mode);
-
     if all {
         let sessions = client
-            .list_sessions(base_url, api_mode, auth)
+            .list_sessions(base_url, mode, auth)
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -415,7 +373,7 @@ pub async fn stop_session(
             .collect();
 
         for id in &live_ids {
-            let _ = client.release_session(base_url, api_mode, id, auth).await;
+            let _ = client.release_session(base_url, mode, id, auth).await;
         }
 
         with_lock(paths, true, |state| {
@@ -445,7 +403,7 @@ pub async fn stop_session(
     };
 
     client
-        .release_session(base_url, api_mode, &target_id, auth)
+        .release_session(base_url, mode, &target_id, auth)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -464,13 +422,12 @@ pub async fn stop_session(
 pub async fn list_sessions(
     client: &SteelClient,
     base_url: &str,
-    api_mode: ApiMode,
+    mode: ApiMode,
     auth: &Auth,
     paths: &SessionStatePaths,
 ) -> anyhow::Result<Vec<SessionSummary>> {
-    let mode = api_mode_to_session_mode(api_mode);
     let sessions = client
-        .list_sessions(base_url, api_mode, auth)
+        .list_sessions(base_url, mode, auth)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -494,12 +451,11 @@ pub async fn list_sessions(
 pub async fn get_live_url(
     client: &SteelClient,
     base_url: &str,
-    api_mode: ApiMode,
+    mode: ApiMode,
     auth: &Auth,
     paths: &SessionStatePaths,
     session_name: Option<&str>,
 ) -> anyhow::Result<Option<String>> {
-    let mode = api_mode_to_session_mode(api_mode);
     let target_id = with_lock(paths, false, |state| {
         let (id, _) = resolve_target_session(state, mode, session_name);
         id
@@ -509,7 +465,7 @@ pub async fn get_live_url(
         return Ok(None);
     };
 
-    let session = try_get_live_session(client, base_url, api_mode, &target_id, auth)
+    let session = try_get_live_session(client, base_url, mode, &target_id, auth)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -525,7 +481,7 @@ pub async fn get_live_url(
 pub async fn solve_captcha(
     client: &SteelClient,
     base_url: &str,
-    api_mode: ApiMode,
+    mode: ApiMode,
     auth: &Auth,
     paths: &SessionStatePaths,
     explicit_session_id: Option<&str>,
@@ -534,8 +490,6 @@ pub async fn solve_captcha(
     url: Option<&str>,
     task_id: Option<&str>,
 ) -> anyhow::Result<CaptchaSolveResult> {
-    let mode = api_mode_to_session_mode(api_mode);
-
     let session_id = with_lock(paths, false, |state| {
         resolve_captcha_session_id(state, mode, explicit_session_id, session_name)
     })?;
@@ -548,7 +502,7 @@ pub async fn solve_captcha(
     })?;
 
     let raw = client
-        .solve_captcha(base_url, api_mode, &session_id, page_id, url, task_id, auth)
+        .solve_captcha(base_url, mode, &session_id, page_id, url, task_id, auth)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -571,7 +525,7 @@ pub async fn solve_captcha(
 pub async fn captcha_status(
     client: &SteelClient,
     base_url: &str,
-    api_mode: ApiMode,
+    mode: ApiMode,
     auth: &Auth,
     paths: &SessionStatePaths,
     explicit_session_id: Option<&str>,
@@ -581,7 +535,6 @@ pub async fn captcha_status(
     timeout_ms: Option<u64>,
     interval_ms: Option<u64>,
 ) -> anyhow::Result<CaptchaStatusResult> {
-    let mode = api_mode_to_session_mode(api_mode);
     let timeout = timeout_ms.unwrap_or(60_000);
     let interval = interval_ms.unwrap_or(1_000);
 
@@ -600,7 +553,7 @@ pub async fn captcha_status(
 
     loop {
         let pages = client
-            .captcha_status(base_url, api_mode, &session_id, page_id, auth)
+            .captcha_status(base_url, mode, &session_id, page_id, auth)
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -785,13 +738,13 @@ mod tests {
 
     #[test]
     fn viewer_url_cloud_fallback() {
-        let url = get_viewer_url(&json!({}), SessionMode::Cloud, "s1");
+        let url = get_viewer_url(&json!({}), ApiMode::Cloud, "s1");
         assert_eq!(url.as_deref(), Some("https://app.steel.dev/sessions/s1"));
     }
 
     #[test]
     fn viewer_url_local_none() {
-        let url = get_viewer_url(&json!({}), SessionMode::Local, "s1");
+        let url = get_viewer_url(&json!({}), ApiMode::Local, "s1");
         assert_eq!(url, None);
     }
 
@@ -799,7 +752,7 @@ mod tests {
     fn viewer_url_from_response() {
         let url = get_viewer_url(
             &json!({"sessionViewerUrl": "https://custom.dev/view"}),
-            SessionMode::Local,
+            ApiMode::Local,
             "s1",
         );
         assert_eq!(url.as_deref(), Some("https://custom.dev/view"));
@@ -856,21 +809,4 @@ mod tests {
         assert_eq!(types, vec!["turnstile"]);
     }
 
-    #[test]
-    fn resolve_mode_local_flag() {
-        assert_eq!(resolve_session_mode(true, None, None), SessionMode::Local);
-    }
-
-    #[test]
-    fn resolve_mode_default_cloud() {
-        assert_eq!(resolve_session_mode(false, None, None), SessionMode::Cloud);
-    }
-
-    #[test]
-    fn resolve_mode_active_state() {
-        assert_eq!(
-            resolve_session_mode(false, None, Some(SessionMode::Local)),
-            SessionMode::Local
-        );
-    }
 }

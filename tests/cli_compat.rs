@@ -66,7 +66,7 @@ fn flag_val_short(long: &'static str, short: char) -> ExpectedFlag {
 
 /// Assert that a clap Command has exactly the expected visible flags.
 fn assert_flags(cmd: &Command, expected: &[ExpectedFlag], cmd_name: &str) {
-    let skip = ["help", "version", "json", "no-update-check"];
+    let skip = ["help", "version", "json", "no-update-check", "local", "api-url"];
 
     let actual_args: Vec<_> = cmd
         .get_arguments()
@@ -246,8 +246,6 @@ fn scrape_flags() {
             flag("screenshot"),
             flag("use-proxy"),
             flag_val_short("region", 'r'),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
         ],
         "scrape",
     );
@@ -263,8 +261,6 @@ fn screenshot_flags() {
             flag_short("full-page", 'f'),
             flag("use-proxy"),
             flag_val_short("region", 'r'),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
         ],
         "screenshot",
     );
@@ -279,10 +275,19 @@ fn pdf_flags() {
             flag_val_short("delay", 'd'),
             flag("use-proxy"),
             flag_val_short("region", 'r'),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
         ],
         "pdf",
+    );
+}
+
+#[test]
+fn browser_session_flag() {
+    // --session is a global flag on the browser command, propagated to all subcommands
+    let cmd = get_subcommand(&root_cmd(), &["browser"]);
+    assert_flags(
+        &cmd,
+        &[flag_val_short("session", 's')],
+        "browser",
     );
 }
 
@@ -292,9 +297,6 @@ fn browser_start_flags() {
     assert_flags(
         &cmd,
         &[
-            flag_val_short("session", 's'),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
             flag("stealth"),
             flag_val_short("proxy", 'p'),
             flag_val("session-timeout"),
@@ -313,12 +315,7 @@ fn browser_stop_flags() {
     let cmd = get_subcommand(&root_cmd(), &["browser", "stop"]);
     assert_flags(
         &cmd,
-        &[
-            flag_val_short("session", 's'),
-            flag_short("all", 'a'),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
-        ],
+        &[flag_short("all", 'a')],
         "browser stop",
     );
 }
@@ -328,7 +325,7 @@ fn browser_sessions_flags() {
     let cmd = get_subcommand(&root_cmd(), &["browser", "sessions"]);
     assert_flags(
         &cmd,
-        &[flag_short("local", 'l'), flag_val("api-url")],
+        &[],
         "browser sessions",
     );
 }
@@ -338,11 +335,7 @@ fn browser_live_flags() {
     let cmd = get_subcommand(&root_cmd(), &["browser", "live"]);
     assert_flags(
         &cmd,
-        &[
-            flag_val_short("session", 's'),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
-        ],
+        &[],
         "browser live",
     );
 }
@@ -353,13 +346,10 @@ fn browser_captcha_solve_flags() {
     assert_flags(
         &cmd,
         &[
-            flag_val_short("session", 's'),
             flag_val("session-id"),
             flag_val("page-id"),
             flag_val("url"),
             flag_val("task-id"),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
         ],
         "browser captcha solve",
     );
@@ -371,14 +361,11 @@ fn browser_captcha_status_flags() {
     assert_flags(
         &cmd,
         &[
-            flag_val_short("session", 's'),
             flag_val("session-id"),
             flag_val("page-id"),
             flag_short("wait", 'w'),
             flag_val("timeout"),
             flag_val("interval"),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
         ],
         "browser captcha status",
     );
@@ -392,8 +379,6 @@ fn credentials_list_flags() {
         &[
             flag_val_short("namespace", 'n'),
             flag_val("origin"),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
         ],
         "credentials list",
     );
@@ -411,8 +396,6 @@ fn credentials_create_flags() {
             flag_val("totp-secret"),
             flag_val_short("namespace", 'n'),
             flag_val("label"),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
         ],
         "credentials create",
     );
@@ -430,8 +413,6 @@ fn credentials_update_flags() {
             flag_val("totp-secret"),
             flag_val_short("namespace", 'n'),
             flag_val("label"),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
         ],
         "credentials update",
     );
@@ -445,8 +426,6 @@ fn credentials_delete_flags() {
         &[
             flag_val("origin"),
             flag_val_short("namespace", 'n'),
-            flag_short("local", 'l'),
-            flag_val("api-url"),
         ],
         "credentials delete",
     );

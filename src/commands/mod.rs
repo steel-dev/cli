@@ -20,6 +20,8 @@ Quick Actions:
 Global Flags:
   --json                                 Structured JSON output for automation
   --no-update-check                      Skip update check
+  -l, --local                            Use local Steel runtime
+  --api-url <url>                        Explicit self-hosted API endpoint URL
 
 Quick Actions:
   steel scrape <url>                   Scrape webpage content (markdown by default)
@@ -220,6 +222,14 @@ pub struct Cli {
     /// Skip update check
     #[arg(long, global = true)]
     pub no_update_check: bool,
+
+    /// Use local Steel runtime instead of cloud
+    #[arg(short, long, global = true)]
+    pub local: bool,
+
+    /// Explicit self-hosted API endpoint URL
+    #[arg(long, global = true)]
+    pub api_url: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -241,10 +251,7 @@ pub enum Command {
     Pdf(pdf::Args),
 
     /// Browser session management and automation
-    Browser {
-        #[command(subcommand)]
-        command: browser::Command,
-    },
+    Browser(browser::BrowserArgs),
 
     /// Login to Steel CLI
     #[command(alias = "auth")]
@@ -289,6 +296,7 @@ pub enum Command {
 
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
     crate::util::output::set_json_mode(cli.json);
+    crate::util::api::init(cli.local, cli.api_url);
 
     match cli.command {
         Command::Daemon { session_id } => {
@@ -299,7 +307,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Scrape(args) => scrape::run(args).await,
         Command::Screenshot(args) => screenshot::run(args).await,
         Command::Pdf(args) => pdf::run(args).await,
-        Command::Browser { command } => browser::run(command).await,
+        Command::Browser(args) => browser::run(args).await,
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,
         Command::Credentials { command } => credentials::run(command).await,
