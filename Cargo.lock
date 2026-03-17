@@ -2453,6 +2453,7 @@ dependencies = [
  "colored",
  "dialoguer",
  "dirs 6.0.0",
+ "getrandom 0.3.4",
  "hmac",
  "indicatif",
  "open",

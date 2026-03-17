@@ -50,7 +50,8 @@ async fn login_flow() -> anyhow::Result<(String, String)> {
     println!("{auth_url}");
 
     if let Err(e) = open::that(&auth_url) {
-        anyhow::bail!("Failed to open browser: {e}");
+        eprintln!("Warning: could not open browser automatically: {e}");
+        eprintln!("Please open the URL above manually.");
     }
 
     // Wait for the callback with timeout
@@ -145,7 +146,6 @@ fn save_api_key(api_key: &str, name: &str) -> anyhow::Result<()> {
     let mut config = read_config_from(&config_path).unwrap_or_else(|_| Config::default());
     config.api_key = Some(api_key.to_string());
     config.name = Some(name.to_string());
-    config.instance = Some("cloud".to_string());
 
     write_config_to(&config_path, &config)?;
 
@@ -195,14 +195,7 @@ fn send_response(
 }
 
 fn generate_random_hex(bytes: usize) -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    // Simple pseudo-random hex using timestamps and process info
-    let seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let pid = std::process::id() as u128;
-    let combined = seed ^ (pid << 64);
-    let hex = format!("{:032x}", combined);
-    hex[..bytes * 2].to_string()
+    let mut buf = vec![0u8; bytes];
+    getrandom::fill(&mut buf).expect("failed to generate random bytes");
+    buf.iter().map(|b| format!("{b:02x}")).collect()
 }

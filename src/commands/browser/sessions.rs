@@ -22,7 +22,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         .map(|s| {
             let mut obj = serde_json::json!({
                 "id": s.id,
-                "mode": format!("{:?}", s.mode),
+                "mode": s.mode.to_string(),
                 "live": s.live,
             });
             if let Some(ref name) = s.name {
@@ -38,7 +38,33 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         })
         .collect();
 
-    output::success_data(serde_json::json!(data));
+    if output::is_json() {
+        output::success_data(serde_json::json!(data));
+    } else if sessions.is_empty() {
+        println!("No active browser sessions.");
+    } else {
+        // Human-readable table
+        let max_id = sessions.iter().map(|s| s.id.len()).max().unwrap_or(2).max(2);
+        let max_name = sessions
+            .iter()
+            .filter_map(|s| s.name.as_ref())
+            .map(|n| n.len())
+            .max()
+            .unwrap_or(4)
+            .max(4);
+        println!(
+            "{:<max_id$}  {:<max_name$}  {:<6}  STATUS",
+            "ID", "NAME", "MODE"
+        );
+        for s in &sessions {
+            let name = s.name.as_deref().unwrap_or("-");
+            let status = s.status.as_deref().unwrap_or(if s.live { "live" } else { "-" });
+            println!(
+                "{:<max_id$}  {:<max_name$}  {:<6}  {status}",
+                s.id, name, s.mode
+            );
+        }
+    }
 
     Ok(())
 }

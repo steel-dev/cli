@@ -12,6 +12,15 @@ pub enum ApiMode {
     Local,
 }
 
+impl std::fmt::Display for ApiMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiMode::Cloud => write!(f, "cloud"),
+            ApiMode::Local => write!(f, "local"),
+        }
+    }
+}
+
 impl ApiMode {
     /// Resolve the base URL for API requests.
     ///
@@ -319,5 +328,22 @@ mod tests {
         let env = EnvVars::default();
         let url = ApiMode::Cloud.resolve_base_url(Some("https://api.dev///"), &env, None);
         assert_eq!(url, "https://api.dev");
+    }
+
+    #[test]
+    fn api_mode_display_lowercase() {
+        assert_eq!(ApiMode::Cloud.to_string(), "cloud");
+        assert_eq!(ApiMode::Local.to_string(), "local");
+    }
+
+    #[test]
+    fn api_mode_serde_roundtrip() {
+        let cloud_json = serde_json::to_string(&ApiMode::Cloud).unwrap();
+        assert_eq!(cloud_json, "\"cloud\"");
+        let local_json = serde_json::to_string(&ApiMode::Local).unwrap();
+        assert_eq!(local_json, "\"local\"");
+
+        let parsed: ApiMode = serde_json::from_str("\"cloud\"").unwrap();
+        assert_eq!(parsed, ApiMode::Cloud);
     }
 }

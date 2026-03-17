@@ -39,8 +39,10 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         return Ok(());
     };
 
+    let is_newer = is_version_newer(&latest, current_version);
+
     if args.check {
-        if latest != current_version {
+        if is_newer {
             println!("Update available: v{current_version} -> v{latest}");
             println!("Run `steel update` to install.");
         } else {
@@ -49,7 +51,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if latest == current_version && !args.force {
+    if !is_newer && !args.force {
         println!("v{current_version} (latest)");
         return Ok(());
     }
@@ -78,4 +80,62 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Compare semver strings. Returns true if `latest` is strictly newer than `current`.
+fn is_version_newer(latest: &str, current: &str) -> bool {
+    let parse = |s: &str| -> Vec<u64> {
+        s.split('.')
+            .map(|p| p.parse::<u64>().unwrap_or(0))
+            .collect()
+    };
+    let l = parse(latest);
+    let c = parse(current);
+    for i in 0..l.len().max(c.len()) {
+        let lv = l.get(i).copied().unwrap_or(0);
+        let cv = c.get(i).copied().unwrap_or(0);
+        if lv > cv {
+            return true;
+        }
+        if lv < cv {
+            return false;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn newer_patch() {
+        assert!(is_version_newer("0.3.1", "0.3.0"));
+    }
+
+    #[test]
+    fn newer_minor() {
+        assert!(is_version_newer("0.4.0", "0.3.9"));
+    }
+
+    #[test]
+    fn newer_major() {
+        assert!(is_version_newer("1.0.0", "0.99.99"));
+    }
+
+    #[test]
+    fn same_version() {
+        assert!(!is_version_newer("0.3.0", "0.3.0"));
+    }
+
+    #[test]
+    fn older_version() {
+        assert!(!is_version_newer("0.2.0", "0.3.0"));
+    }
+
+    #[test]
+    fn multi_digit_segments() {
+        // This was the bug: string comparison gives wrong result
+        assert!(is_version_newer("0.10.0", "0.9.1"));
+    }
 }

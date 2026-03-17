@@ -22,7 +22,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
             key.clone()
         };
         println!("apiKey: {masked}");
-        println!("source: {:?}", auth.source);
+        println!("source: {}", auth.source);
     }
 
     if let Some(ref cfg) = config {

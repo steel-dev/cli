@@ -10,16 +10,13 @@ pub mod pdf;
 pub mod profile;
 pub mod scrape;
 pub mod screenshot;
-pub mod settings;
 pub mod update;
 
 use clap::{Parser, Subcommand, builder::styling::Styles};
 
 const LONG_HELP: &str = "\
-Quick Actions:
 Global Flags:
   --json                                 Structured JSON output for automation
-  --no-update-check                      Skip update check
   -l, --local                            Use local Steel runtime
   --api-url <url>                        Explicit self-hosted API endpoint URL
 
@@ -173,7 +170,6 @@ Other:
   steel login                          Login to Steel (alias: auth)
   steel logout                         Logout from Steel
   steel config                         Show current configuration
-  steel settings                       Display and modify settings
   steel update                         Update to latest version
   steel cache [-c]                     Manage CLI cache (-c to clean)
 
@@ -219,8 +215,8 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
-    /// Skip update check
-    #[arg(long, global = true)]
+    /// Skip update check (reserved for future use)
+    #[arg(long, global = true, hide = true)]
     pub no_update_check: bool,
 
     /// Use local Steel runtime instead of cloud
@@ -284,9 +280,6 @@ pub enum Command {
     /// Manage Steel CLI cache
     Cache(cache::Args),
 
-    /// Display and modify current settings
-    Settings(settings::Args),
-
     /// Manage named Steel browser profiles
     Profile {
         #[command(subcommand)]
@@ -316,7 +309,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Config(args) => config::run(args).await,
         Command::Update(args) => update::run(args).await,
         Command::Cache(args) => cache::run(args).await,
-        Command::Settings(args) => settings::run(args).await,
         Command::Profile { command } => profile::run(command).await,
     }
 }

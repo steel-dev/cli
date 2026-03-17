@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{Result, bail};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
@@ -38,7 +40,9 @@ impl DaemonClient {
         self.writer.flush().await?;
 
         let mut line = String::new();
-        let n = self.reader.read_line(&mut line).await?;
+        let n = tokio::time::timeout(Duration::from_secs(120), self.reader.read_line(&mut line))
+            .await
+            .map_err(|_| anyhow::anyhow!("Daemon response timed out after 120s"))??;
         if n == 0 {
             bail!("Daemon disconnected unexpectedly");
         }

@@ -86,7 +86,7 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
     if output::is_json() {
         let mut data = json!({
             "sessionId": result.session_id,
-            "mode": format!("{:?}", result.mode),
+            "mode": result.mode.to_string(),
             "success": result.success,
         });
         if let Some(ref msg) = result.message {
@@ -95,7 +95,7 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
         output::success_data(data);
     } else {
         println!("session_id: {}", result.session_id);
-        println!("mode: {:?}", result.mode);
+        println!("mode: {}", result.mode);
         println!("success: {}", result.success);
         if let Some(ref msg) = result.message {
             println!("message: {msg}");
@@ -103,7 +103,7 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
     }
 
     if !result.success {
-        std::process::exit(1);
+        anyhow::bail!("CAPTCHA solve failed");
     }
 
     Ok(())
@@ -147,7 +147,7 @@ async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<(
     }
 
     if result.status != "solved" && result.status != "none" {
-        std::process::exit(1);
+        anyhow::bail!("CAPTCHA status: {}", result.status);
     }
 
     Ok(())

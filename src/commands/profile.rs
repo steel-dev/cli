@@ -109,8 +109,7 @@ async fn run_list(_args: ListArgs) -> anyhow::Result<()> {
 
 async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
     if let Some(err) = profile_store::validate_profile_name(&args.name) {
-        eprintln!("{err}");
-        std::process::exit(1);
+        anyhow::bail!("{err}");
     }
 
     if profile_store::delete_profile(&args.name)? {
@@ -165,8 +164,7 @@ fn resolve_browser(browser_arg: Option<&str>) -> anyhow::Result<profile_porter::
 async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
     // Validate
     if let Some(err) = profile_store::validate_profile_name(&args.name) {
-        eprintln!("{err}");
-        std::process::exit(1);
+        anyhow::bail!("{err}");
     }
 
     let (api_key, api_base) = resolve_api()?;
@@ -269,8 +267,7 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
 async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
     // Validate
     if let Some(err) = profile_store::validate_profile_name(&args.name) {
-        eprintln!("{err}");
-        std::process::exit(1);
+        anyhow::bail!("{err}");
     }
 
     let (api_key, api_base) = resolve_api()?;

@@ -51,7 +51,6 @@
 		},
 		{ "name": "scrape" },
 		{ "name": "screenshot" },
-		{ "name": "settings" },
 		{ "name": "update" }
 	]
 }

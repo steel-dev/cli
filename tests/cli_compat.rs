@@ -488,12 +488,6 @@ fn cache_flags() {
 }
 
 #[test]
-fn settings_flags() {
-    let cmd = get_subcommand(&root_cmd(), &["settings"]);
-    assert_flags(&cmd, &[], "settings");
-}
-
-#[test]
 fn login_has_auth_alias() {
     let root = root_cmd();
     let login = root

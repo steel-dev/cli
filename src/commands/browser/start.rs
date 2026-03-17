@@ -129,7 +129,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     if output::is_json() {
         let mut data = json!({
             "id": session.id,
-            "mode": format!("{:?}", session.mode),
+            "mode": session.mode.to_string(),
         });
         if let Some(ref name) = session.name {
             data["name"] = json!(name);
@@ -143,7 +143,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         output::success_data(data);
     } else {
         println!("id: {}", session.id);
-        println!("mode: {:?}", session.mode);
+        println!("mode: {}", session.mode);
         if let Some(ref name) = session.name {
             println!("name: {name}");
         }

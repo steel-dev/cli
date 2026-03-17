@@ -42,13 +42,13 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     if output::is_json() {
         output::success_data(json!({
             "stoppedSessionIds": result.stopped_session_ids,
-            "mode": format!("{:?}", result.mode),
+            "mode": result.mode.to_string(),
         }));
     } else if result.stopped_session_ids.is_empty() {
         println!("No active browser sessions to stop.");
     } else if result.all {
         println!(
-            "Stopped {} sessions in {:?} mode.",
+            "Stopped {} sessions in {} mode.",
             result.stopped_session_ids.len(),
             result.mode
         );

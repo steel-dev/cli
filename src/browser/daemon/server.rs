@@ -353,7 +353,7 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
             Ok(result)
         }
         DaemonCommand::Close | DaemonCommand::Shutdown => {
-            engine.close().await.ok();
+            // Engine is closed by the main loop after handle_connection returns true.
             Ok(Value::Null)
         }
         DaemonCommand::Ping => Ok(json!("pong")),
