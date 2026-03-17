@@ -1,6 +1,6 @@
 {
   "name": "@steel-dev/cli",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Steel CLI — this package installs the native binary. See https://steel.dev for details.",
   "license": "MIT",
   "type": "module",
