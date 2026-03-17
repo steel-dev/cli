@@ -44,24 +44,6 @@ steel browser snapshot -i --session my-job
 steel browser stop
 ```
 
-### Self-hosted endpoint
-
-```bash
-steel browser start --api-url https://steel.your-domain.dev/v1 --session my-job
-steel browser open https://example.com --api-url https://steel.your-domain.dev/v1 --session my-job
-```
-
-### Local runtime (`localhost` flow)
-
-```bash
-steel dev install
-steel dev start
-steel browser start --local --session local-job
-steel browser open https://example.com --session local-job
-steel browser stop
-steel dev stop
-```
-
 ## Agent-Browser Integration
 
 `steel browser` is directly backed by the vendored `agent-browser` runtime.
