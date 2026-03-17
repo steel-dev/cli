@@ -419,6 +419,18 @@ fn optional_vec(v: Vec<String>) -> Option<Vec<String>> {
 pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
     let mut client = ensure_daemon(session).await?;
 
+    let result = dispatch_action(&mut client, action).await;
+    if let Err(ref err) = result {
+        // On failure, check if the remote session is still alive.
+        // If not, clear stale state and give a helpful error.
+        if let Some(enriched) = check_session_health(session, err).await {
+            return Err(enriched);
+        }
+    }
+    result
+}
+
+async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Result<()> {
     match action {
         // --- Navigation ---
         ActionCommand::Navigate(args) => {
@@ -857,6 +869,185 @@ async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
     DaemonClient::connect(session_id).await
 }
 
+/// On action failure, check whether the remote session is still alive.
+/// If the session is dead/expired, clear stale state and return a user-friendly error.
+/// If it's alive but close to expiry, warn on stderr.
+/// Returns None if the session is fine (original error should be used).
+async fn check_session_health(
+    session_name: Option<&str>,
+    _original_err: &anyhow::Error,
+) -> Option<anyhow::Error> {
+    let paths = SessionStatePaths::default_paths();
+    let state = read_state(&paths.state_path);
+    let mode = api::mode();
+
+    let session_id = if let Some(name) = session_name {
+        state.resolve_candidate(mode, Some(name))?
+    } else {
+        state.active_session_id.as_deref()?
+    };
+
+    let (_, base_url, auth) = api::resolve_with_auth();
+    let client = SteelClient::new().ok()?;
+    let session = match client.get_session(&base_url, mode, session_id, &auth).await {
+        Ok(s) => s,
+        Err(e) if e.is_not_found() => {
+            // Session doesn't exist anymore — clean up state
+            let _ = crate::config::session_state::with_lock(&paths, true, |state| {
+                state.clear_active(mode, session_id);
+            });
+            let _ = process::kill_daemon(session_id);
+            return Some(anyhow::anyhow!(
+                "Session expired or not found. Run `steel browser start` to create a new one."
+            ));
+        }
+        Err(_) => return None, // API unreachable, don't mask the original error
+    };
+
+    use crate::browser::lifecycle::is_session_live;
+    if !is_session_live(&session) {
+        // Session exists but is dead — clean up state
+        let _ = crate::config::session_state::with_lock(&paths, true, |state| {
+            state.clear_active(mode, session_id);
+        });
+        let _ = process::kill_daemon(session_id);
+        let status = session
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        return Some(anyhow::anyhow!(
+            "Session is no longer active (status: {status}). Run `steel browser start` to create a new one."
+        ));
+    }
+
+    // Session is alive — check if close to expiry and warn
+    if let Some(timeout) = session.get("timeout").and_then(|v| v.as_u64()) {
+        if let Some(created) = session.get("createdAt").and_then(|v| v.as_str()) {
+            if let Some(remaining_ms) = estimate_remaining_ms(created, timeout) {
+                if remaining_ms < 5 * 60 * 1000 {
+                    let remaining_secs = remaining_ms / 1000;
+                    let mins = remaining_secs / 60;
+                    let secs = remaining_secs % 60;
+                    eprintln!(
+                        "Warning: Session expires in {mins}m{secs}s. \
+                         Run `steel browser start` to create a new one."
+                    );
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Estimate remaining session time from a createdAt timestamp (RFC3339) and timeout (ms).
+/// Returns None if parsing fails or the session has already expired.
+fn estimate_remaining_ms(created_at: &str, timeout_ms: u64) -> Option<u64> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let created = parse_rfc3339_to_epoch_ms(created_at)?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_millis() as u64;
+    let expires_at = created.checked_add(timeout_ms)?;
+    if now >= expires_at {
+        return None; // Already expired
+    }
+    Some(expires_at - now)
+}
+
+/// Parse an RFC3339 timestamp to epoch milliseconds.
+/// Handles "2026-03-17T12:00:00Z" and "2026-03-17T12:00:00.123Z" formats.
+fn parse_rfc3339_to_epoch_ms(s: &str) -> Option<u64> {
+    // Strip trailing 'Z' or timezone offset, parse date-time components
+    let s = s.trim();
+
+    // Use jiff or manual parsing. Since we have no chrono dep, parse manually.
+    // Expected format: YYYY-MM-DDTHH:MM:SS[.frac]Z or YYYY-MM-DDTHH:MM:SS[.frac]+HH:MM
+    let (datetime_part, tz_offset_secs) = if s.ends_with('Z') || s.ends_with('z') {
+        (&s[..s.len() - 1], 0i64)
+    } else if let Some(plus_pos) = s.rfind('+') {
+        if plus_pos > 10 {
+            let offset = parse_tz_offset(&s[plus_pos..])?;
+            (&s[..plus_pos], offset)
+        } else {
+            return None;
+        }
+    } else if let Some(minus_pos) = s.rfind('-') {
+        if minus_pos > 10 {
+            let offset = parse_tz_offset(&s[minus_pos..])?;
+            (&s[..minus_pos], offset)
+        } else {
+            return None;
+        }
+    } else {
+        return None;
+    };
+
+    let (date_part, time_part) = datetime_part.split_once('T').or_else(|| datetime_part.split_once('t'))?;
+    let date_fields: Vec<&str> = date_part.split('-').collect();
+    if date_fields.len() != 3 {
+        return None;
+    }
+    let year: i64 = date_fields[0].parse().ok()?;
+    let month: u32 = date_fields[1].parse().ok()?;
+    let day: u32 = date_fields[2].parse().ok()?;
+
+    let (time_whole, frac_ms) = if let Some((whole, frac)) = time_part.split_once('.') {
+        let ms: u64 = match frac.len() {
+            1 => frac.parse::<u64>().ok()? * 100,
+            2 => frac.parse::<u64>().ok()? * 10,
+            3 => frac.parse::<u64>().ok()?,
+            n if n > 3 => frac[..3].parse().ok()?,
+            _ => 0,
+        };
+        (whole, ms)
+    } else {
+        (time_part, 0u64)
+    };
+
+    let time_fields: Vec<&str> = time_whole.split(':').collect();
+    if time_fields.len() != 3 {
+        return None;
+    }
+    let hour: u32 = time_fields[0].parse().ok()?;
+    let min: u32 = time_fields[1].parse().ok()?;
+    let sec: u32 = time_fields[2].parse().ok()?;
+
+    // Convert to epoch using a simplified calculation
+    let days = days_from_civil(year, month, day);
+    let epoch_secs = days as i64 * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64
+        - tz_offset_secs;
+
+    if epoch_secs < 0 {
+        return None;
+    }
+
+    Some(epoch_secs as u64 * 1000 + frac_ms)
+}
+
+fn parse_tz_offset(s: &str) -> Option<i64> {
+    let sign: i64 = if s.starts_with('+') { 1 } else { -1 };
+    let rest = &s[1..];
+    let (h, m) = rest.split_once(':')?;
+    let hours: i64 = h.parse().ok()?;
+    let mins: i64 = m.parse().ok()?;
+    Some(sign * (hours * 3600 + mins * 60))
+}
+
+/// Days from civil date (year, month, day) to Unix epoch.
+/// Algorithm from Howard Hinnant's date library.
+fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let m = if month <= 2 { month + 9 } else { month - 3 };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u32;
+    let doy = (153 * m as u32 + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe as i64 - 719468
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1000,5 +1191,70 @@ mod tests {
     fn optional_vec_non_empty_is_some() {
         let v = optional_vec(vec!["color".to_string()]);
         assert_eq!(v.unwrap(), vec!["color"]);
+    }
+
+    // ── parse_rfc3339_to_epoch_ms ─────────────────────────────────
+
+    #[test]
+    fn rfc3339_utc_basic() {
+        // 2025-01-01T00:00:00Z = 1735689600000 ms
+        let ms = parse_rfc3339_to_epoch_ms("2025-01-01T00:00:00Z").unwrap();
+        assert_eq!(ms, 1735689600000);
+    }
+
+    #[test]
+    fn rfc3339_with_fractional_seconds() {
+        let ms = parse_rfc3339_to_epoch_ms("2025-01-01T00:00:00.500Z").unwrap();
+        assert_eq!(ms, 1735689600500);
+    }
+
+    #[test]
+    fn rfc3339_with_positive_offset() {
+        // 2025-01-01T09:00:00+09:00 = 2025-01-01T00:00:00Z
+        let ms = parse_rfc3339_to_epoch_ms("2025-01-01T09:00:00+09:00").unwrap();
+        assert_eq!(ms, 1735689600000);
+    }
+
+    #[test]
+    fn rfc3339_with_negative_offset() {
+        // 2024-12-31T19:00:00-05:00 = 2025-01-01T00:00:00Z
+        let ms = parse_rfc3339_to_epoch_ms("2024-12-31T19:00:00-05:00").unwrap();
+        assert_eq!(ms, 1735689600000);
+    }
+
+    #[test]
+    fn rfc3339_invalid_returns_none() {
+        assert!(parse_rfc3339_to_epoch_ms("not a date").is_none());
+        assert!(parse_rfc3339_to_epoch_ms("").is_none());
+    }
+
+    // ── estimate_remaining_ms ─────────────────────────────────────
+
+    #[test]
+    fn estimate_remaining_far_future() {
+        // Created in far future with 10 min timeout → should have remaining time
+        let remaining = estimate_remaining_ms("2099-01-01T00:00:00Z", 600_000);
+        assert!(remaining.is_some());
+        assert!(remaining.unwrap() > 0);
+    }
+
+    #[test]
+    fn estimate_remaining_already_expired() {
+        // Created in the past with 1ms timeout → expired
+        let remaining = estimate_remaining_ms("2020-01-01T00:00:00Z", 1);
+        assert!(remaining.is_none());
+    }
+
+    // ── days_from_civil ───────────────────────────────────────────
+
+    #[test]
+    fn days_from_civil_epoch() {
+        assert_eq!(days_from_civil(1970, 1, 1), 0);
+    }
+
+    #[test]
+    fn days_from_civil_known_date() {
+        // 2025-01-01 = day 20089
+        assert_eq!(days_from_civil(2025, 1, 1), 20089);
     }
 }

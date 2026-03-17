@@ -11,6 +11,7 @@ use super::process;
 use super::protocol::*;
 
 const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
+const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 
 pub async fn run(session_id: String, cdp_url: String) -> Result<()> {
     let pid_path = process::pid_path(&session_id);
@@ -29,13 +30,26 @@ pub async fn run(session_id: String, cdp_url: String) -> Result<()> {
     let _ = std::fs::remove_file(&socket_path);
     let listener = UnixListener::bind(&socket_path)?;
 
+    let mut last_health_check = tokio::time::Instant::now();
+
     loop {
+        // Periodic health check: exit if CDP connection is dead
+        if last_health_check.elapsed() >= HEALTH_CHECK_INTERVAL {
+            if !engine.is_alive().await {
+                break;
+            }
+            last_health_check = tokio::time::Instant::now();
+        }
+
         match tokio::time::timeout(IDLE_TIMEOUT, listener.accept()).await {
             Err(_) => break,
             Ok(Err(_)) => continue,
             Ok(Ok((stream, _))) => {
-                if handle_connection(&mut engine, stream).await {
-                    break;
+                let result = handle_connection(&mut engine, stream).await;
+                match result {
+                    ConnectionResult::Continue => {}
+                    ConnectionResult::Shutdown => break,
+                    ConnectionResult::Disconnected => break,
                 }
             }
         }
@@ -46,11 +60,16 @@ pub async fn run(session_id: String, cdp_url: String) -> Result<()> {
     Ok(())
 }
 
-/// Returns true if the daemon should shut down.
+enum ConnectionResult {
+    Continue,
+    Shutdown,
+    Disconnected,
+}
+
 async fn handle_connection(
     engine: &mut BrowserEngine,
     stream: tokio::net::UnixStream,
-) -> bool {
+) -> ConnectionResult {
     let (read_half, mut write_half) = tokio::io::split(stream);
     let mut reader = BufReader::new(read_half);
     let mut line = String::new();
@@ -58,7 +77,7 @@ async fn handle_connection(
     loop {
         line.clear();
         match reader.read_line(&mut line).await {
-            Err(_) | Ok(0) => return false,
+            Err(_) | Ok(0) => return ConnectionResult::Continue,
             Ok(_) => {
                 let request: DaemonRequest = match serde_json::from_str(&line) {
                     Ok(r) => r,
@@ -78,6 +97,11 @@ async fn handle_connection(
                 let is_shutdown =
                     matches!(request.command, DaemonCommand::Shutdown | DaemonCommand::Close);
                 let result = dispatch(engine, request.command).await;
+
+                // Check if CDP connection died during dispatch
+                let cdp_dead = matches!(&result, DaemonResult::Error { .. })
+                    && !engine.is_alive().await;
+
                 let resp = DaemonResponse {
                     id: request.id,
                     result,
@@ -87,7 +111,10 @@ async fn handle_connection(
                 let _ = write_half.flush().await;
 
                 if is_shutdown {
-                    return true;
+                    return ConnectionResult::Shutdown;
+                }
+                if cdp_dead {
+                    return ConnectionResult::Disconnected;
                 }
             }
         }

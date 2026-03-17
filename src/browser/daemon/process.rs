@@ -74,3 +74,20 @@ pub async fn stop_daemon(session_id: &str) -> Result<()> {
 
     Ok(())
 }
+
+/// Kill a daemon process by reading its PID file, then clean up.
+pub fn kill_daemon(session_id: &str) -> Result<()> {
+    let pid_file = pid_path(session_id);
+    if let Ok(contents) = std::fs::read_to_string(&pid_file) {
+        if let Ok(pid) = contents.trim().parse::<u32>() {
+            // Best-effort kill via command
+            let _ = std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
+    }
+    cleanup_stale(session_id);
+    Ok(())
+}
