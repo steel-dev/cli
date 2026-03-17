@@ -821,7 +821,16 @@ pub fn package_profile(
         }
     }
 
-    on_progress("Zipping...");
+    let total_bytes: usize = zip_files.iter().map(|(_, d)| d.len()).sum();
+    let total_mb = total_bytes as f64 / 1024.0 / 1024.0;
+    if total_mb >= 100.0 {
+        on_progress(&format!(
+            "Zipping {:.0} MB (this may take a moment)...",
+            total_mb
+        ));
+    } else {
+        on_progress(&format!("Zipping {:.0} MB...", total_mb));
+    }
     let mut cursor = std::io::Cursor::new(Vec::new());
     {
         let mut zip = zip::ZipWriter::new(&mut cursor);
