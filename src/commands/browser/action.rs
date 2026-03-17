@@ -250,7 +250,7 @@ pub struct ScrollArgs {
     /// Scroll amount in pixels (default: 300)
     pub amount: Option<f64>,
     /// Element selector to scroll
-    #[arg(long)]
+    #[arg(long, short)]
     pub selector: Option<String>,
 }
 
@@ -269,7 +269,7 @@ pub struct SnapshotArgs {
     #[arg(short, long)]
     pub interactive: bool,
     /// Restrict snapshot to a subtree
-    #[arg(long)]
+    #[arg(short, long)]
     pub selector: Option<String>,
     /// Use compact output format
     #[arg(short, long)]

@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 pub struct BrowserArgs {
     /// Named session to target
-    #[arg(short, long, global = true)]
+    #[arg(long, global = true)]
     pub session: Option<String>,
 
     #[command(subcommand)]

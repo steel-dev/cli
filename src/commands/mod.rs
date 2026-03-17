@@ -33,7 +33,7 @@ Quick Actions:
   steel pdf <url>                      Generate a PDF from a webpage
 
 Browser Sessions:
-  steel browser start [-s <name>]      Create or attach to a browser session
+  steel browser start [--session <name>]      Create or attach to a browser session
     --stealth                            Enable stealth mode (humanize + auto CAPTCHA)
     -p, --proxy <proxy>                  Use residential proxy
     --session-timeout <ms>               Session timeout
@@ -41,9 +41,9 @@ Browser Sessions:
     --profile <name>                     Named profile to persist browser state
     --update-profile                     Save state back to profile on session end
     --namespace <ns> / --credentials     Inject stored credentials
-  steel browser stop [-s <name>]       Stop a session (-a for all)
+  steel browser stop [--session <name>]       Stop a session (-a for all)
   steel browser sessions               List active sessions (use --json for structured output)
-  steel browser live [-s <name>]       Open live session viewer
+  steel browser live [--session <name>]       Open live session viewer
 
 Browser Navigation:
   steel browser navigate <url>         Navigate to URL (aliases: open, goto)
@@ -130,7 +130,7 @@ Window:
 
 CAPTCHA:
   steel browser captcha solve          Solve CAPTCHA
-    -s <name> / --session-id <id>        Session
+    --session-id <id>                      Session ID override
     --page-id <id> / --task-id <id>      Target specific CAPTCHA
   steel browser captcha status         Check CAPTCHA status
     -w, --wait                           Wait for terminal status
@@ -184,7 +184,7 @@ Examples:
   steel scrape https://example.com
   steel scrape https://example.com --format html,markdown
   steel screenshot https://example.com -f
-  steel browser start -s my-session
+  steel browser start --session my-session
   steel browser navigate https://example.com
   steel browser snapshot -i
   steel browser click \"button#submit\"
@@ -196,7 +196,7 @@ Examples:
   steel browser screenshot --full --annotate
   steel browser eval \"document.title\"
   steel browser tab new https://example.com
-  steel browser stop -s my-session";
+  steel browser stop --session my-session";
 
 #[derive(Parser)]
 #[command(

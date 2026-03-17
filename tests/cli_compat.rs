@@ -286,7 +286,7 @@ fn browser_session_flag() {
     let cmd = get_subcommand(&root_cmd(), &["browser"]);
     assert_flags(
         &cmd,
-        &[flag_val_short("session", 's')],
+        &[flag_val("session")],
         "browser",
     );
 }
