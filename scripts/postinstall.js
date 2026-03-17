@@ -23,10 +23,12 @@ function main() {
     return;
   }
 
-  // Already installed
   if (existsSync(BINARY_PATH)) {
     console.log(`[steel] Native binary already installed at ${BINARY_PATH}`);
-    console.log("[steel] Run `steel update` to check for updates.");
+    console.log(
+      "[steel] The npm package is not needed. You can remove it with:"
+    );
+    console.log("[steel]   npm uninstall -g @steel-dev/cli");
     return;
   }
 
@@ -47,10 +49,10 @@ function main() {
 
   // Run the cargo-dist installer
   try {
-    execSync(
-      `curl --proto '=https' --tlsv1.2 -LsSf ${INSTALLER_URL} | sh`,
-      { stdio: "inherit", shell: "/bin/sh" }
-    );
+    execSync(`curl --proto '=https' --tlsv1.2 -LsSf ${INSTALLER_URL} | sh`, {
+      stdio: "inherit",
+      shell: "/bin/sh",
+    });
     console.log("");
     console.log("[steel] Installation complete!");
     console.log(`[steel] Binary installed to ${BINARY_DIR}`);
@@ -61,9 +63,7 @@ function main() {
     console.error("");
     console.error("[steel] Automatic installation failed.");
     console.error("[steel] Install manually:");
-    console.error(
-      "  curl -LsSf https://steel.dev/install.sh | sh"
-    );
+    console.error("  curl -LsSf https://steel.dev/install.sh | sh");
     console.error("");
     console.error(
       "[steel] Or download from: https://github.com/steel-dev/cli/releases"
