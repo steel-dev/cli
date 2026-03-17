@@ -3,6 +3,7 @@ pub mod cache;
 pub mod config;
 pub mod credentials;
 pub mod dev;
+pub mod forge;
 pub mod login;
 pub mod logout;
 pub mod pdf;
@@ -163,6 +164,9 @@ Development:
     -d, --docker-check                   Only verify Docker, then exit
   steel dev stop                       Stop local runtime
 
+Project Scaffolding:
+  steel forge [template] [-n <name>]   Create a new project from a template
+
 Other:
   steel login                          Login to Steel (alias: auth)
   steel logout                         Logout from Steel
@@ -261,6 +265,9 @@ pub enum Command {
         command: dev::Command,
     },
 
+    /// Scaffold a new project from a template
+    Forge(forge::Args),
+
     /// Show current configuration
     Config(config::Args),
 
@@ -297,6 +304,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Logout(args) => logout::run(args).await,
         Command::Credentials { command } => credentials::run(command).await,
         Command::Dev { command } => dev::run(command).await,
+        Command::Forge(args) => forge::run(args).await,
         Command::Config(args) => config::run(args).await,
         Command::Update(args) => update::run(args).await,
         Command::Cache(args) => cache::run(args).await,

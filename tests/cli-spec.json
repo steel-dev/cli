@@ -1,5 +1,5 @@
 {
-	"_generated": "v0.3.0 CLI spec. Removed: docs, star, support, forge, run.",
+	"_generated": "v0.3.0 CLI spec. Removed: docs, star, support, run.",
 	"commands": [
 		{
 			"name": "browser",
@@ -36,6 +36,7 @@
 				{ "name": "stop" }
 			]
 		},
+		{ "name": "forge" },
 		{ "name": "login" },
 		{ "name": "logout" },
 		{ "name": "pdf" },

@@ -483,6 +483,16 @@ fn dev_stop_flags() {
 }
 
 #[test]
+fn forge_flags() {
+    let cmd = get_subcommand(&root_cmd(), &["forge"]);
+    assert_flags(
+        &cmd,
+        &[flag_val_short("name", 'n')],
+        "forge",
+    );
+}
+
+#[test]
 fn update_flags() {
     let cmd = get_subcommand(&root_cmd(), &["update"]);
     assert_flags(
