@@ -199,3 +199,94 @@ fn generate_random_hex(bytes: usize) -> String {
     getrandom::fill(&mut buf).expect("failed to generate random bytes");
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- parse_query_from_request ---
+
+    #[test]
+    fn parse_query_normal_get() {
+        let query = parse_query_from_request("GET /callback?code=abc&state=xyz HTTP/1.1\r\n");
+        assert_eq!(query.len(), 2);
+        assert_eq!(query[0], ("code".to_string(), "abc".to_string()));
+        assert_eq!(query[1], ("state".to_string(), "xyz".to_string()));
+    }
+
+    #[test]
+    fn parse_query_no_query_string() {
+        let query = parse_query_from_request("GET /callback HTTP/1.1\r\n");
+        assert!(query.is_empty());
+    }
+
+    #[test]
+    fn parse_query_empty_input() {
+        let query = parse_query_from_request("");
+        assert!(query.is_empty());
+    }
+
+    #[test]
+    fn parse_query_single_word() {
+        let query = parse_query_from_request("GET");
+        assert!(query.is_empty());
+    }
+
+    #[test]
+    fn parse_query_url_encoded() {
+        let query = parse_query_from_request("GET /cb?msg=hello%20world HTTP/1.1\r\n");
+        assert_eq!(query.len(), 1);
+        assert_eq!(query[0], ("msg".to_string(), "hello world".to_string()));
+    }
+
+    #[test]
+    fn parse_query_empty_value() {
+        let query = parse_query_from_request("GET /cb?key= HTTP/1.1\r\n");
+        assert_eq!(query.len(), 1);
+        assert_eq!(query[0], ("key".to_string(), "".to_string()));
+    }
+
+    #[test]
+    fn parse_query_key_without_equals() {
+        let query = parse_query_from_request("GET /cb?flag HTTP/1.1\r\n");
+        assert_eq!(query.len(), 1);
+        assert_eq!(query[0], ("flag".to_string(), "".to_string()));
+    }
+
+    #[test]
+    fn parse_query_multiple_params() {
+        let query = parse_query_from_request("GET /cb?a=1&b=2&c=3 HTTP/1.1\r\n");
+        assert_eq!(query.len(), 3);
+        assert_eq!(query[0].0, "a");
+        assert_eq!(query[1].0, "b");
+        assert_eq!(query[2].0, "c");
+    }
+
+    #[test]
+    fn parse_query_value_with_equals() {
+        let query = parse_query_from_request("GET /cb?q=a=b HTTP/1.1\r\n");
+        assert_eq!(query.len(), 1);
+        assert_eq!(query[0], ("q".to_string(), "a=b".to_string()));
+    }
+
+    // --- generate_random_hex ---
+
+    #[test]
+    fn random_hex_length() {
+        assert_eq!(generate_random_hex(16).len(), 32);
+        assert_eq!(generate_random_hex(1).len(), 2);
+    }
+
+    #[test]
+    fn random_hex_chars_only() {
+        let hex = generate_random_hex(16);
+        assert!(hex.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn random_hex_uniqueness() {
+        let a = generate_random_hex(16);
+        let b = generate_random_hex(16);
+        assert_ne!(a, b);
+    }
+}
