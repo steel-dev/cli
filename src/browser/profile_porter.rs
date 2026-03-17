@@ -669,7 +669,18 @@ fn reencrypt_cookies_db(
         )?;
 
         let rows: Vec<(i64, String, Vec<u8>)> = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .query_map([], |row| {
+                let rowid: i64 = row.get(0)?;
+                let host_key: String = row.get(1)?;
+                // Some browsers (e.g. Brave) may store encrypted_value as TEXT
+                // instead of BLOB, so handle both types.
+                let encrypted_value: Vec<u8> = match row.get_ref(2)? {
+                    rusqlite::types::ValueRef::Blob(b) => b.to_vec(),
+                    rusqlite::types::ValueRef::Text(t) => t.to_vec(),
+                    _ => return Ok((rowid, host_key, Vec::new())),
+                };
+                Ok((rowid, host_key, encrypted_value))
+            })?
             .collect::<std::result::Result<_, _>>()?;
 
         let mut converted: u64 = 0;
