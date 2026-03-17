@@ -1,50 +1,21 @@
-//! Contract tests: verify that Rust CLI flags are 100% compatible with the frozen CLI spec.
+//! Contract tests: verify that Rust CLI flags are compatible with the frozen CLI spec.
 //!
-//! Each test defines the expected flags (from the spec, originally extracted from TS source)
-//! and asserts that the Rust clap parser exposes exactly those flags with correct names,
-//! short aliases, and required/optional status.
+//! Each test defines the expected flags and asserts that the Rust clap parser
+//! exposes exactly those flags with correct names, short aliases, and required/optional status.
 
 use std::collections::BTreeSet;
 use std::path::Path;
 
 use clap::{ArgAction, Command, CommandFactory};
 
-// Re-use the clap-derived structs from the binary.
-// We need CommandFactory to introspect without running.
 use steel_cli::commands;
 
-/// Scan a Pastel commands directory and return the set of command names.
-/// Convention: .tsx files (excluding index.tsx) are commands, directories are parent commands.
-fn discover_pastel_commands(dir: &Path) -> BTreeSet<String> {
-    let mut commands = BTreeSet::new();
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return commands,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-
-        if path.is_file() && name_str.ends_with(".tsx") && name_str != "index.tsx" {
-            commands.insert(name_str.trim_end_matches(".tsx").to_string());
-        } else if path.is_dir() {
-            commands.insert(name_str.to_string());
-        }
-    }
-    commands
-}
-
-/// Describes a single CLI flag as defined in the TypeScript source.
+/// Describes a single CLI flag.
 #[derive(Debug)]
 struct ExpectedFlag {
-    /// Long name on the CLI (e.g., "use-proxy")
     long: &'static str,
-    /// Short alias character, if any (e.g., 'u')
     short: Option<char>,
-    /// Whether the flag is required (clap will reject the command without it)
     required: bool,
-    /// Whether the flag takes a value (true) or is a boolean switch (false)
     takes_value: bool,
 }
 
@@ -93,18 +64,17 @@ fn flag_val_short(long: &'static str, short: char) -> ExpectedFlag {
     }
 }
 
-/// Assert that a clap Command has exactly the expected flags.
+/// Assert that a clap Command has exactly the expected visible flags.
 fn assert_flags(cmd: &Command, expected: &[ExpectedFlag], cmd_name: &str) {
-    // Collect actual flags (skip "help" and "version" — clap adds those automatically)
-    let skip = ["help", "version", "no-update-check"];
+    let skip = ["help", "version", "json", "no-update-check"];
 
     let actual_args: Vec<_> = cmd
         .get_arguments()
         .filter(|a| !skip.contains(&a.get_id().as_str()))
         .filter(|a| a.get_long().is_some()) // skip positional args
+        .filter(|a| !a.is_hide_set()) // skip hidden args
         .collect();
 
-    // Check each expected flag exists
     for ef in expected {
         let actual = actual_args
             .iter()
@@ -117,7 +87,6 @@ fn assert_flags(cmd: &Command, expected: &[ExpectedFlag], cmd_name: &str) {
             }
         };
 
-        // Check short alias
         let actual_short = actual.get_short();
         assert_eq!(
             actual_short, ef.short,
@@ -125,7 +94,6 @@ fn assert_flags(cmd: &Command, expected: &[ExpectedFlag], cmd_name: &str) {
             ef.long, ef.short, actual_short
         );
 
-        // Check required
         let actual_required = actual.is_required_set();
         assert_eq!(
             actual_required, ef.required,
@@ -133,7 +101,6 @@ fn assert_flags(cmd: &Command, expected: &[ExpectedFlag], cmd_name: &str) {
             ef.long, ef.required, actual_required
         );
 
-        // Check takes_value via action type (Set/Append take values; SetTrue/SetFalse/Count don't)
         let actual_takes_value = matches!(actual.get_action(), ArgAction::Set | ArgAction::Append);
         assert_eq!(
             actual_takes_value, ef.takes_value,
@@ -142,17 +109,15 @@ fn assert_flags(cmd: &Command, expected: &[ExpectedFlag], cmd_name: &str) {
         );
     }
 
-    // Check no unexpected flags
     for actual in &actual_args {
         let long = actual.get_long().unwrap_or("");
         let found = expected.iter().any(|ef| ef.long == long);
         if !found {
-            panic!("[{cmd_name}] Unexpected flag --{long} not in TypeScript CLI");
+            panic!("[{cmd_name}] Unexpected flag --{long} not in spec");
         }
     }
 }
 
-/// Get a subcommand from the top-level CLI command.
 fn get_subcommand(root: &Command, path: &[&str]) -> Command {
     let mut cmd = root.clone();
     for name in path {
@@ -166,24 +131,19 @@ fn get_subcommand(root: &Command, path: &[&str]) -> Command {
     cmd
 }
 
-// ─── Tests ───────────────────────────────────────────────────────────────────
-
 fn root_cmd() -> Command {
     commands::Cli::command()
 }
 
-/// Verify the complete subcommand tree matches the spec frozen from the TypeScript CLI.
-/// The spec is loaded from cli-spec.json (generated before the TS source was removed).
+/// Verify the complete subcommand tree matches the spec.
 #[test]
 fn subcommand_tree_matches_spec() {
-    let spec_path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cli-spec.json");
+    let spec_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cli-spec.json");
     let spec_text = std::fs::read_to_string(&spec_path)
         .unwrap_or_else(|e| panic!("Failed to read cli-spec.json: {e}"));
     let spec: serde_json::Value = serde_json::from_str(&spec_text)
         .unwrap_or_else(|e| panic!("Failed to parse cli-spec.json: {e}"));
 
-    // Extract top-level commands from spec (array format)
     let spec_cmds = spec
         .get("commands")
         .and_then(|v| v.as_array())
@@ -196,7 +156,6 @@ fn subcommand_tree_matches_spec() {
         .collect();
     assert!(!spec_top.is_empty(), "Spec has no commands");
 
-    // Get Rust top-level commands
     let root = root_cmd();
     let rust_top: BTreeSet<String> = root
         .get_subcommands()
@@ -205,7 +164,6 @@ fn subcommand_tree_matches_spec() {
         .filter(|n| n != "help")
         .collect();
 
-    // Check that all spec commands exist in Rust
     for name in &spec_top {
         assert!(
             rust_top.contains(name),
@@ -213,7 +171,6 @@ fn subcommand_tree_matches_spec() {
         );
     }
 
-    // Recurse into subcommands from spec
     for cmd in spec_cmds {
         let name = match cmd.get("name").and_then(|n| n.as_str()) {
             Some(n) => n,
@@ -244,7 +201,6 @@ fn subcommand_tree_matches_spec() {
             );
         }
 
-        // One more level (e.g., browser/captcha/)
         for sub_cmd in subs {
             let sub_name = match sub_cmd.get("name").and_then(|n| n.as_str()) {
                 Some(n) => n,
@@ -261,8 +217,7 @@ fn subcommand_tree_matches_spec() {
                 .map(|s| s.to_string())
                 .collect();
 
-            let rust_nested_parent =
-                get_subcommand(&root, &[name, sub_name]);
+            let rust_nested_parent = get_subcommand(&root, &[name, sub_name]);
             let rust_nested: BTreeSet<String> = rust_nested_parent
                 .get_subcommands()
                 .map(|s| s.get_name().to_string())
@@ -285,10 +240,7 @@ fn scrape_flags() {
     assert_flags(
         &cmd,
         &[
-            // positional `url` is not a flag
-            flag_val_short("url", 'u'),
             flag_val("format"),
-            flag("raw"),
             flag_val_short("delay", 'd'),
             flag("pdf"),
             flag("screenshot"),
@@ -307,7 +259,6 @@ fn screenshot_flags() {
     assert_flags(
         &cmd,
         &[
-            flag_val_short("url", 'u'),
             flag_val_short("delay", 'd'),
             flag_short("full-page", 'f'),
             flag("use-proxy"),
@@ -325,7 +276,6 @@ fn pdf_flags() {
     assert_flags(
         &cmd,
         &[
-            flag_val_short("url", 'u'),
             flag_val_short("delay", 'd'),
             flag("use-proxy"),
             flag_val_short("region", 'r'),
@@ -348,8 +298,6 @@ fn browser_start_flags() {
             flag("stealth"),
             flag_val_short("proxy", 'p'),
             flag_val("session-timeout"),
-            flag_val("session-headless"),
-            flag_val("session-region"),
             flag("session-solve-captcha"),
             flag_val("profile"),
             flag("update-profile"),
@@ -380,7 +328,7 @@ fn browser_sessions_flags() {
     let cmd = get_subcommand(&root_cmd(), &["browser", "sessions"]);
     assert_flags(
         &cmd,
-        &[flag_short("local", 'l'), flag_val("api-url"), flag("raw")],
+        &[flag_short("local", 'l'), flag_val("api-url")],
         "browser sessions",
     );
 }
@@ -410,7 +358,6 @@ fn browser_captcha_solve_flags() {
             flag_val("page-id"),
             flag_val("url"),
             flag_val("task-id"),
-            flag("raw"),
             flag_short("local", 'l'),
             flag_val("api-url"),
         ],
@@ -430,7 +377,6 @@ fn browser_captcha_status_flags() {
             flag_short("wait", 'w'),
             flag_val("timeout"),
             flag_val("interval"),
-            flag("raw"),
             flag_short("local", 'l'),
             flag_val("api-url"),
         ],
@@ -537,38 +483,12 @@ fn dev_stop_flags() {
 }
 
 #[test]
-fn forge_flags() {
-    let cmd = get_subcommand(&root_cmd(), &["forge"]);
+fn update_flags() {
+    let cmd = get_subcommand(&root_cmd(), &["update"]);
     assert_flags(
         &cmd,
-        &[
-            flag_val_short("name", 'n'),
-            flag_val_short("api-url", 'a'),
-            flag_val("api-key"),
-            flag_val("openai-key"),
-            flag_val("anthropic-key"),
-            flag("skip-auth"),
-        ],
-        "forge",
-    );
-}
-
-#[test]
-fn run_flags() {
-    let cmd = get_subcommand(&root_cmd(), &["run"]);
-    assert_flags(
-        &cmd,
-        &[
-            flag_val_short("task", 't'),
-            flag_short("view", 'o'),
-            flag_val_short("api-url", 'a'),
-            flag_val("api-key"),
-            flag_val("openai-key"),
-            flag_val("anthropic-key"),
-            flag_val("gemini-key"),
-            flag("skip-auth"),
-        ],
-        "run",
+        &[flag_short("force", 'f'), flag_short("check", 'c')],
+        "update",
     );
 }
 
@@ -576,24 +496,6 @@ fn run_flags() {
 fn cache_flags() {
     let cmd = get_subcommand(&root_cmd(), &["cache"]);
     assert_flags(&cmd, &[flag_short("clean", 'c')], "cache");
-}
-
-#[test]
-fn docs_flags() {
-    let cmd = get_subcommand(&root_cmd(), &["docs"]);
-    assert_flags(&cmd, &[], "docs");
-}
-
-#[test]
-fn star_flags() {
-    let cmd = get_subcommand(&root_cmd(), &["star"]);
-    assert_flags(&cmd, &[], "star");
-}
-
-#[test]
-fn support_flags() {
-    let cmd = get_subcommand(&root_cmd(), &["support"]);
-    assert_flags(&cmd, &[], "support");
 }
 
 #[test]
@@ -620,7 +522,7 @@ fn login_has_auth_alias() {
 #[test]
 fn profile_list_flags() {
     let cmd = get_subcommand(&root_cmd(), &["profile", "list"]);
-    assert_flags(&cmd, &[flag("json")], "profile list");
+    assert_flags(&cmd, &[], "profile list");
 }
 
 #[test]

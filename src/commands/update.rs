@@ -15,22 +15,21 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     println!("Checking for updates...");
 
     let client = reqwest::Client::new();
-
-    // Check npm registry for latest version
-    let response = client
-        .get("https://registry.npmjs.org/@steel-dev/cli/latest")
-        .header("Accept", "application/json")
-        .send()
-        .await;
-
     let current_version = env!("CARGO_PKG_VERSION");
 
-    let latest_version = match response {
+    // Check GitHub releases for latest version
+    let latest_version = match client
+        .get("https://api.github.com/repos/steel-dev/cli/releases/latest")
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", format!("steel-cli/{current_version}"))
+        .send()
+        .await
+    {
         Ok(resp) if resp.status().is_success() => {
             let data: serde_json::Value = resp.json().await.unwrap_or_default();
-            data.get("version")
+            data.get("tag_name")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
+                .map(|s| s.strip_prefix('v').unwrap_or(s).to_string())
         }
         _ => None,
     };
@@ -42,36 +41,39 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     if args.check {
         if latest != current_version {
-            println!("Update available!");
-            println!("Current: v{current_version}");
-            println!("Latest: v{latest}");
-            println!("Run `steel update` to update to the latest version.");
+            println!("Update available: v{current_version} -> v{latest}");
+            println!("Run `steel update` to install.");
         } else {
-            println!("Current version: v{current_version}");
-            println!("You're already on the latest version!");
+            println!("v{current_version} (latest)");
         }
         return Ok(());
     }
 
     if latest == current_version && !args.force {
-        println!("Current version: v{current_version}");
-        println!("You're already on the latest version!");
+        println!("v{current_version} (latest)");
         return Ok(());
     }
 
-    // Update via npm
-    let status = std::process::Command::new("npm")
-        .args(["install", "-g", "@steel-dev/cli@latest"])
+    println!("Updating v{current_version} -> v{latest}...");
+
+    // Use cargo-dist installer
+    let status = std::process::Command::new("sh")
+        .args([
+            "-c",
+            "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steel-dev/cli/releases/latest/download/steel-cli-installer.sh | sh",
+        ])
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status();
 
     match status {
         Ok(s) if s.success() => {
-            println!("Updated from v{current_version} to v{latest}");
+            println!("Updated to v{latest}");
         }
         _ => {
-            anyhow::bail!("Failed to update. Try running: npm install -g @steel-dev/cli@latest");
+            anyhow::bail!(
+                "Update failed. Try manually:\n  curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steel-dev/cli/releases/latest/download/steel-cli-installer.sh | sh"
+            );
         }
     }
 

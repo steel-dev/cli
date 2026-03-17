@@ -97,7 +97,7 @@ fn scrape_help_shows_expected_flags() {
     let output = run(&["scrape", "--help"]);
     assert!(output.status.success(), "steel scrape --help should exit 0");
     let out = stdout(&output);
-    for flag in &["url", "--format", "--raw", "--delay"] {
+    for flag in &["url", "--format", "--delay"] {
         assert!(
             out.contains(flag),
             "scrape help should mention '{flag}', got: {out}"
@@ -364,7 +364,7 @@ fn browser_sessions_help_shows_expected_flags() {
         "steel browser sessions --help should exit 0"
     );
     let out = stdout(&output);
-    for flag in &["--local", "--raw"] {
+    for flag in &["--local"] {
         assert!(
             out.contains(flag),
             "browser sessions help should mention '{flag}', got: {out}"

@@ -4,6 +4,7 @@ use crate::api::client::SteelClient;
 use crate::api::top_level::{get_scrape_output_text, parse_scrape_formats};
 use crate::config::auth;
 use crate::config::settings::{ApiMode, EnvVars};
+use crate::util::output;
 use crate::util::url::resolve_tool_url;
 
 #[derive(Parser)]
@@ -11,17 +12,9 @@ pub struct Args {
     /// Target URL to scrape
     pub url: Option<String>,
 
-    /// Target URL to scrape
-    #[arg(short = 'u', long = "url")]
-    pub url_flag: Option<String>,
-
     /// Comma-separated output formats: html, readability, cleaned_html, markdown
     #[arg(long)]
     pub format: Option<String>,
-
-    /// Print full JSON response payload
-    #[arg(long)]
-    pub raw: bool,
 
     /// Delay before scraping in milliseconds
     #[arg(short, long)]
@@ -53,7 +46,7 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    let url = resolve_tool_url(args.url_flag.as_deref(), args.url.as_deref())?;
+    let url = resolve_tool_url(args.url.as_deref())?;
 
     let formats = match &args.format {
         Some(f) => parse_scrape_formats(f).map_err(|e| anyhow::anyhow!(e))?,
@@ -83,14 +76,13 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         )
         .await?;
 
-    if args.raw {
-        println!("{}", serde_json::to_string_pretty(&response)?);
-        return Ok(());
-    }
-
-    match get_scrape_output_text(&response, &formats) {
-        Some(text) => println!("{text}"),
-        None => println!("{}", serde_json::to_string_pretty(&response)?),
+    if output::is_json() {
+        output::success_data(response);
+    } else {
+        match get_scrape_output_text(&response, &formats) {
+            Some(text) => println!("{text}"),
+            None => println!("{}", serde_json::to_string_pretty(&response)?),
+        }
     }
 
     Ok(())

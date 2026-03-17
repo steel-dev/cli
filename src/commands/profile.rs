@@ -1,8 +1,10 @@
 use clap::{Parser, Subcommand};
+use serde_json::json;
 
 use crate::browser::{profile_porter, profile_store};
 use crate::config::auth;
 use crate::config::settings::{ApiMode, EnvVars};
+use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -20,11 +22,7 @@ pub enum Command {
 }
 
 #[derive(Parser)]
-pub struct ListArgs {
-    /// Output profiles as JSON
-    #[arg(long)]
-    pub json: bool,
-}
+pub struct ListArgs {}
 
 #[derive(Parser)]
 pub struct ImportArgs {
@@ -64,20 +62,20 @@ pub async fn run(command: Command) -> anyhow::Result<()> {
     }
 }
 
-async fn run_list(args: ListArgs) -> anyhow::Result<()> {
+async fn run_list(_args: ListArgs) -> anyhow::Result<()> {
     let profiles = profile_store::list_profiles()?;
 
-    if args.json {
-        let json: Vec<serde_json::Value> = profiles
+    if output::is_json() {
+        let data: Vec<serde_json::Value> = profiles
             .iter()
             .map(|p| {
-                serde_json::json!({
+                json!({
                     "name": p.name,
                     "profileId": p.profile_id,
                 })
             })
             .collect();
-        println!("{}", serde_json::to_string_pretty(&json)?);
+        output::success_data(json!(data));
         return Ok(());
     }
 
@@ -110,13 +108,12 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
     }
 
     if profile_store::delete_profile(&args.name)? {
-        println!(
-            "Deleted profile \"{}\". Note: Browser state on Steel servers is not affected.",
-            args.name
+        output::success(
+            json!({"name": args.name, "deleted": true}),
+            &format!("Deleted profile \"{}\". Note: Browser state on Steel servers is not affected.\n", args.name),
         );
     } else {
-        eprintln!("Profile \"{}\" not found.", args.name);
-        std::process::exit(1);
+        return Err(output::error(&format!("Profile \"{}\" not found.", args.name)));
     }
 
     Ok(())

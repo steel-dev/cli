@@ -1,5 +1,7 @@
 use clap::Parser;
 
+use serde_json::json;
+
 use crate::api::client::SteelClient;
 use crate::api::session::CreateSessionOptions;
 use crate::browser::lifecycle::{sanitize_connect_url, start_session};
@@ -7,6 +9,7 @@ use crate::browser::profile_store;
 use crate::config::auth;
 use crate::config::session_state::SessionStatePaths;
 use crate::config::settings::{ApiMode, EnvVars};
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {
@@ -35,11 +38,11 @@ pub struct Args {
     pub session_timeout: Option<u64>,
 
     /// Create new sessions in headless mode (create-time only)
-    #[arg(long = "session-headless")]
+    #[arg(long = "session-headless", hide = true)]
     pub session_headless: Option<bool>,
 
     /// Preferred session region (create-time only)
-    #[arg(long = "session-region")]
+    #[arg(long = "session-region", hide = true)]
     pub session_region: Option<String>,
 
     /// Enable manual CAPTCHA solving on new sessions (create-time only)
@@ -124,18 +127,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         }
     }
 
-    println!("id: {}", session.id);
-    println!("mode: {:?}", session.mode);
-    if let Some(ref name) = session.name {
-        println!("name: {name}");
-    }
-    if let Some(ref url) = session.viewer_url {
-        println!("live_url: {url}");
-    }
+    // Eagerly spawn daemon so subsequent commands are fast
     if let Some(ref url) = session.connect_url {
-        println!("connect_url: {}", sanitize_connect_url(url));
-
-        // Eagerly spawn daemon so subsequent commands are fast
         use crate::browser::daemon::process;
         if !process::socket_path(&session.id).exists() {
             if let Err(e) = process::spawn_daemon(&session.id, url) {
@@ -146,6 +139,35 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             ).await {
                 eprintln!("Warning: browser daemon did not become ready: {e}");
             }
+        }
+    }
+
+    if output::is_json() {
+        let mut data = json!({
+            "id": session.id,
+            "mode": format!("{:?}", session.mode),
+        });
+        if let Some(ref name) = session.name {
+            data["name"] = json!(name);
+        }
+        if let Some(ref url) = session.viewer_url {
+            data["liveUrl"] = json!(url);
+        }
+        if let Some(ref url) = session.connect_url {
+            data["connectUrl"] = json!(sanitize_connect_url(url));
+        }
+        output::success_data(data);
+    } else {
+        println!("id: {}", session.id);
+        println!("mode: {:?}", session.mode);
+        if let Some(ref name) = session.name {
+            println!("name: {name}");
+        }
+        if let Some(ref url) = session.viewer_url {
+            println!("live_url: {url}");
+        }
+        if let Some(ref url) = session.connect_url {
+            println!("connect_url: {}", sanitize_connect_url(url));
         }
     }
 

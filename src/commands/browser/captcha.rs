@@ -1,10 +1,12 @@
 use clap::{Parser, Subcommand};
+use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::browser::lifecycle;
 use crate::config::auth;
 use crate::config::session_state::SessionStatePaths;
 use crate::config::settings::{ApiMode, EnvVars};
+use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -36,10 +38,6 @@ pub struct SolveArgs {
     /// CAPTCHA task ID for targeted solving
     #[arg(long)]
     pub task_id: Option<String>,
-
-    /// Print full raw API payload
-    #[arg(long)]
-    pub raw: bool,
 
     /// Use local runtime
     #[arg(short, long)]
@@ -75,10 +73,6 @@ pub struct StatusArgs {
     /// Poll interval in milliseconds for --wait mode
     #[arg(long)]
     pub interval: Option<u64>,
-
-    /// Print full raw API payload
-    #[arg(long)]
-    pub raw: bool,
 
     /// Use local runtime
     #[arg(short, long)]
@@ -125,15 +119,23 @@ async fn run_solve(args: SolveArgs) -> anyhow::Result<()> {
     )
     .await?;
 
-    println!("session_id: {}", result.session_id);
-    println!("mode: {:?}", result.mode);
-    println!("success: {}", result.success);
-    if let Some(ref msg) = result.message {
-        println!("message: {msg}");
-    }
-
-    if args.raw {
-        println!("{}", serde_json::to_string_pretty(&result.raw)?);
+    if output::is_json() {
+        let mut data = json!({
+            "sessionId": result.session_id,
+            "mode": format!("{:?}", result.mode),
+            "success": result.success,
+        });
+        if let Some(ref msg) = result.message {
+            data["message"] = json!(msg);
+        }
+        output::success_data(data);
+    } else {
+        println!("session_id: {}", result.session_id);
+        println!("mode: {:?}", result.mode);
+        println!("success: {}", result.success);
+        if let Some(ref msg) = result.message {
+            println!("message: {msg}");
+        }
     }
 
     if !result.success {
@@ -163,8 +165,14 @@ async fn run_status(args: StatusArgs) -> anyhow::Result<()> {
     )
     .await?;
 
-    if args.raw {
-        println!("{}", serde_json::to_string_pretty(&result.raw)?);
+    if output::is_json() {
+        let mut data = json!({
+            "status": result.status,
+        });
+        if !result.types.is_empty() {
+            data["types"] = json!(result.types);
+        }
+        output::success_data(data);
     } else {
         let type_suffix = if result.types.is_empty() {
             String::new()

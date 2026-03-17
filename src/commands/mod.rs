@@ -3,23 +3,23 @@ pub mod cache;
 pub mod config;
 pub mod credentials;
 pub mod dev;
-pub mod docs;
-pub mod forge;
 pub mod login;
 pub mod logout;
 pub mod pdf;
 pub mod profile;
-pub mod run;
 pub mod scrape;
 pub mod screenshot;
 pub mod settings;
-pub mod star;
-pub mod support;
 pub mod update;
 
 use clap::{Parser, Subcommand, builder::styling::Styles};
 
 const LONG_HELP: &str = "\
+Quick Actions:
+Global Flags:
+  --json                                 Structured JSON output for automation
+  --no-update-check                      Skip update check
+
 Quick Actions:
   steel scrape <url>                   Scrape webpage content (markdown by default)
     --format <fmt>                       Output formats: html, readability, cleaned_html, markdown
@@ -42,7 +42,7 @@ Browser Sessions:
     --update-profile                     Save state back to profile on session end
     --namespace <ns> / --credentials     Inject stored credentials
   steel browser stop [-s <name>]       Stop a session (-a for all)
-  steel browser sessions               List active sessions
+  steel browser sessions               List active sessions (use --json for structured output)
   steel browser live [-s <name>]       Open live session viewer
 
 Browser Navigation:
@@ -150,7 +150,7 @@ Credentials:
   steel credentials delete             Delete credential
 
 Profiles:
-  steel profile list [--json]          List named browser profiles
+  steel profile list                   List named browser profiles
   steel profile import --name <n>      Import Chrome profile (--from \"Profile 1\")
   steel profile sync --name <n>        Sync profile from Chrome
   steel profile delete --name <n>      Delete a profile
@@ -163,24 +163,13 @@ Development:
     -d, --docker-check                   Only verify Docker, then exit
   steel dev stop                       Stop local runtime
 
-Projects:
-  steel forge [template]               Start a new project from template
-    -n, --name <name>                    Project name
-    --api-key / --openai-key / --anthropic-key   API keys
-  steel run [template]                 Run a Steel Cookbook automation
-    -t, --task <task>                    Task to run
-    -o, --view                           Open live session viewer
-
 Other:
   steel login                          Login to Steel (alias: auth)
   steel logout                         Logout from Steel
   steel config                         Show current configuration
   steel settings                       Display and modify settings
-  steel update [-c | -f]               Check for or install updates
+  steel update                         Update to latest version
   steel cache [-c]                     Manage CLI cache (-c to clean)
-  steel docs                           Open Steel documentation
-  steel support                        Open Steel Discord
-  steel star                           Open Steel GitHub repository
 
 Environment:
   STEEL_API_KEY                        API key for Steel (overrides login)
@@ -219,6 +208,10 @@ Examples:
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
+
+    /// Output all results as JSON (structured output for automation)
+    #[arg(long, global = true)]
+    pub json: bool,
 
     /// Skip update check
     #[arg(long, global = true)]
@@ -268,29 +261,14 @@ pub enum Command {
         command: dev::Command,
     },
 
-    /// Start a new project using the Steel CLI
-    Forge(forge::Args),
-
-    /// Run a Steel Cookbook automation
-    Run(run::Args),
-
     /// Show current configuration
     Config(config::Args),
 
-    /// Check for updates and install the latest version
+    /// Update to the latest version
     Update(update::Args),
 
     /// Manage Steel CLI cache
     Cache(cache::Args),
-
-    /// Open Steel documentation in browser
-    Docs(docs::Args),
-
-    /// Open Steel Browser GitHub repository
-    Star(star::Args),
-
-    /// Open Steel Discord server
-    Support(support::Args),
 
     /// Display and modify current settings
     Settings(settings::Args),
@@ -303,6 +281,8 @@ pub enum Command {
 }
 
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
+    crate::util::output::set_json_mode(cli.json);
+
     match cli.command {
         Command::Daemon { session_id } => {
             let cdp_url = std::env::var("STEEL_DAEMON_CDP_URL")
@@ -317,14 +297,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Logout(args) => logout::run(args).await,
         Command::Credentials { command } => credentials::run(command).await,
         Command::Dev { command } => dev::run(command).await,
-        Command::Forge(args) => forge::run(args).await,
-        Command::Run(args) => run::run(args).await,
         Command::Config(args) => config::run(args).await,
         Command::Update(args) => update::run(args).await,
         Command::Cache(args) => cache::run(args).await,
-        Command::Docs(args) => docs::run(args).await,
-        Command::Star(args) => star::run(args).await,
-        Command::Support(args) => support::run(args).await,
         Command::Settings(args) => settings::run(args).await,
         Command::Profile { command } => profile::run(command).await,
     }

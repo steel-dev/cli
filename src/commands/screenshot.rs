@@ -4,16 +4,13 @@ use crate::api::client::SteelClient;
 use crate::api::top_level::get_hosted_url;
 use crate::config::auth;
 use crate::config::settings::{ApiMode, EnvVars};
+use crate::util::output;
 use crate::util::url::resolve_tool_url;
 
 #[derive(Parser)]
 pub struct Args {
     /// Target URL to capture
     pub url: Option<String>,
-
-    /// Target URL to capture
-    #[arg(short = 'u', long = "url")]
-    pub url_flag: Option<String>,
 
     /// Delay before capturing in milliseconds
     #[arg(short, long)]
@@ -41,7 +38,7 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    let url = resolve_tool_url(args.url_flag.as_deref(), args.url.as_deref())?;
+    let url = resolve_tool_url(args.url.as_deref())?;
 
     let mode = ApiMode::resolve(args.local, args.api_url.as_deref());
     let auth = auth::resolve_auth();
@@ -64,9 +61,13 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         )
         .await?;
 
-    match get_hosted_url(&response) {
-        Some(hosted_url) => println!("{hosted_url}"),
-        None => println!("{}", serde_json::to_string_pretty(&response)?),
+    if output::is_json() {
+        output::success_data(response);
+    } else {
+        match get_hosted_url(&response) {
+            Some(hosted_url) => println!("{hosted_url}"),
+            None => println!("{}", serde_json::to_string_pretty(&response)?),
+        }
     }
 
     Ok(())

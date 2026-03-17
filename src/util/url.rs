@@ -50,14 +50,13 @@ pub fn normalize_url(input: &str) -> String {
 
 /// Resolve a URL from positional arg or --url flag.
 /// Matches TS `resolveTopLevelToolUrl()`.
-pub fn resolve_tool_url(url_flag: Option<&str>, url_arg: Option<&str>) -> anyhow::Result<String> {
-    let candidate = url_flag
-        .or(url_arg)
+pub fn resolve_tool_url(url_arg: Option<&str>) -> anyhow::Result<String> {
+    let candidate = url_arg
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "Missing URL. Provide a target URL as the first argument or with --url."
+                "Missing URL. Provide a target URL as the first argument."
             )
         })?;
 
@@ -134,25 +133,19 @@ mod tests {
 
     #[test]
     fn resolve_from_arg() {
-        let url = resolve_tool_url(None, Some("example.com")).unwrap();
+        let url = resolve_tool_url(Some("example.com")).unwrap();
         assert_eq!(url, "https://example.com");
     }
 
     #[test]
-    fn resolve_flag_takes_priority() {
-        let url = resolve_tool_url(Some("a.com"), Some("b.com")).unwrap();
-        assert_eq!(url, "https://a.com");
-    }
-
-    #[test]
     fn resolve_missing_url_error() {
-        let err = resolve_tool_url(None, None).unwrap_err();
+        let err = resolve_tool_url(None).unwrap_err();
         assert!(err.to_string().contains("Missing URL"));
     }
 
     #[test]
     fn resolve_empty_url_error() {
-        let err = resolve_tool_url(Some("  "), None).unwrap_err();
+        let err = resolve_tool_url(Some("  ")).unwrap_err();
         assert!(err.to_string().contains("Missing URL"));
     }
 }

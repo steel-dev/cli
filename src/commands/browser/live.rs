@@ -1,10 +1,12 @@
 use clap::Parser;
+use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::browser::lifecycle::get_live_url;
 use crate::config::auth;
 use crate::config::session_state::SessionStatePaths;
 use crate::config::settings::{ApiMode, EnvVars};
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {
@@ -43,7 +45,9 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     .await?;
 
     match live_url {
-        Some(url) => println!("{url}"),
+        Some(url) => {
+            output::success(json!(url), &format!("{url}\n"));
+        }
         None => {
             let msg = match args.session.as_deref() {
                 Some(name) => format!(
@@ -52,7 +56,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
                 ),
                 None => "No active live session found. Start one with `steel browser start`.".to_string(),
             };
-            anyhow::bail!("{msg}");
+            return Err(output::error(&msg));
         }
     }
 

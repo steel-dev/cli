@@ -5,6 +5,7 @@ use crate::browser::lifecycle::list_sessions;
 use crate::config::auth;
 use crate::config::session_state::SessionStatePaths;
 use crate::config::settings::{ApiMode, EnvVars};
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {
@@ -16,9 +17,6 @@ pub struct Args {
     #[arg(long)]
     pub api_url: Option<String>,
 
-    /// Include full raw API payload for each session
-    #[arg(long)]
-    pub raw: bool,
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
@@ -32,19 +30,9 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let client = SteelClient::new()?;
     let paths = SessionStatePaths::default_paths();
 
-    if args.raw {
-        // Raw mode: print full API response
-        let raw_sessions = client
-            .list_sessions(&base_url, mode, &auth)
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
-        println!("{}", serde_json::to_string_pretty(&raw_sessions)?);
-        return Ok(());
-    }
-
     let sessions = list_sessions(&client, &base_url, mode, &auth, &paths).await?;
 
-    let output: Vec<serde_json::Value> = sessions
+    let data: Vec<serde_json::Value> = sessions
         .iter()
         .map(|s| {
             let mut obj = serde_json::json!({
@@ -65,7 +53,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         })
         .collect();
 
-    println!("{}", serde_json::to_string_pretty(&output)?);
+    output::success_data(serde_json::json!(data));
 
     Ok(())
 }

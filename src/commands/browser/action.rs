@@ -17,6 +17,7 @@ use crate::browser::lifecycle::{
 use crate::config::auth;
 use crate::config::session_state::{SessionStatePaths, read_state};
 use crate::config::settings::EnvVars;
+use crate::util::output;
 
 // ── Shared arg types ────────────────────────────────────────────────
 
@@ -400,15 +401,19 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     headers,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Back => {
             client.send(DaemonCommand::Back).await?;
+            output::success_silent();
         }
         ActionCommand::Forward => {
             client.send(DaemonCommand::Forward).await?;
+            output::success_silent();
         }
         ActionCommand::Reload => {
             client.send(DaemonCommand::Reload).await?;
+            output::success_silent();
         }
 
         // --- Interactions ---
@@ -421,6 +426,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     new_tab: args.new_tab,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::DblClick(args) => {
             client
@@ -428,6 +434,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     selector: args.selector,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Fill(args) => {
             let value = args.value.join(" ");
@@ -437,6 +444,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     value,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Type(args) => {
             let text = args.text.join(" ");
@@ -448,11 +456,13 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     delay_ms: args.delay,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Press(args) => {
             client
                 .send(DaemonCommand::Press { key: args.key })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Hover(args) => {
             client
@@ -460,6 +470,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     selector: args.selector,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Focus(args) => {
             client
@@ -467,6 +478,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     selector: args.selector,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Check(args) => {
             client
@@ -474,6 +486,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     selector: args.selector,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Uncheck(args) => {
             client
@@ -481,6 +494,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     selector: args.selector,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Select(args) => {
             client
@@ -489,6 +503,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     values: args.values,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Clear(args) => {
             client
@@ -496,6 +511,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     selector: args.selector,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::SelectAll(args) => {
             client
@@ -503,6 +519,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     selector: args.selector,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::Scroll(args) => {
             let dir = args.direction.as_deref().unwrap_or("down");
@@ -521,6 +538,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     delta_y: dy,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::ScrollIntoView(args) => {
             client
@@ -528,6 +546,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     selector: args.selector,
                 })
                 .await?;
+            output::success_silent();
         }
         ActionCommand::SetValue(args) => {
             let value = args.value.join(" ");
@@ -537,6 +556,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     value,
                 })
                 .await?;
+            output::success_silent();
         }
 
         // --- Observation ---
@@ -550,7 +570,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     cursor: args.cursor,
                 })
                 .await?;
-            if let Some(s) = data.as_str() {
+            if output::is_json() {
+                output::success_data(data);
+            } else if let Some(s) = data.as_str() {
                 println!("{s}");
             }
         }
@@ -575,13 +597,21 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     screenshot_dir: None,
                 })
                 .await?;
-            let saved_path = data["path"].as_str().unwrap_or(&args.output);
-            println!("{saved_path}");
+            if output::is_json() {
+                output::success_data(data);
+            } else {
+                let saved_path = data["path"].as_str().unwrap_or(&args.output);
+                println!("{saved_path}");
+            }
         }
         ActionCommand::Eval(args) => {
             let script = args.script.join(" ");
             let data = client.send(DaemonCommand::Eval { script }).await?;
-            println!("{data}");
+            if output::is_json() {
+                output::success_data(data);
+            } else {
+                println!("{data}");
+            }
         }
         ActionCommand::Find(args) => {
             let data = client
@@ -589,7 +619,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     selector: args.selector,
                 })
                 .await?;
-            if let Some(elements) = data["elements"].as_array() {
+            if output::is_json() {
+                output::success_data(data);
+            } else if let Some(elements) = data["elements"].as_array() {
                 for el in elements {
                     let idx = el["index"].as_u64().unwrap_or(0);
                     let tag = el["tagName"].as_str().unwrap_or("");
@@ -602,7 +634,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
         }
         ActionCommand::Content => {
             let data = client.send(DaemonCommand::Content).await?;
-            if let Some(s) = data.as_str() {
+            if output::is_json() {
+                output::success_data(data);
+            } else if let Some(s) = data.as_str() {
                 println!("{s}");
             }
         }
@@ -615,7 +649,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if let Some(s) = data["text"].as_str() {
+                if output::is_json() {
+                    output::success_data(data);
+                } else if let Some(s) = data["text"].as_str() {
                     println!("{s}");
                 }
             }
@@ -625,7 +661,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if let Some(s) = data["html"].as_str() {
+                if output::is_json() {
+                    output::success_data(data);
+                } else if let Some(s) = data["html"].as_str() {
                     println!("{s}");
                 }
             }
@@ -635,7 +673,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                if let Some(s) = data["value"].as_str() {
+                if output::is_json() {
+                    output::success_data(data);
+                } else if let Some(s) = data["value"].as_str() {
                     println!("{s}");
                 }
             }
@@ -646,17 +686,25 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         attribute: args.attribute,
                     })
                     .await?;
-                println!("{}", data["value"]);
+                if output::is_json() {
+                    output::success_data(data);
+                } else {
+                    println!("{}", data["value"]);
+                }
             }
             GetCommand::Url => {
                 let data = client.send(DaemonCommand::Url).await?;
-                if let Some(s) = data.as_str() {
+                if output::is_json() {
+                    output::success_data(data);
+                } else if let Some(s) = data.as_str() {
                     println!("{s}");
                 }
             }
             GetCommand::Title => {
                 let data = client.send(DaemonCommand::Title).await?;
-                if let Some(s) = data.as_str() {
+                if output::is_json() {
+                    output::success_data(data);
+                } else if let Some(s) = data.as_str() {
                     println!("{s}");
                 }
             }
@@ -666,7 +714,11 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                println!("{}", data["count"]);
+                if output::is_json() {
+                    output::success_data(data);
+                } else {
+                    println!("{}", data["count"]);
+                }
             }
             GetCommand::Box(args) => {
                 let data = client
@@ -674,7 +726,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                println!("{data}");
+                output::success_data(data);
             }
             GetCommand::Styles(args) => {
                 let properties = if args.property.is_empty() {
@@ -688,7 +740,7 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         properties,
                     })
                     .await?;
-                println!("{data}");
+                output::success_data(data);
             }
         },
 
@@ -700,7 +752,11 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                println!("{}", data["visible"]);
+                if output::is_json() {
+                    output::success_data(data);
+                } else {
+                    println!("{}", data["visible"]);
+                }
             }
             IsCommand::Enabled(args) => {
                 let data = client
@@ -708,7 +764,11 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                println!("{}", data["enabled"]);
+                if output::is_json() {
+                    output::success_data(data);
+                } else {
+                    println!("{}", data["enabled"]);
+                }
             }
             IsCommand::Checked(args) => {
                 let data = client
@@ -716,7 +776,11 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                         selector: args.selector,
                     })
                     .await?;
-                println!("{}", data["checked"]);
+                if output::is_json() {
+                    output::success_data(data);
+                } else {
+                    println!("{}", data["checked"]);
+                }
             }
         },
 
@@ -733,7 +797,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                     load_state: args.load_state,
                 })
                 .await?;
-            if let Some(s) = data["waited"].as_str() {
+            if output::is_json() {
+                output::success_data(data);
+            } else if let Some(s) = data["waited"].as_str() {
                 println!("{s}");
             }
         }
@@ -742,7 +808,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
         ActionCommand::Tab { command } => match command {
             TabCommand::List => {
                 let data = client.send(DaemonCommand::TabList).await?;
-                if let Some(tabs) = data["tabs"].as_array() {
+                if output::is_json() {
+                    output::success_data(data);
+                } else if let Some(tabs) = data["tabs"].as_array() {
                     for tab in tabs {
                         let idx = tab["index"].as_u64().unwrap_or(0);
                         let title = tab["title"].as_str().unwrap_or("");
@@ -757,7 +825,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                 let data = client
                     .send(DaemonCommand::TabNew { url: args.url })
                     .await?;
-                if let Some(url) = data["url"].as_str() {
+                if output::is_json() {
+                    output::success_data(data);
+                } else if let Some(url) = data["url"].as_str() {
                     println!("{url}");
                 }
             }
@@ -765,7 +835,9 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                 let data = client
                     .send(DaemonCommand::TabSwitch { index: args.index })
                     .await?;
-                if let Some(url) = data["url"].as_str() {
+                if output::is_json() {
+                    output::success_data(data);
+                } else if let Some(url) = data["url"].as_str() {
                     println!("{url}");
                 }
             }
@@ -773,17 +845,20 @@ pub async fn run(action: ActionCommand) -> Result<()> {
                 client
                     .send(DaemonCommand::TabClose { index: args.index })
                     .await?;
+                output::success_silent();
             }
         },
 
         // --- Window ---
         ActionCommand::BringToFront => {
             client.send(DaemonCommand::BringToFront).await?;
+            output::success_silent();
         }
 
         // --- Session ---
         ActionCommand::Close => {
             client.send(DaemonCommand::Close).await?;
+            output::success_silent();
         }
     }
 

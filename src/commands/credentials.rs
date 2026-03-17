@@ -4,6 +4,7 @@ use serde_json::json;
 use crate::api::client::SteelClient;
 use crate::config::auth;
 use crate::config::settings::{ApiMode, EnvVars};
+use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -179,7 +180,7 @@ async fn run_list(args: ListArgs) -> anyhow::Result<()> {
         vec![data]
     };
 
-    println!("{}", serde_json::to_string_pretty(&credentials)?);
+    output::success_data(json!(credentials));
 
     Ok(())
 }
@@ -240,24 +241,28 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    println!("origin: {origin}");
-    println!("username: {username}");
-    if let Some(ref ns) = args.namespace {
-        let trimmed = ns.trim();
-        if !trimmed.is_empty() {
-            println!("namespace: {trimmed}");
+    if output::is_json() {
+        output::success_data(result);
+    } else {
+        println!("origin: {origin}");
+        println!("username: {username}");
+        if let Some(ref ns) = args.namespace {
+            let trimmed = ns.trim();
+            if !trimmed.is_empty() {
+                println!("namespace: {trimmed}");
+            }
         }
-    }
-    if let Some(ref label) = args.label {
-        let trimmed = label.trim();
-        if !trimmed.is_empty() {
-            println!("label: {trimmed}");
+        if let Some(ref label) = args.label {
+            let trimmed = label.trim();
+            if !trimmed.is_empty() {
+                println!("label: {trimmed}");
+            }
         }
+        if let Some(id) = result.get("id").and_then(|v| v.as_str()) {
+            println!("id: {id}");
+        }
+        println!("Credential created successfully.");
     }
-    if let Some(id) = result.get("id").and_then(|v| v.as_str()) {
-        println!("id: {id}");
-    }
-    println!("Credential created successfully.");
 
     Ok(())
 }
@@ -317,17 +322,21 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    println!("origin: {origin}");
-    if let Some(ref ns) = args.namespace {
-        let trimmed = ns.trim();
-        if !trimmed.is_empty() {
-            println!("namespace: {trimmed}");
+    if output::is_json() {
+        output::success_data(result);
+    } else {
+        println!("origin: {origin}");
+        if let Some(ref ns) = args.namespace {
+            let trimmed = ns.trim();
+            if !trimmed.is_empty() {
+                println!("namespace: {trimmed}");
+            }
         }
+        if let Some(id) = result.get("id").and_then(|v| v.as_str()) {
+            println!("id: {id}");
+        }
+        println!("Credential updated successfully.");
     }
-    if let Some(id) = result.get("id").and_then(|v| v.as_str()) {
-        println!("id: {id}");
-    }
-    println!("Credential updated successfully.");
 
     Ok(())
 }
@@ -356,14 +365,25 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    println!("origin: {origin}");
-    if let Some(ref ns) = args.namespace {
-        let trimmed = ns.trim();
-        if !trimmed.is_empty() {
-            println!("namespace: {trimmed}");
+    if output::is_json() {
+        let mut data = json!({"origin": origin});
+        if let Some(ref ns) = args.namespace {
+            let trimmed = ns.trim();
+            if !trimmed.is_empty() {
+                data["namespace"] = json!(trimmed);
+            }
         }
+        output::success_data(data);
+    } else {
+        println!("origin: {origin}");
+        if let Some(ref ns) = args.namespace {
+            let trimmed = ns.trim();
+            if !trimmed.is_empty() {
+                println!("namespace: {trimmed}");
+            }
+        }
+        println!("Credential deleted successfully.");
     }
-    println!("Credential deleted successfully.");
 
     Ok(())
 }

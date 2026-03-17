@@ -16,7 +16,7 @@ This package now integrates `agent-browser` directly into `steel browser`, so yo
 ## Install
 
 ```bash
-curl -LsSf https://steel.dev/install.sh | sh
+curl -LsSf https://setup.steel.dev | sh
 ```
 
 Or download directly from [GitHub Releases](https://github.com/steel-dev/cli/releases).

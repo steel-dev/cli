@@ -1,10 +1,12 @@
 use clap::Parser;
+use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::browser::lifecycle::stop_session;
 use crate::config::auth;
 use crate::config::session_state::SessionStatePaths;
 use crate::config::settings::{ApiMode, EnvVars};
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {
@@ -56,7 +58,12 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         let _ = crate::browser::daemon::process::stop_daemon(id).await;
     }
 
-    if result.stopped_session_ids.is_empty() {
+    if output::is_json() {
+        output::success_data(json!({
+            "stoppedSessionIds": result.stopped_session_ids,
+            "mode": format!("{:?}", result.mode),
+        }));
+    } else if result.stopped_session_ids.is_empty() {
         println!("No active browser sessions to stop.");
     } else if result.all {
         println!(
