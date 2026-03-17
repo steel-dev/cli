@@ -103,10 +103,46 @@ async fn dispatch(engine: &mut BrowserEngine, cmd: DaemonCommand) -> DaemonResul
     }
 }
 
-async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Result<Value> {
-    use browser_engine::native::screenshot::ScreenshotOptions;
-    use browser_engine::native::snapshot::SnapshotOptions;
+use browser_engine::native::screenshot::ScreenshotOptions;
+use browser_engine::native::snapshot::SnapshotOptions;
 
+fn build_snapshot_options(
+    interactive_only: bool,
+    selector: Option<String>,
+    compact: bool,
+    max_depth: Option<usize>,
+    cursor: bool,
+) -> SnapshotOptions {
+    SnapshotOptions {
+        selector,
+        interactive: interactive_only,
+        compact,
+        depth: max_depth,
+        cursor,
+    }
+}
+
+fn build_screenshot_options(
+    full_page: bool,
+    selector: Option<String>,
+    format: Option<String>,
+    quality: Option<i32>,
+    annotate: bool,
+    path: Option<String>,
+    screenshot_dir: Option<String>,
+) -> ScreenshotOptions {
+    ScreenshotOptions {
+        selector,
+        path,
+        full_page,
+        format: format.unwrap_or_else(|| "png".to_string()),
+        quality,
+        annotate,
+        output_dir: screenshot_dir,
+    }
+}
+
+async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Result<Value> {
     match cmd {
         DaemonCommand::Navigate {
             url,
@@ -149,13 +185,7 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
             max_depth,
             cursor,
         } => {
-            let options = SnapshotOptions {
-                selector: selector,
-                interactive: interactive_only,
-                compact,
-                depth: max_depth,
-                cursor,
-            };
+            let options = build_snapshot_options(interactive_only, selector, compact, max_depth, cursor);
             let text = engine.snapshot(options).await?;
             Ok(Value::String(text))
         }
@@ -168,15 +198,7 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
             path,
             screenshot_dir,
         } => {
-            let options = ScreenshotOptions {
-                selector,
-                path,
-                full_page,
-                format: format.unwrap_or_else(|| "png".to_string()),
-                quality,
-                annotate,
-                output_dir: screenshot_dir,
-            };
+            let options = build_screenshot_options(full_page, selector, format, quality, annotate, path, screenshot_dir);
             let result = engine.take_screenshot(options).await?;
             Ok(json!({ "path": result.path }))
         }
@@ -363,4 +385,135 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
 fn cleanup(session_id: &str) {
     let _ = std::fs::remove_file(process::socket_path(session_id));
     let _ = std::fs::remove_file(process::pid_path(session_id));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── build_snapshot_options field mapping ────────────────────────
+
+    #[test]
+    fn snapshot_options_interactive_only_maps_to_interactive() {
+        let opts = build_snapshot_options(true, None, false, None, false);
+        assert!(opts.interactive);
+    }
+
+    #[test]
+    fn snapshot_options_interactive_false() {
+        let opts = build_snapshot_options(false, None, false, None, false);
+        assert!(!opts.interactive);
+    }
+
+    #[test]
+    fn snapshot_options_max_depth_maps_to_depth() {
+        let opts = build_snapshot_options(false, None, false, Some(5), false);
+        assert_eq!(opts.depth, Some(5));
+    }
+
+    #[test]
+    fn snapshot_options_max_depth_none() {
+        let opts = build_snapshot_options(false, None, false, None, false);
+        assert_eq!(opts.depth, None);
+    }
+
+    #[test]
+    fn snapshot_options_selector_passthrough() {
+        let opts = build_snapshot_options(false, Some("div.main".into()), false, None, false);
+        assert_eq!(opts.selector.as_deref(), Some("div.main"));
+    }
+
+    #[test]
+    fn snapshot_options_compact_and_cursor() {
+        let opts = build_snapshot_options(false, None, true, None, true);
+        assert!(opts.compact);
+        assert!(opts.cursor);
+    }
+
+    #[test]
+    fn snapshot_options_all_fields() {
+        let opts = build_snapshot_options(true, Some("#app".into()), true, Some(3), true);
+        assert!(opts.interactive);
+        assert_eq!(opts.selector.as_deref(), Some("#app"));
+        assert!(opts.compact);
+        assert_eq!(opts.depth, Some(3));
+        assert!(opts.cursor);
+    }
+
+    // ── build_screenshot_options field mapping ─────────────────────
+
+    #[test]
+    fn screenshot_options_format_defaults_to_png() {
+        let opts = build_screenshot_options(false, None, None, None, false, None, None);
+        assert_eq!(opts.format, "png");
+    }
+
+    #[test]
+    fn screenshot_options_format_passthrough() {
+        let opts =
+            build_screenshot_options(false, None, Some("jpeg".into()), None, false, None, None);
+        assert_eq!(opts.format, "jpeg");
+    }
+
+    #[test]
+    fn screenshot_options_dir_maps_to_output_dir() {
+        let opts = build_screenshot_options(
+            false,
+            None,
+            None,
+            None,
+            false,
+            None,
+            Some("/tmp/shots".into()),
+        );
+        assert_eq!(opts.output_dir.as_deref(), Some("/tmp/shots"));
+    }
+
+    #[test]
+    fn screenshot_options_full_page_and_annotate() {
+        let opts = build_screenshot_options(true, None, None, None, true, None, None);
+        assert!(opts.full_page);
+        assert!(opts.annotate);
+    }
+
+    #[test]
+    fn screenshot_options_quality_passthrough() {
+        let opts = build_screenshot_options(false, None, None, Some(80), false, None, None);
+        assert_eq!(opts.quality, Some(80));
+    }
+
+    #[test]
+    fn screenshot_options_path_and_selector() {
+        let opts = build_screenshot_options(
+            false,
+            Some("canvas".into()),
+            None,
+            None,
+            false,
+            Some("/out/img.png".into()),
+            None,
+        );
+        assert_eq!(opts.selector.as_deref(), Some("canvas"));
+        assert_eq!(opts.path.as_deref(), Some("/out/img.png"));
+    }
+
+    #[test]
+    fn screenshot_options_all_fields() {
+        let opts = build_screenshot_options(
+            true,
+            Some("body".into()),
+            Some("webp".into()),
+            Some(90),
+            true,
+            Some("/tmp/shot.webp".into()),
+            Some("/tmp".into()),
+        );
+        assert!(opts.full_page);
+        assert_eq!(opts.selector.as_deref(), Some("body"));
+        assert_eq!(opts.format, "webp");
+        assert_eq!(opts.quality, Some(90));
+        assert!(opts.annotate);
+        assert_eq!(opts.path.as_deref(), Some("/tmp/shot.webp"));
+        assert_eq!(opts.output_dir.as_deref(), Some("/tmp"));
+    }
 }

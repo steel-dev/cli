@@ -371,6 +371,49 @@ pub struct TabCloseArgs {
     pub index: Option<usize>,
 }
 
+// ── Conversion helpers (pure functions, tested below) ───────────────
+
+fn parse_header_args(headers: &[String]) -> Option<HashMap<String, String>> {
+    if headers.is_empty() {
+        return None;
+    }
+    let mut map = HashMap::new();
+    for h in headers {
+        if let Some((k, v)) = h.split_once(':') {
+            map.insert(k.trim().to_string(), v.trim().to_string());
+        }
+    }
+    Some(map)
+}
+
+fn scroll_deltas(direction: Option<&str>, amount: Option<f64>) -> (f64, f64) {
+    let dir = direction.unwrap_or("down");
+    let amt = amount.unwrap_or(300.0);
+    match dir {
+        "up" => (0.0, -amt),
+        "down" => (0.0, amt),
+        "left" => (-amt, 0.0),
+        "right" => (amt, 0.0),
+        _ => (0.0, amt),
+    }
+}
+
+fn resolve_output_path(output: &str) -> Result<String> {
+    let path = std::path::Path::new(output);
+    if path.is_absolute() {
+        Ok(output.to_string())
+    } else {
+        Ok(std::env::current_dir()?
+            .join(path)
+            .to_string_lossy()
+            .to_string())
+    }
+}
+
+fn optional_vec(v: Vec<String>) -> Option<Vec<String>> {
+    if v.is_empty() { None } else { Some(v) }
+}
+
 // ── Command dispatch ────────────────────────────────────────────────
 
 pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
@@ -379,22 +422,11 @@ pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
     match action {
         // --- Navigation ---
         ActionCommand::Navigate(args) => {
-            let headers = if args.headers.is_empty() {
-                None
-            } else {
-                let mut map = HashMap::new();
-                for h in &args.headers {
-                    if let Some((k, v)) = h.split_once(':') {
-                        map.insert(k.trim().to_string(), v.trim().to_string());
-                    }
-                }
-                Some(map)
-            };
             client
                 .send(DaemonCommand::Navigate {
                     url: args.url,
                     wait_until: args.wait_until,
-                    headers,
+                    headers: parse_header_args(&args.headers),
                 })
                 .await?;
             output::success_silent();
@@ -518,15 +550,7 @@ pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
             output::success_silent();
         }
         ActionCommand::Scroll(args) => {
-            let dir = args.direction.as_deref().unwrap_or("down");
-            let amt = args.amount.unwrap_or(300.0);
-            let (dx, dy) = match dir {
-                "up" => (0.0, -amt),
-                "down" => (0.0, amt),
-                "left" => (-amt, 0.0),
-                "right" => (amt, 0.0),
-                _ => (0.0, amt),
-            };
+            let (dx, dy) = scroll_deltas(args.direction.as_deref(), args.amount);
             client
                 .send(DaemonCommand::Scroll {
                     selector: args.selector,
@@ -569,15 +593,7 @@ pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
             output::success_text(data);
         }
         ActionCommand::Screenshot(args) => {
-            let path = std::path::Path::new(&args.output);
-            let abs_path = if path.is_absolute() {
-                args.output.clone()
-            } else {
-                std::env::current_dir()?
-                    .join(path)
-                    .to_string_lossy()
-                    .to_string()
-            };
+            let abs_path = resolve_output_path(&args.output)?;
             let data = client
                 .send(DaemonCommand::Screenshot {
                     full_page: args.full_page,
@@ -685,15 +701,10 @@ pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
                 output::success_data(data);
             }
             GetCommand::Styles(args) => {
-                let properties = if args.property.is_empty() {
-                    None
-                } else {
-                    Some(args.property)
-                };
                 let data = client
                     .send(DaemonCommand::Styles {
                         selector: args.selector,
-                        properties,
+                        properties: optional_vec(args.property),
                     })
                     .await?;
                 output::success_data(data);
@@ -844,4 +855,150 @@ async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
     process::wait_for_daemon(session_id, Duration::from_secs(10)).await?;
 
     DaemonClient::connect(session_id).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── parse_header_args ──────────────────────────────────────────
+
+    #[test]
+    fn parse_headers_empty() {
+        assert!(parse_header_args(&[]).is_none());
+    }
+
+    #[test]
+    fn parse_headers_single() {
+        let headers = vec!["Content-Type: application/json".to_string()];
+        let map = parse_header_args(&headers).unwrap();
+        assert_eq!(map.len(), 1);
+        assert_eq!(map["Content-Type"], "application/json");
+    }
+
+    #[test]
+    fn parse_headers_multiple() {
+        let headers = vec![
+            "X-Custom: value1".to_string(),
+            "Authorization: Bearer token".to_string(),
+        ];
+        let map = parse_header_args(&headers).unwrap();
+        assert_eq!(map.len(), 2);
+        assert_eq!(map["X-Custom"], "value1");
+        assert_eq!(map["Authorization"], "Bearer token");
+    }
+
+    #[test]
+    fn parse_headers_trims_whitespace() {
+        let headers = vec!["  Key  :  Value  ".to_string()];
+        let map = parse_header_args(&headers).unwrap();
+        assert_eq!(map["Key"], "Value");
+    }
+
+    #[test]
+    fn parse_headers_colon_in_value() {
+        let headers = vec!["URL: https://example.com:8080/path".to_string()];
+        let map = parse_header_args(&headers).unwrap();
+        assert_eq!(map["URL"], "https://example.com:8080/path");
+    }
+
+    #[test]
+    fn parse_headers_no_colon_skipped() {
+        let headers = vec!["invalid-header".to_string(), "Valid: yes".to_string()];
+        let map = parse_header_args(&headers).unwrap();
+        assert_eq!(map.len(), 1);
+        assert_eq!(map["Valid"], "yes");
+    }
+
+    #[test]
+    fn parse_headers_all_invalid_returns_empty_map() {
+        let headers = vec!["no-colon".to_string()];
+        let map = parse_header_args(&headers).unwrap();
+        assert!(map.is_empty());
+    }
+
+    // ── scroll_deltas ──────────────────────────────────────────────
+
+    #[test]
+    fn scroll_down_default() {
+        let (dx, dy) = scroll_deltas(None, None);
+        assert_eq!(dx, 0.0);
+        assert_eq!(dy, 300.0);
+    }
+
+    #[test]
+    fn scroll_up() {
+        let (dx, dy) = scroll_deltas(Some("up"), Some(500.0));
+        assert_eq!(dx, 0.0);
+        assert_eq!(dy, -500.0);
+    }
+
+    #[test]
+    fn scroll_down_explicit() {
+        let (dx, dy) = scroll_deltas(Some("down"), Some(200.0));
+        assert_eq!(dx, 0.0);
+        assert_eq!(dy, 200.0);
+    }
+
+    #[test]
+    fn scroll_left() {
+        let (dx, dy) = scroll_deltas(Some("left"), Some(100.0));
+        assert_eq!(dx, -100.0);
+        assert_eq!(dy, 0.0);
+    }
+
+    #[test]
+    fn scroll_right() {
+        let (dx, dy) = scroll_deltas(Some("right"), Some(100.0));
+        assert_eq!(dx, 100.0);
+        assert_eq!(dy, 0.0);
+    }
+
+    #[test]
+    fn scroll_unknown_direction_defaults_down() {
+        let (dx, dy) = scroll_deltas(Some("diagonal"), Some(100.0));
+        assert_eq!(dx, 0.0);
+        assert_eq!(dy, 100.0);
+    }
+
+    #[test]
+    fn scroll_default_amount() {
+        let (_, dy) = scroll_deltas(Some("down"), None);
+        assert_eq!(dy, 300.0);
+    }
+
+    // ── resolve_output_path ────────────────────────────────────────
+
+    #[test]
+    fn resolve_absolute_path_unchanged() {
+        let result = resolve_output_path("/tmp/screenshot.png").unwrap();
+        assert_eq!(result, "/tmp/screenshot.png");
+    }
+
+    #[test]
+    fn resolve_relative_path_prepends_cwd() {
+        let result = resolve_output_path("screenshot.png").unwrap();
+        let cwd = std::env::current_dir().unwrap();
+        assert_eq!(result, cwd.join("screenshot.png").to_string_lossy());
+    }
+
+    #[test]
+    fn resolve_relative_nested_path() {
+        let result = resolve_output_path("output/shot.png").unwrap();
+        let cwd = std::env::current_dir().unwrap();
+        assert_eq!(result, cwd.join("output/shot.png").to_string_lossy());
+    }
+
+    // ── optional_vec ───────────────────────────────────────────────
+
+    #[test]
+    fn optional_vec_empty_is_none() {
+        assert!(optional_vec(vec![]).is_none());
+    }
+
+    #[test]
+    fn optional_vec_non_empty_is_some() {
+        let v = optional_vec(vec!["color".to_string()]);
+        assert_eq!(v.unwrap(), vec!["color"]);
+    }
 }
