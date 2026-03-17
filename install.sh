@@ -42,10 +42,58 @@ fi
 
 echo "Installing steel binary..."
 
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steel-dev/cli/releases/latest/download/steel-cli-installer.sh | sh
+STEEL_CLI_NO_MODIFY_PATH=1 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steel-dev/cli/releases/latest/download/steel-cli-installer.sh | STEEL_CLI_NO_MODIFY_PATH=1 sh
+
+INSTALL_DIR="$HOME/.steel/bin"
+
+_added=false
+if [ -n "${SHELL:-}" ]; then
+    case "$SHELL" in
+        */zsh)
+            _rc="$HOME/.zshrc"
+            ;;
+        */bash)
+            if [ "$(uname)" = "Darwin" ]; then
+                _rc="$HOME/.bash_profile"
+            else
+                _rc="$HOME/.bashrc"
+            fi
+            ;;
+        */fish)
+            _rc="$HOME/.config/fish/conf.d/steel.fish"
+            ;;
+        *)
+            _rc="$HOME/.profile"
+            ;;
+    esac
+
+    _line="export PATH=\"$INSTALL_DIR:\$PATH\""
+    if [ "${SHELL##*/}" = "fish" ]; then
+        _line="fish_add_path $INSTALL_DIR"
+    fi
+
+    if [ -f "$_rc" ] && grep -qF "$INSTALL_DIR" "$_rc" 2>/dev/null; then
+        _added=true
+    elif [ -n "$_rc" ]; then
+        mkdir -p "$(dirname "$_rc")"
+        echo "$_line" >> "$_rc"
+        _added=true
+    fi
+fi
 
 echo ""
-echo "Setup complete! Try it out:"
+echo "Setup complete!"
+if [ "$_added" = true ]; then
+    echo "Added $INSTALL_DIR to PATH in $_rc"
+    echo ""
+    echo "Restart your shell or run:"
+    echo "  source $_rc"
+else
+    echo "Add this to your shell config:"
+    echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+fi
+echo ""
+echo "Then try it out:"
 echo ""
 echo "  steel --help"
 echo "  steel login"
