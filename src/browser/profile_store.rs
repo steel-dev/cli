@@ -9,6 +9,8 @@ pub struct ProfileData {
     pub profile_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chrome_profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub browser: Option<String>,
 }
 
 /// Validate a profile name. Returns `Some(error_message)` if invalid.
@@ -42,8 +44,13 @@ pub fn read_profile(name: &str) -> Result<Option<ProfileData>> {
     read_profile_in(name, &profiles_dir())
 }
 
-pub fn write_profile(name: &str, profile_id: &str, chrome_profile: Option<&str>) -> Result<()> {
-    write_profile_in(name, profile_id, chrome_profile, &profiles_dir())
+pub fn write_profile(
+    name: &str,
+    profile_id: &str,
+    chrome_profile: Option<&str>,
+    browser: Option<&str>,
+) -> Result<()> {
+    write_profile_in(name, profile_id, chrome_profile, browser, &profiles_dir())
 }
 
 pub fn list_profiles() -> Result<Vec<ProfileEntry>> {
@@ -70,6 +77,7 @@ fn write_profile_in(
     name: &str,
     profile_id: &str,
     chrome_profile: Option<&str>,
+    browser: Option<&str>,
     dir: &Path,
 ) -> Result<()> {
     std::fs::create_dir_all(dir)?;
@@ -77,6 +85,7 @@ fn write_profile_in(
     let data = ProfileData {
         profile_id: profile_id.to_string(),
         chrome_profile: chrome_profile.map(|s| s.to_string()),
+        browser: browser.map(|s| s.to_string()),
     };
 
     let contents = serde_json::to_string_pretty(&data)?;
@@ -187,7 +196,7 @@ mod tests {
     fn write_read_delete_roundtrip() {
         let (_tmp, dir) = tmp_profiles_dir();
 
-        write_profile_in("test-prof", "prof_123", Some("Default"), &dir).unwrap();
+        write_profile_in("test-prof", "prof_123", Some("Default"), Some("chrome"), &dir).unwrap();
 
         let data = read_profile_in("test-prof", &dir).unwrap().unwrap();
         assert_eq!(data.profile_id, "prof_123");
@@ -226,7 +235,7 @@ mod tests {
     fn write_without_chrome_profile() {
         let (_tmp, dir) = tmp_profiles_dir();
 
-        write_profile_in("minimal", "prof_456", None, &dir).unwrap();
+        write_profile_in("minimal", "prof_456", None, None, &dir).unwrap();
         let data = read_profile_in("minimal", &dir).unwrap().unwrap();
         assert_eq!(data.profile_id, "prof_456");
         assert!(data.chrome_profile.is_none());

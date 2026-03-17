@@ -11,10 +11,10 @@ pub enum Command {
     /// List all saved Steel browser profiles
     List(ListArgs),
 
-    /// Import a local Chrome profile into Steel (macOS only)
+    /// Import a local browser profile into Steel
     Import(ImportArgs),
 
-    /// Sync a local Chrome profile to an existing Steel profile
+    /// Sync a local browser profile to an existing Steel profile
     Sync(SyncArgs),
 
     /// Delete a saved Steel browser profile
@@ -30,9 +30,13 @@ pub struct ImportArgs {
     #[arg(long)]
     pub name: String,
 
-    /// Chrome profile to import from (e.g. "Default", "Profile 1")
+    /// Browser profile directory to import from (e.g. "Default", "Profile 1")
     #[arg(long)]
     pub from: Option<String>,
+
+    /// Browser to import from (chrome, edge, brave, arc, opera, vivaldi)
+    #[arg(long)]
+    pub browser: Option<String>,
 }
 
 #[derive(Parser)]
@@ -41,9 +45,13 @@ pub struct SyncArgs {
     #[arg(long)]
     pub name: String,
 
-    /// Chrome profile to sync from (overrides stored source)
+    /// Browser profile directory to sync from (overrides stored source)
     #[arg(long)]
     pub from: Option<String>,
+
+    /// Browser to sync from (overrides stored browser)
+    #[arg(long)]
+    pub browser: Option<String>,
 }
 
 #[derive(Parser)]
@@ -134,6 +142,35 @@ fn resolve_api_base() -> String {
     mode.resolve_base_url(None, &env_vars, local_url)
 }
 
+fn resolve_browser(browser_arg: Option<&str>) -> anyhow::Result<profile_porter::BrowserId> {
+    if let Some(name) = browser_arg {
+        return profile_porter::BrowserId::from_str(name).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Unknown browser: \"{name}\". Supported: chrome, edge, brave, arc, opera, vivaldi"
+            )
+        });
+    }
+
+    // Detect installed browsers
+    let installed = profile_porter::detect_installed_browsers();
+    if installed.is_empty() {
+        anyhow::bail!("No supported browsers found.");
+    }
+    if installed.len() == 1 {
+        return Ok(installed[0]);
+    }
+
+    // Interactive selection
+    let items: Vec<String> = installed.iter().map(|b| b.display_name().to_string()).collect();
+    let selection = dialoguer::Select::new()
+        .with_prompt("Select browser")
+        .items(&items)
+        .default(0)
+        .interact()?;
+
+    Ok(installed[selection])
+}
+
 async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
     // Validate
     if let Some(err) = profile_store::validate_profile_name(&args.name) {
@@ -141,29 +178,29 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    if std::env::consts::OS != "macos" {
-        anyhow::bail!("Profile import is only supported on macOS.");
-    }
-
     let api_key = resolve_api_key()?;
     let api_base = resolve_api_base();
 
-    // Find Chrome profiles
-    let chrome_profiles = profile_porter::find_chrome_profiles();
-    if chrome_profiles.is_empty() {
-        anyhow::bail!("No Chrome profiles found.");
+    // Resolve browser
+    let browser_id = resolve_browser(args.browser.as_deref())?;
+
+    // Find profiles for selected browser
+    let profiles = profile_porter::find_browser_profiles(browser_id);
+    if profiles.is_empty() {
+        anyhow::bail!("No {} profiles found.", browser_id.display_name());
     }
 
-    // Select Chrome profile
-    let chrome_profile = if let Some(ref from) = args.from {
-        chrome_profiles
+    // Select profile
+    let selected = if let Some(ref from) = args.from {
+        profiles
             .iter()
             .find(|p| p.dir_name == *from)
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Chrome profile \"{}\" not found. Available: {}",
+                    "{} profile \"{}\" not found. Available: {}",
+                    browser_id.display_name(),
                     from,
-                    chrome_profiles
+                    profiles
                         .iter()
                         .map(|p| p.dir_name.as_str())
                         .collect::<Vec<_>>()
@@ -173,11 +210,14 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
             .clone()
     } else {
         // Interactive selection
-        if profile_porter::is_chrome_running() {
-            eprintln!("Warning: Chrome is currently running. Some data may be locked.");
+        if profile_porter::is_browser_running(browser_id) {
+            eprintln!(
+                "Warning: {} is currently running. Some data may be locked.",
+                browser_id.display_name()
+            );
         }
 
-        let items: Vec<String> = chrome_profiles
+        let items: Vec<String> = profiles
             .iter()
             .map(|p| {
                 if p.display_name != p.dir_name {
@@ -189,17 +229,22 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
             .collect();
 
         let selection = dialoguer::Select::new()
-            .with_prompt("Select Chrome profile to import")
+            .with_prompt(&format!("Select {} profile to import", browser_id.display_name()))
             .items(&items)
             .default(0)
             .interact()?;
 
-        chrome_profiles[selection].clone()
+        profiles[selection].clone()
     };
 
     // Package
-    println!("Importing {} → {}...", chrome_profile.dir_name, args.name);
-    let result = profile_porter::package_chrome_profile(&chrome_profile.dir_name, &|msg| {
+    println!(
+        "Importing {} ({}) → {}...",
+        selected.dir_name,
+        browser_id.display_name(),
+        args.name
+    );
+    let result = profile_porter::package_profile(browser_id, &selected.dir_name, &|msg| {
         println!("  {msg}");
     })?;
 
@@ -211,7 +256,12 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         profile_porter::upload_profile_to_steel(result.zip_buffer, &api_key, &api_base).await?;
 
     // Save metadata
-    profile_store::write_profile(&args.name, &profile_id, Some(&chrome_profile.dir_name))?;
+    profile_store::write_profile(
+        &args.name,
+        &profile_id,
+        Some(&selected.dir_name),
+        Some(browser_id.as_str()),
+    )?;
 
     println!();
     println!("  {}", args.name);
@@ -233,10 +283,6 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    if std::env::consts::OS != "macos" {
-        anyhow::bail!("Profile sync is only supported on macOS.");
-    }
-
     let api_key = resolve_api_key()?;
     let api_base = resolve_api_base();
 
@@ -249,31 +295,53 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         )
     })?;
 
-    // Determine Chrome source
-    let chrome_source = args
+    // Resolve browser: CLI flag → stored → default to chrome
+    let browser_id = if let Some(ref b) = args.browser {
+        profile_porter::BrowserId::from_str(b)
+            .ok_or_else(|| anyhow::anyhow!("Unknown browser: \"{b}\". Supported: chrome, edge, brave, arc, opera, vivaldi"))?
+    } else if let Some(ref stored_browser) = stored.browser {
+        profile_porter::BrowserId::from_str(stored_browser).unwrap_or(profile_porter::BrowserId::Chrome)
+    } else {
+        profile_porter::BrowserId::Chrome
+    };
+
+    // Determine profile dir source
+    let profile_source = args
         .from
         .as_deref()
         .or(stored.chrome_profile.as_deref())
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "No source Chrome profile stored. Use --from to specify one."
+                "No source browser profile stored. Use --from to specify one."
             )
         })?
         .to_string();
 
-    // Verify Chrome profile exists
-    let chrome_profiles = profile_porter::find_chrome_profiles();
-    if !chrome_profiles.iter().any(|p| p.dir_name == chrome_source) {
-        anyhow::bail!("Chrome profile \"{}\" not found.", chrome_source);
+    // Verify profile exists
+    let browser_profiles = profile_porter::find_browser_profiles(browser_id);
+    if !browser_profiles.iter().any(|p| p.dir_name == profile_source) {
+        anyhow::bail!(
+            "{} profile \"{}\" not found.",
+            browser_id.display_name(),
+            profile_source
+        );
     }
 
-    if profile_porter::is_chrome_running() {
-        eprintln!("Warning: Chrome is currently running. Some data may be locked.");
+    if profile_porter::is_browser_running(browser_id) {
+        eprintln!(
+            "Warning: {} is currently running. Some data may be locked.",
+            browser_id.display_name()
+        );
     }
 
     // Package
-    println!("Syncing {} → {}...", chrome_source, args.name);
-    let result = profile_porter::package_chrome_profile(&chrome_source, &|msg| {
+    println!(
+        "Syncing {} ({}) → {}...",
+        profile_source,
+        browser_id.display_name(),
+        args.name
+    );
+    let result = profile_porter::package_profile(browser_id, &profile_source, &|msg| {
         println!("  {msg}");
     })?;
 
@@ -289,12 +357,15 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
     )
     .await?;
 
-    // Update stored metadata if --from changed the source
-    if args.from.is_some() && args.from.as_deref() != stored.chrome_profile.as_deref() {
+    // Update stored metadata if source changed
+    let source_changed = args.from.is_some() && args.from.as_deref() != stored.chrome_profile.as_deref();
+    let browser_changed = args.browser.is_some() && args.browser.as_deref() != stored.browser.as_deref();
+    if source_changed || browser_changed {
         profile_store::write_profile(
             &args.name,
             &stored.profile_id,
-            Some(&chrome_source),
+            Some(&profile_source),
+            Some(browser_id.as_str()),
         )?;
     }
 

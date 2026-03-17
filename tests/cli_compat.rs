@@ -540,7 +540,7 @@ fn profile_import_flags() {
     let cmd = get_subcommand(&root_cmd(), &["profile", "import"]);
     assert_flags(
         &cmd,
-        &[flag_val_required("name"), flag_val("from")],
+        &[flag_val_required("name"), flag_val("from"), flag_val("browser")],
         "profile import",
     );
 }
@@ -550,7 +550,7 @@ fn profile_sync_flags() {
     let cmd = get_subcommand(&root_cmd(), &["profile", "sync"]);
     assert_flags(
         &cmd,
-        &[flag_val_required("name"), flag_val("from")],
+        &[flag_val_required("name"), flag_val("from"), flag_val("browser")],
         "profile sync",
     );
 }
