@@ -7,21 +7,27 @@ import SelectInput from 'ink-select-input';
 import zod from 'zod';
 import {option} from 'pastel';
 import {
-	findChromeProfiles,
-	isChromeRunning,
-	packageChromeProfile,
+	findBrowserProfiles,
+	detectInstalledBrowsers,
+	isBrowserRunning,
+	getBrowserDescriptor,
+	getProfileBaseDir,
+	packageProfile,
+	createKeyProvider,
 	uploadProfileToSteel,
-	type ChromeProfile,
-} from '../../utils/browser/profile-porter.js';
+	type BrowserDescriptor,
+	type BrowserId,
+	type BrowserProfile,
+} from '../../utils/browser/profile-porter/index.js';
 import {
 	validateProfileName,
 	writeSteelProfile,
 } from '../../utils/browser/lifecycle/profile-store.js';
 import {resolveBrowserAuth} from '../../utils/browser/auth.js';
 import {DEFAULT_API_PATH} from '../../utils/browser/lifecycle/constants.js';
+import * as path from 'node:path';
 
-export const description =
-	'Import a local Chrome profile into Steel (macOS only)';
+export const description = 'Import a local browser profile into Steel';
 
 export const options = zod.object({
 	name: zod.string().describe(
@@ -34,7 +40,16 @@ export const options = zod.object({
 		.describe(
 			option({
 				description:
-					'Chrome profile to import from (e.g. "Default", "Profile 1")',
+					'Browser profile to import from (e.g. "Default", "Profile 1")',
+			}),
+		)
+		.optional(),
+	browser: zod
+		.string()
+		.describe(
+			option({
+				description:
+					'Browser to import from (chrome, edge, brave, arc, opera, vivaldi)',
 			}),
 		)
 		.optional(),
@@ -46,9 +61,23 @@ type Props = {
 
 type Phase =
 	| {tag: 'checking'}
-	| {tag: 'selecting'; profiles: ChromeProfile[]; chromeRunning: boolean}
-	| {tag: 'keychain'}
-	| {tag: 'importing'; chromeProfile: ChromeProfile; step: string}
+	| {
+			tag: 'selectingBrowser';
+			browsers: BrowserDescriptor[];
+	  }
+	| {
+			tag: 'selecting';
+			browser: BrowserDescriptor;
+			profiles: BrowserProfile[];
+			browserRunning: boolean;
+	  }
+	| {tag: 'keyPrompt'; browser: BrowserDescriptor}
+	| {
+			tag: 'importing';
+			browser: BrowserDescriptor;
+			profile: BrowserProfile;
+			step: string;
+	  }
 	| {tag: 'done'; profileId: string; cookiesReencrypted: number; zipMb: string}
 	| {tag: 'error'; message: string};
 
@@ -62,14 +91,6 @@ export default function Import({options}: Props) {
 			return;
 		}
 
-		if (process.platform !== 'darwin') {
-			setPhase({
-				tag: 'error',
-				message: '`steel profile import` is currently macOS only.',
-			});
-			return;
-		}
-
 		const auth = resolveBrowserAuth(process.env);
 		if (!auth.apiKey) {
 			setPhase({
@@ -79,11 +100,46 @@ export default function Import({options}: Props) {
 			return;
 		}
 
-		const profiles = findChromeProfiles();
+		if (options.browser) {
+			let browser: BrowserDescriptor;
+			try {
+				browser = getBrowserDescriptor(options.browser as BrowserId);
+			} catch {
+				setPhase({
+					tag: 'error',
+					message: `Unknown browser "${options.browser}". Supported: chrome, edge, brave, arc, opera, vivaldi`,
+				});
+				return;
+			}
+
+			startWithBrowser(browser, auth.apiKey!);
+			return;
+		}
+
+		// Auto-detect installed browsers
+		const installed = detectInstalledBrowsers();
+		if (installed.length === 0) {
+			setPhase({
+				tag: 'error',
+				message: 'No supported Chromium browsers found.',
+			});
+			return;
+		}
+
+		if (installed.length === 1) {
+			startWithBrowser(installed[0]!, auth.apiKey!);
+			return;
+		}
+
+		setPhase({tag: 'selectingBrowser', browsers: installed});
+	}, []);
+
+	function startWithBrowser(browser: BrowserDescriptor, apiKey: string) {
+		const profiles = findBrowserProfiles(browser);
 		if (profiles.length === 0) {
 			setPhase({
 				tag: 'error',
-				message: 'No Chrome profiles found.',
+				message: `No ${browser.displayName} profiles found.`,
 			});
 			return;
 		}
@@ -93,45 +149,55 @@ export default function Import({options}: Props) {
 			if (!match) {
 				setPhase({
 					tag: 'error',
-					message: `Chrome profile "${options.from}" not found. Available: ${profiles.map(p => p.dirName).join(', ')}`,
+					message: `Profile "${options.from}" not found in ${browser.displayName}. Available: ${profiles.map(p => p.dirName).join(', ')}`,
 				});
 				return;
 			}
-
-			runImport(match, auth.apiKey!);
+			runImport(browser, match, apiKey);
 			return;
 		}
 
-		// No --from: show picker
 		setPhase({
 			tag: 'selecting',
+			browser,
 			profiles,
-			chromeRunning: isChromeRunning(),
+			browserRunning: isBrowserRunning(browser),
 		});
-	}, []);
+	}
 
-	function runImport(chromeProfile: ChromeProfile, apiKey: string) {
-		setPhase({tag: 'importing', chromeProfile, step: 'Starting...'});
+	function runImport(
+		browser: BrowserDescriptor,
+		profile: BrowserProfile,
+		apiKey: string,
+	) {
+		setPhase({tag: 'importing', browser, profile, step: 'Starting...'});
 
 		(async () => {
 			let zipBuffer: Buffer;
 			let cookiesReencrypted: number;
 			let zipMb: string;
 
+			const baseDir = getProfileBaseDir(browser);
+			if (!baseDir) {
+				setPhase({
+					tag: 'error',
+					message: `${browser.displayName} is not supported on this platform.`,
+				});
+				return;
+			}
+
 			try {
-				({zipBuffer, cookiesReencrypted} = await packageChromeProfile(
-					chromeProfile.dirName,
-					msg => {
-						setPhase({
-							tag: 'importing',
-							chromeProfile,
-							step: msg,
-						});
+				const keyProvider = createKeyProvider(browser);
+				({zipBuffer, cookiesReencrypted} = await packageProfile({
+					profileDir: path.join(baseDir, profile.dirName),
+					keyProvider,
+					onProgress: msg => {
+						setPhase({tag: 'importing', browser, profile, step: msg});
 					},
-					() => {
-						setPhase({tag: 'keychain'});
+					onKeyPrompt: () => {
+						setPhase({tag: 'keyPrompt', browser});
 					},
-				));
+				}));
 				zipMb = (zipBuffer.length / 1024 / 1024).toFixed(1);
 			} catch (error) {
 				setPhase({
@@ -143,7 +209,8 @@ export default function Import({options}: Props) {
 
 			setPhase({
 				tag: 'importing',
-				chromeProfile,
+				browser,
+				profile,
 				step: 'Uploading to Steel...',
 			});
 
@@ -166,7 +233,8 @@ export default function Import({options}: Props) {
 				options.name,
 				profileId,
 				process.env,
-				chromeProfile.dirName,
+				profile.dirName,
+				browser.id,
 			);
 
 			setPhase({tag: 'done', profileId, cookiesReencrypted, zipMb});
@@ -174,11 +242,18 @@ export default function Import({options}: Props) {
 		})();
 	}
 
-	function handleSelect(item: {value: string}) {
+	function handleBrowserSelect(item: {value: string}) {
+		if (phase.tag !== 'selectingBrowser') return;
+		const browser = phase.browsers.find(b => b.id === item.value)!;
+		const auth = resolveBrowserAuth(process.env);
+		startWithBrowser(browser, auth.apiKey!);
+	}
+
+	function handleProfileSelect(item: {value: string}) {
 		if (phase.tag !== 'selecting') return;
 		const profile = phase.profiles.find(p => p.dirName === item.value)!;
 		const auth = resolveBrowserAuth(process.env);
-		runImport(profile, auth.apiKey!);
+		runImport(phase.browser, profile, auth.apiKey!);
 	}
 
 	if (phase.tag === 'checking') {
@@ -192,6 +267,20 @@ export default function Import({options}: Props) {
 		);
 	}
 
+	if (phase.tag === 'selectingBrowser') {
+		const items = phase.browsers.map(b => ({
+			label: b.displayName,
+			value: b.id,
+		}));
+
+		return (
+			<Box flexDirection="column" gap={1}>
+				<Text bold>Select browser to import from:</Text>
+				<SelectInput items={items} onSelect={handleBrowserSelect} />
+			</Box>
+		);
+	}
+
 	if (phase.tag === 'selecting') {
 		const items = phase.profiles.map(p => ({
 			label: `${p.displayName}  ${p.dirName !== p.displayName ? `(${p.dirName})` : ''}`,
@@ -200,26 +289,36 @@ export default function Import({options}: Props) {
 
 		return (
 			<Box flexDirection="column" gap={1}>
-				{phase.chromeRunning && (
+				{phase.browserRunning && (
 					<Box>
 						<Text color="yellow">
-							⚠ Chrome is running. Close it for best results (cookie file may
-							be locked).
+							{phase.browser.displayName} is running. Close it for best results
+							(cookie file may be locked).
 						</Text>
 					</Box>
 				)}
-				<Text bold>Select Chrome profile to import:</Text>
-				<SelectInput items={items} onSelect={handleSelect} />
+				<Text bold>Select {phase.browser.displayName} profile to import:</Text>
+				<SelectInput items={items} onSelect={handleProfileSelect} />
 			</Box>
 		);
 	}
 
-	if (phase.tag === 'keychain') {
+	if (phase.tag === 'keyPrompt') {
+		if (process.platform === 'darwin') {
+			return (
+				<Box>
+					<Text color="yellow">
+						macOS will ask for your password to read {phase.browser.displayName}
+						's cookie encryption key from Keychain.
+					</Text>
+				</Box>
+			);
+		}
+
 		return (
 			<Box>
 				<Text color="yellow">
-					macOS will ask for your password to read Chrome's cookie encryption
-					key from Keychain.
+					Reading {phase.browser.displayName}'s cookie encryption key...
 				</Text>
 			</Box>
 		);
@@ -233,7 +332,7 @@ export default function Import({options}: Props) {
 				</Text>
 				<Text>
 					{' '}
-					{phase.chromeProfile.displayName} → {options.name}
+					{phase.profile.displayName} → {options.name}
 					{'  '}
 					<Text dimColor>{phase.step}</Text>
 				</Text>

@@ -1,17 +1,23 @@
 #!/usr/bin/env node
 
 import * as React from 'react';
+import * as path from 'node:path';
 import {Box, Text} from 'ink';
 import Spinner from 'ink-spinner';
 import zod from 'zod';
 import {option} from 'pastel';
 import {
-	findChromeProfiles,
-	isChromeRunning,
-	packageChromeProfile,
+	findBrowserProfiles,
+	isBrowserRunning,
+	getBrowserDescriptor,
+	getProfileBaseDir,
+	packageProfile,
+	createKeyProvider,
 	updateProfileOnSteel,
-	type ChromeProfile,
-} from '../../utils/browser/profile-porter.js';
+	type BrowserDescriptor,
+	type BrowserId,
+	type BrowserProfile,
+} from '../../utils/browser/profile-porter/index.js';
 import {
 	readSteelProfile,
 	validateProfileName,
@@ -21,7 +27,7 @@ import {resolveBrowserAuth} from '../../utils/browser/auth.js';
 import {DEFAULT_API_PATH} from '../../utils/browser/lifecycle/constants.js';
 
 export const description =
-	'Sync a local Chrome profile to an existing Steel profile';
+	'Sync a local browser profile to an existing Steel profile';
 
 export const options = zod.object({
 	name: zod.string().describe(
@@ -33,7 +39,15 @@ export const options = zod.object({
 		.string()
 		.describe(
 			option({
-				description: 'Chrome profile to sync from (overrides stored source)',
+				description: 'Browser profile to sync from (overrides stored source)',
+			}),
+		)
+		.optional(),
+	browser: zod
+		.string()
+		.describe(
+			option({
+				description: 'Browser to sync from (overrides stored browser)',
 			}),
 		)
 		.optional(),
@@ -44,8 +58,13 @@ type Props = {
 };
 
 type Phase =
-	| {tag: 'keychain'}
-	| {tag: 'syncing'; chromeProfile: ChromeProfile; step: string}
+	| {tag: 'keyPrompt'; browser: BrowserDescriptor}
+	| {
+			tag: 'syncing';
+			browser: BrowserDescriptor;
+			profile: BrowserProfile;
+			step: string;
+	  }
 	| {tag: 'done'; cookiesReencrypted: number; zipMb: string}
 	| {tag: 'error'; message: string};
 
@@ -57,14 +76,6 @@ export default function Sync({options}: Props) {
 			const nameError = validateProfileName(options.name);
 			if (nameError) {
 				setPhase({tag: 'error', message: nameError});
-				return;
-			}
-
-			if (process.platform !== 'darwin') {
-				setPhase({
-					tag: 'error',
-					message: '`steel profile sync` is currently macOS only.',
-				});
 				return;
 			}
 
@@ -86,48 +97,72 @@ export default function Sync({options}: Props) {
 				return;
 			}
 
-			const chromeProfileDirName = options.from ?? stored.chromeProfile;
-			if (!chromeProfileDirName) {
+			// Resolve browser: --browser flag > stored browser > default 'chrome'
+			const browserId = (options.browser ??
+				stored.browser ??
+				'chrome') as BrowserId;
+			let browser: BrowserDescriptor;
+			try {
+				browser = getBrowserDescriptor(browserId);
+			} catch {
 				setPhase({
 					tag: 'error',
-					message: `No source Chrome profile stored for "${options.name}". Specify one with --from.`,
+					message: `Unknown browser "${browserId}". Supported: chrome, edge, brave, arc, opera, vivaldi`,
 				});
 				return;
 			}
 
-			const allProfiles = findChromeProfiles();
-			const chromeProfile = allProfiles.find(
-				p => p.dirName === chromeProfileDirName,
-			);
-			if (!chromeProfile) {
+			const profileDirName = options.from ?? stored.chromeProfile;
+			if (!profileDirName) {
 				setPhase({
 					tag: 'error',
-					message: `Chrome profile "${chromeProfileDirName}" not found. Available: ${allProfiles.map(p => p.dirName).join(', ')}`,
+					message: `No source browser profile stored for "${options.name}". Specify one with --from.`,
 				});
 				return;
 			}
 
-			if (isChromeRunning()) {
+			const allProfiles = findBrowserProfiles(browser);
+			const profile = allProfiles.find(p => p.dirName === profileDirName);
+			if (!profile) {
+				setPhase({
+					tag: 'error',
+					message: `${browser.displayName} profile "${profileDirName}" not found. Available: ${allProfiles.map(p => p.dirName).join(', ')}`,
+				});
+				return;
+			}
+
+			if (isBrowserRunning(browser)) {
 				console.error(
-					'Warning: Chrome is running. Close it for best results (cookie file may be locked).',
+					`Warning: ${browser.displayName} is running. Close it for best results (cookie file may be locked).`,
 				);
 			}
 
-			setPhase({tag: 'syncing', chromeProfile, step: 'Starting...'});
+			const baseDir = getProfileBaseDir(browser);
+			if (!baseDir) {
+				setPhase({
+					tag: 'error',
+					message: `${browser.displayName} is not supported on this platform.`,
+				});
+				return;
+			}
+
+			setPhase({tag: 'syncing', browser, profile, step: 'Starting...'});
 
 			let zipBuffer: Buffer;
 			let cookiesReencrypted: number;
 
 			try {
-				({zipBuffer, cookiesReencrypted} = await packageChromeProfile(
-					chromeProfile.dirName,
-					msg => {
-						setPhase({tag: 'syncing', chromeProfile, step: msg});
+				const keyProvider = createKeyProvider(browser);
+				({zipBuffer, cookiesReencrypted} = await packageProfile({
+					profileDir: path.join(baseDir, profile.dirName),
+					keyProvider,
+					onProgress: msg => {
+						setPhase({tag: 'syncing', browser, profile, step: msg});
 					},
-					() => {
-						setPhase({tag: 'keychain'});
+					onKeyPrompt: () => {
+						setPhase({tag: 'keyPrompt', browser});
 					},
-				));
+				}));
 			} catch (error) {
 				setPhase({
 					tag: 'error',
@@ -138,7 +173,8 @@ export default function Sync({options}: Props) {
 
 			setPhase({
 				tag: 'syncing',
-				chromeProfile,
+				browser,
+				profile,
 				step: 'Uploading to Steel...',
 			});
 
@@ -157,12 +193,17 @@ export default function Sync({options}: Props) {
 				return;
 			}
 
-			if (options.from && options.from !== stored.chromeProfile) {
+			// Update stored profile if browser or source changed
+			if (
+				options.from !== stored.chromeProfile ||
+				browserId !== (stored.browser ?? 'chrome')
+			) {
 				await writeSteelProfile(
 					options.name,
 					stored.profileId,
 					process.env,
-					options.from,
+					options.from ?? stored.chromeProfile,
+					browserId,
 				);
 			}
 
@@ -183,12 +224,21 @@ export default function Sync({options}: Props) {
 		);
 	}
 
-	if (phase.tag === 'keychain') {
+	if (phase.tag === 'keyPrompt') {
+		if (process.platform === 'darwin') {
+			return (
+				<Box>
+					<Text color="yellow">
+						macOS will ask for your password to read {phase.browser.displayName}
+						's cookie encryption key from Keychain.
+					</Text>
+				</Box>
+			);
+		}
 		return (
 			<Box>
 				<Text color="yellow">
-					macOS will ask for your password to read Chrome's cookie encryption
-					key from Keychain.
+					Reading {phase.browser.displayName}'s cookie encryption key...
 				</Text>
 			</Box>
 		);
@@ -202,7 +252,7 @@ export default function Sync({options}: Props) {
 				</Text>
 				<Text>
 					{' '}
-					{phase.chromeProfile.displayName} → {options.name}
+					{phase.profile.displayName} → {options.name}
 					{'  '}
 					<Text dimColor>{phase.step}</Text>
 				</Text>
