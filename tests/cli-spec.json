@@ -1,0 +1,56 @@
+{
+	"_generated": "v0.3.0 CLI spec. Removed: docs, star, support, run.",
+	"commands": [
+		{
+			"name": "browser",
+			"subcommands": [
+				{
+					"name": "captcha",
+					"subcommands": [
+						{ "name": "solve" },
+						{ "name": "status" }
+					]
+				},
+				{ "name": "live" },
+				{ "name": "sessions" },
+				{ "name": "start" },
+				{ "name": "stop" }
+			]
+		},
+		{ "name": "cache" },
+		{ "name": "config" },
+		{
+			"name": "credentials",
+			"subcommands": [
+				{ "name": "create" },
+				{ "name": "delete" },
+				{ "name": "list" },
+				{ "name": "update" }
+			]
+		},
+		{
+			"name": "dev",
+			"subcommands": [
+				{ "name": "install" },
+				{ "name": "start" },
+				{ "name": "stop" }
+			]
+		},
+		{ "name": "forge" },
+		{ "name": "login" },
+		{ "name": "logout" },
+		{ "name": "pdf" },
+		{
+			"name": "profile",
+			"subcommands": [
+				{ "name": "list" },
+				{ "name": "import" },
+				{ "name": "sync" },
+				{ "name": "delete" }
+			]
+		},
+		{ "name": "scrape" },
+		{ "name": "screenshot" },
+		{ "name": "update" }
+	]
+}

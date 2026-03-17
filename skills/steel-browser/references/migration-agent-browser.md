@@ -4,24 +4,23 @@ Use this reference when users bring existing upstream scripts or habits.
 
 ## Core migration rule
 
-For most scripts, replace command prefix only:
+Replace the command prefix:
 
 - Before: `agent-browser <command> ...`
 - After: `steel browser <command> ...`
 
-Steel keeps inherited runtime command behavior and adds lifecycle controls.
+Steel keeps the same CLI interface as agent-browser and adds lifecycle controls.
 
-## Recommended migration process
+## Differences
 
-1. Ensure Steel CLI is installed and authenticated (`steel login` or `STEEL_API_KEY`).
-2. Replace command prefixes in scripts.
-3. Run smoke validation:
-   - `start`
-   - `open`
-   - `snapshot -i`
-   - `stop`
-4. Add explicit `--session <name>` for multi-step scripts.
-5. If self-hosted, set `--api-url` for deterministic endpoint selection.
+Most commands work with a direct prefix swap. These are the exceptions:
+
+| agent-browser           | steel browser              | reason              |
+| ----------------------- | -------------------------- | ------------------- |
+| `tab 2`                 | `tab switch 2`             | positional → subcmd |
+| `wait @e1`              | `wait --selector @e1`      | positional → flag   |
+| `wait 2000`             | `wait --timeout 2000`      | positional → flag   |
+| `screenshot ./page.png` | `screenshot -o ./page.png` | positional → flag   |
 
 ## Example conversion
 
@@ -31,40 +30,28 @@ agent-browser open https://example.com
 agent-browser snapshot -i
 agent-browser click @e3
 agent-browser get text @e7
+agent-browser wait --load networkidle
+agent-browser screenshot ./page.png
 
-# After
+# After — just swap the prefix (aliases handle the rest)
+steel browser start
 steel browser open https://example.com
 steel browser snapshot -i
 steel browser click @e3
 steel browser get text @e7
+steel browser wait --load networkidle
+steel browser screenshot -o ./page.png
+steel browser stop
 ```
 
-## Steel-native commands to introduce when helpful
+## Steel-only commands
 
-- `steel browser start`
-- `steel browser stop`
-- `steel browser sessions`
-- `steel browser live`
+These are Steel additions not present in agent-browser:
 
-These are helpful for explicit session lifecycle management and debugging.
+- `steel browser start` — create/attach a cloud browser session
+- `steel browser stop` — release the session
+- `steel browser sessions` — list active sessions
+- `steel browser live` — open the live session viewer
+- `steel browser captcha status/solve` — CAPTCHA management
 
-## Auth and environment differences
-
-Cloud mode:
-
-- Use `steel login` locally.
-- Use `STEEL_API_KEY` in CI/automation.
-
-Self-hosted mode:
-
-- Prefer `--api-url <url>`.
-- Alternative precedence still applies through env/config:
-  `STEEL_BROWSER_API_URL`, `STEEL_LOCAL_API_URL`, config file.
-
-## Attach behavior note
-
-If a command already provides `--cdp` or `--auto-connect`, Steel forwards passthrough without adding bootstrap attach flags. Do not combine both flags in one call.
-
-## Security note for logs
-
-`steel browser start` and `steel browser sessions` output display-safe connect URLs with sensitive values redacted. Use session `id` + environment secrets for raw credentialed URLs when needed.
+Use `steel browser --help` to see all currently available commands.

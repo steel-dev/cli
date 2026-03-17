@@ -43,7 +43,7 @@ Follow this sequence:
 1. Choose command family:
    extraction (`steel scrape`) or interaction (`steel browser`).
 2. For interactive work, start/attach a named session.
-3. Inspect page state (`snapshot -i`), then interact in small steps.
+3. Inspect page state (`snapshot`), then interact in small steps.
 4. Re-snapshot after meaningful DOM changes/navigation.
 5. Verify with `wait`, `get ...`, `snapshot`, or screenshot/PDF output.
 6. Stop sessions when done unless user asks to keep them running.
@@ -58,12 +58,11 @@ steel scrape https://example.com --format markdown,html --use-proxy
 ### Interactive playbook
 
 ```bash
-SESSION="task-$(date +%s)"
-steel browser start --session "$SESSION"
-steel browser open <url> --session "$SESSION"
-steel browser snapshot -i --session "$SESSION"
+steel browser start --session my-task
+steel browser open <url>
+steel browser snapshot
 # click/fill/wait/get/snapshot loop
-steel browser stop --session "$SESSION"
+steel browser stop
 ```
 
 ### Parallel sessions playbook
@@ -73,12 +72,12 @@ steel browser stop --session "$SESSION"
 steel browser start --session job-a
 steel browser start --session job-b
 
-# Each session runs an isolated Steel cloud browser -- commands stay independent
+# Each session runs an isolated Steel cloud browser
 steel browser open https://site-a.com --session job-a
 steel browser open https://site-b.com --session job-b
 
-steel browser snapshot -i --session job-a
-steel browser snapshot -i --session job-b
+steel browser snapshot --session job-a
+steel browser snapshot --session job-b
 
 # Clean up
 steel browser stop --session job-a
@@ -104,32 +103,32 @@ steel browser stop --all
 ### Navigation and inspection
 
 ```bash
-steel browser open <url> --session <name>
-steel browser snapshot -i --session <name>
-steel browser snapshot -c --session <name>
-steel browser get url --session <name>
-steel browser get title --session <name>
-steel browser get text <selector-or-ref> --session <name>
+steel browser open <url>
+steel browser snapshot                        # all elements (default)
+steel browser snapshot -i                     # interactive elements only
+steel browser snapshot -c                     # compact output
+steel browser get url
+steel browser get title
+steel browser get text <selector-or-ref>
 ```
 
 ### Interaction and sync
 
 ```bash
-steel browser click <selector-or-ref> --session <name>
-steel browser fill <selector-or-ref> "text" --session <name>
-steel browser press Enter --session <name>
-steel browser select <selector-or-ref> "value" --session <name>
-steel browser wait --load networkidle --session <name>
-steel browser wait <selector-or-ref> --session <name>
+steel browser click <selector-or-ref>
+steel browser fill <selector-or-ref> "text"
+steel browser press Enter
+steel browser select <selector-or-ref> "value"
+steel browser wait --load-state networkidle
+steel browser wait --selector <selector> --state visible
+steel browser wait --text "Success"
 ```
 
 ### CAPTCHA and anti-bot
 
 ```bash
-steel browser start --session <name> --stealth --proxy <proxy-url>
-# If session has auto-captcha enabled, and there's a captcha on the page, you can get the status of the solve (and wait until its finished) like so
-steel browser captcha status --wait --session <name>
-# If the session has manual solving on, you can invoke a captcha solving on the page like so
+steel browser start --session <name> --stealth
+steel browser captcha status --wait
 steel browser captcha solve --session <name>
 ```
 

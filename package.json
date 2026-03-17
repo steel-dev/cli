@@ -1,106 +1,21 @@
 {
-	"name": "@steel-dev/cli",
-	"version": "0.2.3",
-	"license": "MIT",
-	"bin": {
-		"steel": "./dist/steel.js"
-	},
-	"type": "module",
-	"engines": {
-		"node": ">=18"
-	},
-	"scripts": {
-		"prepare": "husky",
-		"clean": "rm -rf dist",
-		"build": "npm run browser:runtime:deps:check && npm run clean && tsc && npm run browser:runtime:package",
-		"dev": "tsc --watch",
-		"lint": "eslint . --ext .ts,.tsx",
-		"lint:fix": "eslint . --ext .ts,.tsx --fix",
-		"format": "prettier --check .",
-		"format:fix": "prettier --write .",
-		"browser:runtime:deps:check": "node scripts/browser-runtime-deps-check.js",
-		"browser:runtime:package": "node scripts/package-browser-runtime.js",
-		"browser:runtime:smoke": "node scripts/browser-runtime-smoke.js",
-		"browser:cloud:smoke": "node scripts/browser-cloud-smoke.js",
-		"references:sync:agent-browser": "node scripts/sync-agent-browser-commands-reference.js",
-		"docs:generate": "npm run build && node scripts/generate-docs.js",
-		"test": "npm run build && node scripts/test-integration-table.js",
-		"test:unit": "vitest run tests/unit",
-		"test:integration": "npm run build && node scripts/test-integration-table.js tests/integration",
-		"test:integration:raw": "npm run build && vitest run tests/integration",
-		"test:watch": "vitest tests/unit"
-	},
-	"files": [
-		"dist",
-		"manifest.json"
-	],
-	"dependencies": {
-		"@babel/parser": "^7.27.2",
-		"@types/better-sqlite3": "^7.6.13",
-		"better-sqlite3": "^11.10.0",
-		"fflate": "^0.8.2",
-		"figures": "^6.1.0",
-		"ink": "^5.2.1",
-		"ink-big-text": "^2.0.0",
-		"ink-form": "^2.0.1",
-		"ink-link": "^4.1.0",
-		"ink-progress-bar": "^3.0.0",
-		"ink-select-input": "^6.2.0",
-		"ink-spinner": "^5.0.0",
-		"ink-syntax-highlight": "^2.0.2",
-		"ink-task-list": "^2.0.0",
-		"ink-text-input": "^6.0.0",
-		"node-simctl": "^7.4.0",
-		"open": "^10.1.2",
-		"pastel": "^3.0.0",
-		"playwright-core": "^1.57.0",
-		"react": "^18.2.0",
-		"tar-stream": "^3.1.7",
-		"uuid": "^11.1.0",
-		"webdriverio": "^9.15.0",
-		"ws": "^8.19.0",
-		"zod": "^3.24.3"
-	},
-	"overrides": {
-		"ink-select-input": "^6.2.0"
-	},
-	"devDependencies": {
-		"@eslint/css": "^0.10.0",
-		"@eslint/js": "^9.31.0",
-		"@eslint/json": "^0.13.0",
-		"@eslint/markdown": "^7.0.0",
-		"@sindresorhus/tsconfig": "^7.0.0",
-		"@types/react": "^19.1.2",
-		"@types/uuid": "^10.0.0",
-		"@typescript-eslint/eslint-plugin": "^8.37.0",
-		"@typescript-eslint/parser": "^8.37.0",
-		"@vdemedes/prettier-config": "^2.0.1",
-		"chalk": "^5.4.1",
-		"eslint": "^9.31.0",
-		"eslint-config-prettier": "^10.1.5",
-		"eslint-config-xo-react": "^0.28.0",
-		"eslint-import-resolver-typescript": "^4.4.4",
-		"eslint-plugin-import": "^2.32.0",
-		"eslint-plugin-jsx-a11y": "^6.10.2",
-		"eslint-plugin-node": "^11.1.0",
-		"eslint-plugin-prettier": "^5.5.1",
-		"eslint-plugin-react": "^7.37.5",
-		"eslint-plugin-react-hooks": "^5.2.0",
-		"globals": "^16.3.0",
-		"husky": "^9.1.7",
-		"ink-testing-library": "^4.0.0",
-		"prettier": "^3.6.2",
-		"rimraf": "^6.0.0",
-		"typescript": "^5.8.3",
-		"typescript-eslint": "^8.37.0",
-		"vitest": "^3.2.4"
-	},
-	"xo": {
-		"extends": "xo-react",
-		"prettier": true,
-		"rules": {
-			"react/prop-types": "off"
-		}
-	},
-	"prettier": "@vdemedes/prettier-config"
+  "name": "@steel-dev/cli",
+  "version": "0.3.0",
+  "description": "Steel CLI — this package installs the native binary. See https://steel.dev for details.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "steel": "./bin/steel.js"
+  },
+  "files": [
+    "bin",
+    "scripts"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steel-dev/cli.git"
+  }
 }
