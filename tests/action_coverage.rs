@@ -8,20 +8,54 @@ use std::path::{Path, PathBuf};
 
 /// Actions we have proper Clap subcommands for.
 const COVERED: &[&str] = &[
-    "navigate", "click", "fill", "type", "press", "hover", "scroll",
-    "select", "check", "uncheck", "snapshot", "screenshot", "evaluate",
-    "gettext", "getattribute", "isvisible", "isenabled", "ischecked",
+    "navigate",
+    "click",
+    "fill",
+    "type",
+    "press",
+    "hover",
+    "scroll",
+    "select",
+    "check",
+    "uncheck",
+    "snapshot",
+    "screenshot",
+    "evaluate",
+    "gettext",
+    "getattribute",
+    "isvisible",
+    "isenabled",
+    "ischecked",
     "wait",
-    "url", "title", "back", "forward", "reload", "close",
+    "url",
+    "title",
+    "back",
+    "forward",
+    "reload",
+    "close",
     // Interactions
-    "dblclick", "focus", "clear", "selectall", "scrollintoview",
+    "dblclick",
+    "focus",
+    "clear",
+    "selectall",
+    "scrollintoview",
     // Element queries
-    "innertext", "innerhtml", "inputvalue", "setvalue",
-    "count", "boundingbox", "styles",
+    "innertext",
+    "innerhtml",
+    "inputvalue",
+    "setvalue",
+    "count",
+    "boundingbox",
+    "styles",
     // Page
-    "content", "find", "bringtofront",
+    "content",
+    "find",
+    "bringtofront",
     // Tab management
-    "tab_list", "tab_new", "tab_switch", "tab_close",
+    "tab_list",
+    "tab_new",
+    "tab_switch",
+    "tab_close",
 ];
 
 /// Actions in agent-browser that we intentionally skip (not yet wrapped).
@@ -29,63 +63,135 @@ const SKIPPED: &[&str] = &[
     // Page content
     "setcontent",
     // Interactions not yet wrapped
-    "dispatch", "highlight", "tap", "drag", "swipe", "multiselect",
+    "dispatch",
+    "highlight",
+    "tap",
+    "drag",
+    "swipe",
+    "multiselect",
     // Locators
-    "getbyrole", "getbytext", "getbylabel", "getbyplaceholder",
-    "getbyalttext", "getbytitle", "getbytestid", "nth",
+    "getbyrole",
+    "getbytext",
+    "getbylabel",
+    "getbyplaceholder",
+    "getbyalttext",
+    "getbytitle",
+    "getbytestid",
+    "nth",
     // Cookies / storage
-    "cookies_get", "cookies_set", "cookies_clear",
-    "storage_get", "storage_set", "storage_clear",
+    "cookies_get",
+    "cookies_set",
+    "cookies_clear",
+    "storage_get",
+    "storage_set",
+    "storage_clear",
     // Network
-    "headers", "offline", "console", "errors",
-    "route", "unroute", "requests", "responsebody", "credentials",
+    "headers",
+    "offline",
+    "console",
+    "errors",
+    "route",
+    "unroute",
+    "requests",
+    "responsebody",
+    "credentials",
     // Profiling / tracing
-    "trace_start", "trace_stop",
-    "profiler_start", "profiler_stop",
-    "screencast_start", "screencast_stop",
-    "video_start", "video_stop",
-    "har_start", "har_stop",
+    "trace_start",
+    "trace_stop",
+    "profiler_start",
+    "profiler_stop",
+    "screencast_start",
+    "screencast_stop",
+    "video_start",
+    "video_stop",
+    "har_start",
+    "har_stop",
     // Export / capture
     "pdf",
     // Tabs
     "window_new",
     // Browser configuration
-    "viewport", "useragent", "user_agent", "set_media", "emulatemedia",
-    "timezone", "locale", "geolocation", "permissions",
+    "viewport",
+    "useragent",
+    "user_agent",
+    "set_media",
+    "emulatemedia",
+    "timezone",
+    "locale",
+    "geolocation",
+    "permissions",
     "download",
     // Diff
-    "diff_snapshot", "diff_url", "diff_screenshot",
+    "diff_snapshot",
+    "diff_url",
+    "diff_screenshot",
     // Input
-    "mouse", "keyboard",
-    "input_mouse", "input_keyboard", "input_touch",
-    "keydown", "keyup", "inserttext",
-    "mousemove", "mousedown", "mouseup",
+    "mouse",
+    "keyboard",
+    "input_mouse",
+    "input_keyboard",
+    "input_touch",
+    "keydown",
+    "keyup",
+    "inserttext",
+    "mousemove",
+    "mousedown",
+    "mouseup",
     // Dialog / file / scripts
-    "dialog", "upload",
-    "addscript", "addinitscript", "addstyle",
-    "clipboard", "wheel", "device",
+    "dialog",
+    "upload",
+    "addscript",
+    "addinitscript",
+    "addstyle",
+    "clipboard",
+    "wheel",
+    "device",
     // Frame / eval
-    "frame", "mainframe", "evalhandle",
+    "frame",
+    "mainframe",
+    "evalhandle",
     // Wait variants
-    "waitforurl", "waitforloadstate", "waitforfunction", "waitfordownload",
+    "waitforurl",
+    "waitforloadstate",
+    "waitforfunction",
+    "waitfordownload",
     // Policy
-    "confirm", "deny",
+    "confirm",
+    "deny",
 ];
 
 /// Actions that don't apply to Steel's remote session architecture.
 const NOT_APPLICABLE: &[&str] = &[
     // Steel manages browser lifecycle via its API, not local launch
-    "launch", "cdp_url", "inspect",
+    "launch",
+    "cdp_url",
+    "inspect",
     // agent-browser's own credential/auth storage — Steel has its own
-    "credentials_set", "credentials_get", "credentials_delete", "credentials_list",
-    "auth_save", "auth_login", "auth_list", "auth_delete", "auth_show",
+    "credentials_set",
+    "credentials_get",
+    "credentials_delete",
+    "credentials_list",
+    "auth_save",
+    "auth_login",
+    "auth_list",
+    "auth_delete",
+    "auth_show",
     // agent-browser's session state management — Steel manages sessions via API
-    "state_save", "state_load", "state_list", "state_show",
-    "state_clear", "state_clean", "state_rename",
+    "state_save",
+    "state_load",
+    "state_list",
+    "state_show",
+    "state_clear",
+    "state_clean",
+    "state_rename",
     // agent-browser internals
-    "expose", "pause", "device_list",
+    "expose",
+    "pause",
+    "device_list",
     // agent-browser's recording (codegen) — not applicable to remote sessions
-    "recording_start", "recording_stop", "recording_restart",
+    "recording_start",
+    "recording_stop",
+    "recording_restart",
 ];
 
 // ── Parameter coverage per covered action ───────────────────────────
@@ -157,7 +263,16 @@ const PARAM_COVERAGE: &[ParamCoverage] = &[
     },
     ParamCoverage {
         handler: "handle_screenshot",
-        covered: &["fullPage", "annotate", "selector", "format", "quality", "path", "screenshotDir", "type"],
+        covered: &[
+            "fullPage",
+            "annotate",
+            "selector",
+            "format",
+            "quality",
+            "path",
+            "screenshotDir",
+            "type",
+        ],
         skipped: &[],
     },
     ParamCoverage {
@@ -192,7 +307,15 @@ const PARAM_COVERAGE: &[ParamCoverage] = &[
     },
     ParamCoverage {
         handler: "handle_wait",
-        covered: &["timeout", "text", "selector", "state", "url", "function", "loadState"],
+        covered: &[
+            "timeout",
+            "text",
+            "selector",
+            "state",
+            "url",
+            "function",
+            "loadState",
+        ],
         skipped: &[],
     },
     // url, title, back, forward, reload, close: no cmd params
@@ -293,7 +416,8 @@ fn action_coverage() {
     };
 
     let actual_actions = extract_action_names(&actions_path);
-    let known: BTreeSet<&str> = COVERED.iter()
+    let known: BTreeSet<&str> = COVERED
+        .iter()
         .chain(SKIPPED.iter())
         .chain(NOT_APPLICABLE.iter())
         .copied()
@@ -365,7 +489,12 @@ fn param_coverage() {
             continue;
         };
 
-        let known: BTreeSet<&str> = pc.covered.iter().chain(pc.skipped.iter()).copied().collect();
+        let known: BTreeSet<&str> = pc
+            .covered
+            .iter()
+            .chain(pc.skipped.iter())
+            .copied()
+            .collect();
 
         // New params not in our lists
         for param in actual {
@@ -554,7 +683,9 @@ fn extract_handler_params(content: &str) -> BTreeMap<String, BTreeSet<String>> {
 
 /// Parse a handler function name from a line like `async fn handle_navigate(cmd: ...`
 fn parse_handler_fn_name(line: &str) -> Option<String> {
-    let rest = line.strip_prefix("async fn ").or_else(|| line.strip_prefix("fn "))?;
+    let rest = line
+        .strip_prefix("async fn ")
+        .or_else(|| line.strip_prefix("fn "))?;
     if !rest.starts_with("handle_") {
         return None;
     }
@@ -575,8 +706,7 @@ fn normalize_cmd_chains(body: &str) -> String {
             i += 3;
             // Skip whitespace between `cmd` and `.`
             let ws_start = i;
-            while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\n' || bytes[i] == b'\t')
-            {
+            while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\n' || bytes[i] == b'\t') {
                 i += 1;
             }
             if i < bytes.len() && bytes[i] == b'.' {

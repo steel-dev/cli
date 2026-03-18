@@ -12,9 +12,7 @@ use steel_cli::api::client::SteelClient;
 use steel_cli::api::session::CreateSessionOptions;
 use steel_cli::browser::lifecycle::*;
 use steel_cli::config::auth::{Auth, AuthSource};
-use steel_cli::config::session_state::{
-    read_state, with_lock, SessionStatePaths,
-};
+use steel_cli::config::session_state::{SessionStatePaths, read_state, with_lock};
 use steel_cli::config::settings::ApiMode;
 
 // ---------------------------------------------------------------------------
@@ -76,9 +74,7 @@ async fn mock_get_session(server: &MockServer, id: &str, live: bool) {
 async fn mock_get_session_not_found(server: &MockServer, id: &str) {
     Mock::given(method("GET"))
         .and(path(format!("/sessions/{id}")))
-        .respond_with(
-            ResponseTemplate::new(404).set_body_json(json!({"message": "Not found"})),
-        )
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({"message": "Not found"})))
         .mount(server)
         .await;
 }
@@ -257,14 +253,8 @@ async fn reattaches_named_live_session() {
 
     // Active state should point to the reattached session
     let state = read_state(&paths.state_path);
-    assert_eq!(
-        state.active_session_id.as_deref(),
-        Some("existing-sess")
-    );
-    assert_eq!(
-        state.active_session_name.as_deref(),
-        Some("work")
-    );
+    assert_eq!(state.active_session_id.as_deref(), Some("existing-sess"));
+    assert_eq!(state.active_session_name.as_deref(), Some("work"));
 }
 
 // ===========================================================================
@@ -548,7 +538,10 @@ fn does_not_duplicate_api_key_if_already_present() {
     // Should keep existing key, not inject a second one
     assert!(url.contains("apiKey=existing-key"));
     let count = url.matches("apiKey").count();
-    assert_eq!(count, 1, "Expected exactly one apiKey, got {count} in: {url}");
+    assert_eq!(
+        count, 1,
+        "Expected exactly one apiKey, got {count} in: {url}"
+    );
 }
 
 // ===========================================================================
@@ -747,14 +740,8 @@ fn state_persists_across_calls() {
 
     // Second call: read state back
     let state = read_state(&paths.state_path);
-    assert_eq!(
-        state.active_session_id.as_deref(),
-        Some("sess-persist")
-    );
-    assert_eq!(
-        state.active_session_name.as_deref(),
-        Some("project-a")
-    );
+    assert_eq!(state.active_session_id.as_deref(), Some("sess-persist"));
+    assert_eq!(state.active_session_name.as_deref(), Some("project-a"));
     assert_eq!(state.active_api_mode, Some(ApiMode::Cloud));
     assert_eq!(
         state
@@ -820,14 +807,8 @@ fn cross_process_state_write_then_read() {
 
     // Simulate "process 2": read state from disk (fresh read, no in-memory carry-over)
     let fresh_state = read_state(&paths.state_path);
-    assert_eq!(
-        fresh_state.active_session_id.as_deref(),
-        Some("cross-sess")
-    );
-    assert_eq!(
-        fresh_state.active_api_mode,
-        Some(ApiMode::Local)
-    );
+    assert_eq!(fresh_state.active_session_id.as_deref(), Some("cross-sess"));
+    assert_eq!(fresh_state.active_api_mode, Some(ApiMode::Local));
     assert_eq!(
         fresh_state
             .named_sessions
@@ -1042,8 +1023,7 @@ fn to_session_summary_passes_name_through() {
         "isLive": true,
     });
     let auth = cloud_auth();
-    let summary =
-        to_session_summary(&session, ApiMode::Cloud, Some("my-session"), &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, Some("my-session"), &auth).unwrap();
     assert_eq!(summary.name.as_deref(), Some("my-session"));
 }
 

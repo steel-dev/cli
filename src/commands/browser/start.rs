@@ -88,16 +88,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         credentials: args.credentials,
     };
 
-    let session = start_session(
-        &client,
-        &base_url,
-        mode,
-        &auth,
-        &paths,
-        session,
-        &options,
-    )
-    .await?;
+    let session = start_session(&client, &base_url, mode, &auth, &paths, session, &options).await?;
 
     // Write profile mapping back if a profile was specified
     if let Some(ref profile_name) = args.profile {
@@ -117,10 +108,9 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         if !process::socket_path(&session.id).exists() {
             if let Err(e) = process::spawn_daemon(&session.id, url) {
                 eprintln!("Warning: failed to start browser daemon: {e}");
-            } else if let Err(e) = process::wait_for_daemon(
-                &session.id,
-                std::time::Duration::from_secs(10),
-            ).await {
+            } else if let Err(e) =
+                process::wait_for_daemon(&session.id, std::time::Duration::from_secs(10)).await
+            {
                 eprintln!("Warning: browser daemon did not become ready: {e}");
             }
         }

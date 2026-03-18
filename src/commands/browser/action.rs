@@ -499,9 +499,7 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
             output::success_silent();
         }
         ActionCommand::Press(args) => {
-            client
-                .send(DaemonCommand::Press { key: args.key })
-                .await?;
+            client.send(DaemonCommand::Press { key: args.key }).await?;
             output::success_silent();
         }
         ActionCommand::Hover(args) => {
@@ -785,9 +783,7 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
                 }
             }
             TabCommand::New(args) => {
-                let data = client
-                    .send(DaemonCommand::TabNew { url: args.url })
-                    .await?;
+                let data = client.send(DaemonCommand::TabNew { url: args.url }).await?;
                 output::success_field(data, "url");
             }
             TabCommand::Switch(args) => {
@@ -838,10 +834,9 @@ async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
                 )
             })?
     } else {
-        state
-            .active_session_id
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("No active browser session. Run `steel browser start` first."))?
+        state.active_session_id.as_deref().ok_or_else(|| {
+            anyhow::anyhow!("No active browser session. Run `steel browser start` first.")
+        })?
     };
 
     // Fast path: daemon already running
@@ -985,7 +980,9 @@ fn parse_rfc3339_to_epoch_ms(s: &str) -> Option<u64> {
         return None;
     };
 
-    let (date_part, time_part) = datetime_part.split_once('T').or_else(|| datetime_part.split_once('t'))?;
+    let (date_part, time_part) = datetime_part
+        .split_once('T')
+        .or_else(|| datetime_part.split_once('t'))?;
     let date_fields: Vec<&str> = date_part.split('-').collect();
     if date_fields.len() != 3 {
         return None;
@@ -1017,8 +1014,8 @@ fn parse_rfc3339_to_epoch_ms(s: &str) -> Option<u64> {
 
     // Convert to epoch using a simplified calculation
     let days = days_from_civil(year, month, day);
-    let epoch_secs = days as i64 * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64
-        - tz_offset_secs;
+    let epoch_secs =
+        days as i64 * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64 - tz_offset_secs;
 
     if epoch_secs < 0 {
         return None;

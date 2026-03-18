@@ -66,7 +66,14 @@ fn flag_val_short(long: &'static str, short: char) -> ExpectedFlag {
 
 /// Assert that a clap Command has exactly the expected visible flags.
 fn assert_flags(cmd: &Command, expected: &[ExpectedFlag], cmd_name: &str) {
-    let skip = ["help", "version", "json", "no-update-check", "local", "api-url"];
+    let skip = [
+        "help",
+        "version",
+        "json",
+        "no-update-check",
+        "local",
+        "api-url",
+    ];
 
     let actual_args: Vec<_> = cmd
         .get_arguments()
@@ -284,11 +291,7 @@ fn pdf_flags() {
 fn browser_session_flag() {
     // --session is a global flag on the browser command, propagated to all subcommands
     let cmd = get_subcommand(&root_cmd(), &["browser"]);
-    assert_flags(
-        &cmd,
-        &[flag_val("session")],
-        "browser",
-    );
+    assert_flags(&cmd, &[flag_val("session")], "browser");
 }
 
 #[test]
@@ -313,31 +316,19 @@ fn browser_start_flags() {
 #[test]
 fn browser_stop_flags() {
     let cmd = get_subcommand(&root_cmd(), &["browser", "stop"]);
-    assert_flags(
-        &cmd,
-        &[flag_short("all", 'a')],
-        "browser stop",
-    );
+    assert_flags(&cmd, &[flag_short("all", 'a')], "browser stop");
 }
 
 #[test]
 fn browser_sessions_flags() {
     let cmd = get_subcommand(&root_cmd(), &["browser", "sessions"]);
-    assert_flags(
-        &cmd,
-        &[],
-        "browser sessions",
-    );
+    assert_flags(&cmd, &[], "browser sessions");
 }
 
 #[test]
 fn browser_live_flags() {
     let cmd = get_subcommand(&root_cmd(), &["browser", "live"]);
-    assert_flags(
-        &cmd,
-        &[],
-        "browser live",
-    );
+    assert_flags(&cmd, &[], "browser live");
 }
 
 #[test]
@@ -376,10 +367,7 @@ fn credentials_list_flags() {
     let cmd = get_subcommand(&root_cmd(), &["credentials", "list"]);
     assert_flags(
         &cmd,
-        &[
-            flag_val_short("namespace", 'n'),
-            flag_val("origin"),
-        ],
+        &[flag_val_short("namespace", 'n'), flag_val("origin")],
         "credentials list",
     );
 }
@@ -423,10 +411,7 @@ fn credentials_delete_flags() {
     let cmd = get_subcommand(&root_cmd(), &["credentials", "delete"]);
     assert_flags(
         &cmd,
-        &[
-            flag_val("origin"),
-            flag_val_short("namespace", 'n'),
-        ],
+        &[flag_val("origin"), flag_val_short("namespace", 'n')],
         "credentials delete",
     );
 }
@@ -464,11 +449,7 @@ fn dev_stop_flags() {
 #[test]
 fn forge_flags() {
     let cmd = get_subcommand(&root_cmd(), &["forge"]);
-    assert_flags(
-        &cmd,
-        &[flag_val_short("name", 'n')],
-        "forge",
-    );
+    assert_flags(&cmd, &[flag_val_short("name", 'n')], "forge");
 }
 
 #[test]
@@ -513,7 +494,12 @@ fn profile_import_flags() {
     let cmd = get_subcommand(&root_cmd(), &["profile", "import"]);
     assert_flags(
         &cmd,
-        &[flag_val_required("name"), flag_val("from"), flag_val("browser")],
+        &[
+            flag_val_required("name"),
+            flag_val("from"),
+            flag_val("browser"),
+            flag("full"),
+        ],
         "profile import",
     );
 }
@@ -523,7 +509,12 @@ fn profile_sync_flags() {
     let cmd = get_subcommand(&root_cmd(), &["profile", "sync"]);
     assert_flags(
         &cmd,
-        &[flag_val_required("name"), flag_val("from"), flag_val("browser")],
+        &[
+            flag_val_required("name"),
+            flag_val("from"),
+            flag_val("browser"),
+            flag("full"),
+        ],
         "profile sync",
     );
 }

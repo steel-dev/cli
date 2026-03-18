@@ -35,6 +35,10 @@ pub struct ImportArgs {
     /// Browser to import from (chrome, edge, brave, arc, opera, vivaldi)
     #[arg(long)]
     pub browser: Option<String>,
+
+    /// Include all profile data (IndexedDB, History, Bookmarks, etc.)
+    #[arg(long)]
+    pub full: bool,
 }
 
 #[derive(Parser)]
@@ -50,6 +54,10 @@ pub struct SyncArgs {
     /// Browser to sync from (overrides stored browser)
     #[arg(long)]
     pub browser: Option<String>,
+
+    /// Include all profile data (IndexedDB, History, Bookmarks, etc.)
+    #[arg(long)]
+    pub full: bool,
 }
 
 #[derive(Parser)]
@@ -86,9 +94,7 @@ async fn run_list(_args: ListArgs) -> anyhow::Result<()> {
     }
 
     if profiles.is_empty() {
-        println!(
-            "No profiles found. Use --profile <name> with steel browser start to create one."
-        );
+        println!("No profiles found. Use --profile <name> with steel browser start to create one.");
         return Ok(());
     }
 
@@ -115,7 +121,10 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
     if profile_store::delete_profile(&args.name)? {
         output::success(
             json!({"name": args.name, "deleted": true}),
-            &format!("Deleted profile \"{}\". Note: Browser state on Steel servers is not affected.\n", args.name),
+            &format!(
+                "Deleted profile \"{}\". Note: Browser state on Steel servers is not affected.\n",
+                args.name
+            ),
         );
     } else {
         anyhow::bail!("Profile \"{}\" not found.", args.name);
@@ -126,9 +135,9 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
 
 fn resolve_api() -> anyhow::Result<(String, String)> {
     let (_, base_url, auth) = api::resolve_with_auth();
-    let api_key = auth
-        .api_key
-        .ok_or_else(|| anyhow::anyhow!("Not authenticated. Run `steel login` or set STEEL_API_KEY."))?;
+    let api_key = auth.api_key.ok_or_else(|| {
+        anyhow::anyhow!("Not authenticated. Run `steel login` or set STEEL_API_KEY.")
+    })?;
     Ok((api_key, base_url))
 }
 
@@ -151,7 +160,10 @@ fn resolve_browser(browser_arg: Option<&str>) -> anyhow::Result<profile_porter::
     }
 
     // Interactive selection
-    let items: Vec<String> = installed.iter().map(|b| b.display_name().to_string()).collect();
+    let items: Vec<String> = installed
+        .iter()
+        .map(|b| b.display_name().to_string())
+        .collect();
     let selection = dialoguer::Select::new()
         .with_prompt("Select browser")
         .items(&items)
@@ -217,7 +229,10 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
             .collect();
 
         let selection = dialoguer::Select::new()
-            .with_prompt(&format!("Select {} profile to import", browser_id.display_name()))
+            .with_prompt(&format!(
+                "Select {} profile to import",
+                browser_id.display_name()
+            ))
             .items(&items)
             .default(0)
             .interact()?;
@@ -232,9 +247,10 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         browser_id.display_name(),
         args.name
     );
-    let result = profile_porter::package_profile(browser_id, &selected.dir_name, &|msg| {
-        println!("  {msg}");
-    })?;
+    let result =
+        profile_porter::package_profile(browser_id, &selected.dir_name, args.full, &|msg| {
+            println!("  {msg}");
+        })?;
 
     let size_mb = result.zip_buffer.len() as f64 / 1024.0 / 1024.0;
 
@@ -283,10 +299,14 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
 
     // Resolve browser: CLI flag → stored → default to chrome
     let browser_id = if let Some(ref b) = args.browser {
-        profile_porter::BrowserId::from_str(b)
-            .ok_or_else(|| anyhow::anyhow!("Unknown browser: \"{b}\". Supported: chrome, edge, brave, arc, opera, vivaldi"))?
+        profile_porter::BrowserId::from_str(b).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Unknown browser: \"{b}\". Supported: chrome, edge, brave, arc, opera, vivaldi"
+            )
+        })?
     } else if let Some(ref stored_browser) = stored.browser {
-        profile_porter::BrowserId::from_str(stored_browser).unwrap_or(profile_porter::BrowserId::Chrome)
+        profile_porter::BrowserId::from_str(stored_browser)
+            .unwrap_or(profile_porter::BrowserId::Chrome)
     } else {
         profile_porter::BrowserId::Chrome
     };
@@ -297,15 +317,16 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         .as_deref()
         .or(stored.chrome_profile.as_deref())
         .ok_or_else(|| {
-            anyhow::anyhow!(
-                "No source browser profile stored. Use --from to specify one."
-            )
+            anyhow::anyhow!("No source browser profile stored. Use --from to specify one.")
         })?
         .to_string();
 
     // Verify profile exists
     let browser_profiles = profile_porter::find_browser_profiles(browser_id);
-    if !browser_profiles.iter().any(|p| p.dir_name == profile_source) {
+    if !browser_profiles
+        .iter()
+        .any(|p| p.dir_name == profile_source)
+    {
         anyhow::bail!(
             "{} profile \"{}\" not found.",
             browser_id.display_name(),
@@ -327,7 +348,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         browser_id.display_name(),
         args.name
     );
-    let result = profile_porter::package_profile(browser_id, &profile_source, &|msg| {
+    let result = profile_porter::package_profile(browser_id, &profile_source, args.full, &|msg| {
         println!("  {msg}");
     })?;
 
@@ -344,8 +365,10 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
     .await?;
 
     // Update stored metadata if source changed
-    let source_changed = args.from.is_some() && args.from.as_deref() != stored.chrome_profile.as_deref();
-    let browser_changed = args.browser.is_some() && args.browser.as_deref() != stored.browser.as_deref();
+    let source_changed =
+        args.from.is_some() && args.from.as_deref() != stored.chrome_profile.as_deref();
+    let browser_changed =
+        args.browser.is_some() && args.browser.as_deref() != stored.browser.as_deref();
     if source_changed || browser_changed {
         profile_store::write_profile(
             &args.name,

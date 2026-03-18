@@ -23,16 +23,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let client = SteelClient::new()?;
     let paths = SessionStatePaths::default_paths();
 
-    let result = stop_session(
-        &client,
-        &base_url,
-        mode,
-        &auth,
-        &paths,
-        session,
-        args.all,
-    )
-    .await?;
+    let result = stop_session(&client, &base_url, mode, &auth, &paths, session, args.all).await?;
 
     // Stop daemons for released sessions
     for id in &result.stopped_session_ids {

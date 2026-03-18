@@ -57,7 +57,10 @@ pub async fn wait_for_daemon(session_id: &str, timeout: Duration) -> Result<()> 
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
-    bail!("Browser daemon failed to start within {}s", timeout.as_secs());
+    bail!(
+        "Browser daemon failed to start within {}s",
+        timeout.as_secs()
+    );
 }
 
 /// Send a shutdown command to a running daemon and clean up files.

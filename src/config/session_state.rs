@@ -58,12 +58,7 @@ impl Default for SessionState {
 
 impl SessionState {
     /// Set the active session. Matches TS `setActiveSessionState()`.
-    pub fn set_active(
-        &mut self,
-        mode: ApiMode,
-        session_id: &str,
-        session_name: Option<&str>,
-    ) {
+    pub fn set_active(&mut self, mode: ApiMode, session_id: &str, session_name: Option<&str>) {
         self.active_api_mode = Some(mode);
         self.active_session_id = Some(session_id.to_string());
         self.active_session_name = session_name.map(|s| s.to_string());
@@ -86,11 +81,7 @@ impl SessionState {
     }
 
     /// Find a candidate session ID. Matches TS `resolveCandidateSessionId()`.
-    pub fn resolve_candidate(
-        &self,
-        mode: ApiMode,
-        session_name: Option<&str>,
-    ) -> Option<&str> {
+    pub fn resolve_candidate(&self, mode: ApiMode, session_name: Option<&str>) -> Option<&str> {
         if let Some(name) = session_name {
             return self.named_sessions.get(mode).get(name).map(|s| s.as_str());
         }
@@ -353,10 +344,7 @@ mod tests {
             .cloud
             .insert("work".into(), "sess-1".into());
 
-        assert_eq!(
-            state.resolve_name(ApiMode::Cloud, "sess-1"),
-            Some("work")
-        );
+        assert_eq!(state.resolve_name(ApiMode::Cloud, "sess-1"), Some("work"));
         assert_eq!(state.resolve_name(ApiMode::Cloud, "other"), None);
     }
 
@@ -365,10 +353,7 @@ mod tests {
         let mut state = SessionState::default();
         state.set_active(ApiMode::Cloud, "sess-1", Some("dev"));
 
-        assert_eq!(
-            state.resolve_name(ApiMode::Cloud, "sess-1"),
-            Some("dev")
-        );
+        assert_eq!(state.resolve_name(ApiMode::Cloud, "sess-1"), Some("dev"));
     }
 
     // --- Serialization ---
@@ -514,7 +499,11 @@ mod tests {
             ts.ends_with(".000Z"),
             "Timestamp should end with .000Z, got: {ts}"
         );
-        assert_eq!(ts.len(), 24, "ISO 8601 timestamp should be 24 chars, got: {ts}");
+        assert_eq!(
+            ts.len(),
+            24,
+            "ISO 8601 timestamp should be 24 chars, got: {ts}"
+        );
         assert_eq!(&ts[4..5], "-");
         assert_eq!(&ts[7..8], "-");
         assert_eq!(&ts[10..11], "T");

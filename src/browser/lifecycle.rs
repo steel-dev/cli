@@ -187,7 +187,10 @@ pub fn to_session_summary(
         status: get_session_status(session),
         connect_url,
         viewer_url: get_viewer_url(session, mode, &session_id),
-        profile_id: session.get("profileId").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        profile_id: session
+            .get("profileId")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
     })
 }
 
@@ -221,11 +224,7 @@ fn resolve_target_session(
     if let Some(name) = session_name {
         let name = name.trim();
         if !name.is_empty() {
-            let session_id = state
-                .named_sessions
-                .get(mode)
-                .get(name)
-                .cloned();
+            let session_id = state.named_sessions.get(mode).get(name).cloned();
             return (session_id, Some(name.to_string()));
         }
     }
@@ -333,7 +332,10 @@ pub async fn start_session(
             }
 
             if let Some(name) = session_name {
-                state.named_sessions.get_mut(mode).insert(name.to_string(), created_id.clone());
+                state
+                    .named_sessions
+                    .get_mut(mode)
+                    .insert(name.to_string(), created_id.clone());
             }
             state.set_active(mode, &created_id, session_name);
             true
@@ -506,7 +508,10 @@ pub async fn solve_captcha(
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    let success = raw.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+    let success = raw
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let message = raw
         .get("message")
         .and_then(|v| v.as_str())
@@ -579,12 +584,7 @@ pub async fn captcha_status(
     }
 }
 
-const KNOWN_CAPTCHA_TYPES: &[&str] = &[
-    "recaptchaV2",
-    "recaptchaV3",
-    "turnstile",
-    "image_to_text",
-];
+const KNOWN_CAPTCHA_TYPES: &[&str] = &["recaptchaV2", "recaptchaV3", "turnstile", "image_to_text"];
 
 fn normalize_captcha_status(pages: &[Value]) -> (String, Vec<String>) {
     if pages.is_empty() {
@@ -808,5 +808,4 @@ mod tests {
         assert_eq!(status, "failed");
         assert_eq!(types, vec!["turnstile"]);
     }
-
 }

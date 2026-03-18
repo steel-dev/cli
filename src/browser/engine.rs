@@ -182,14 +182,23 @@ impl BrowserEngine {
     ) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
         interaction::type_text(
-            client, session_id, &self.ref_map, selector, text, clear, delay_ms,
+            client,
+            session_id,
+            &self.ref_map,
+            selector,
+            text,
+            clear,
+            delay_ms,
         )
         .await
         .map_err(|e| anyhow::anyhow!(e))
     }
 
     /// Take a screenshot.
-    pub async fn take_screenshot(&mut self, options: ScreenshotOptions) -> Result<ScreenshotResult> {
+    pub async fn take_screenshot(
+        &mut self,
+        options: ScreenshotOptions,
+    ) -> Result<ScreenshotResult> {
         let client = &*self.manager.client;
         let session_id = self
             .manager
@@ -218,16 +227,18 @@ impl BrowserEngine {
     }
 
     /// Scroll the page or a specific element.
-    pub async fn scroll(
-        &self,
-        selector: Option<&str>,
-        delta_x: f64,
-        delta_y: f64,
-    ) -> Result<()> {
+    pub async fn scroll(&self, selector: Option<&str>, delta_x: f64, delta_y: f64) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::scroll(client, session_id, &self.ref_map, selector, delta_x, delta_y)
-            .await
-            .map_err(|e| anyhow::anyhow!(e))
+        interaction::scroll(
+            client,
+            session_id,
+            &self.ref_map,
+            selector,
+            delta_x,
+            delta_y,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e))
     }
 
     /// Select dropdown option(s).
@@ -316,10 +327,7 @@ impl BrowserEngine {
 
     /// Get current page URL.
     pub async fn url(&self) -> Result<String> {
-        self.manager
-            .get_url()
-            .await
-            .map_err(|e| anyhow::anyhow!(e))
+        self.manager.get_url().await.map_err(|e| anyhow::anyhow!(e))
     }
 
     /// Get current page title.
@@ -333,10 +341,7 @@ impl BrowserEngine {
     /// Close the browser.
     pub async fn close(&mut self) -> Result<()> {
         self.ref_map.clear();
-        self.manager
-            .close()
-            .await
-            .map_err(|e| anyhow::anyhow!(e))
+        self.manager.close().await.map_err(|e| anyhow::anyhow!(e))
     }
 
     /// Wait for a condition to be met.
@@ -422,8 +427,7 @@ impl BrowserEngine {
 
     /// Poll a JS expression until it returns true.
     async fn poll_until_true(&self, expression: &str, timeout_ms: u64) -> Result<()> {
-        let deadline =
-            tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
+        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
         loop {
             let result = self.evaluate(expression).await?;
             if result.as_bool().unwrap_or(false) {

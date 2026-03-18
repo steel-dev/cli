@@ -200,7 +200,14 @@ mod tests {
         };
 
         let result = client
-            .request("http://localhost", ApiMode::Cloud, reqwest::Method::GET, "/test", None, &auth)
+            .request(
+                "http://localhost",
+                ApiMode::Cloud,
+                reqwest::Method::GET,
+                "/test",
+                None,
+                &auth,
+            )
             .await;
 
         assert!(matches!(result, Err(ApiError::MissingAuth)));

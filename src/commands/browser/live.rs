@@ -15,15 +15,7 @@ pub async fn run(_args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let client = SteelClient::new()?;
     let paths = SessionStatePaths::default_paths();
 
-    let live_url = get_live_url(
-        &client,
-        &base_url,
-        mode,
-        &auth,
-        &paths,
-        session,
-    )
-    .await?;
+    let live_url = get_live_url(&client, &base_url, mode, &auth, &paths, session).await?;
 
     match live_url {
         Some(url) => {
@@ -35,7 +27,8 @@ pub async fn run(_args: Args, session: Option<&str>) -> anyhow::Result<()> {
                     "No live session found for \"{name}\". \
                      Start one with `steel browser start --session {name}`."
                 ),
-                None => "No active live session found. Start one with `steel browser start`.".to_string(),
+                None => "No active live session found. Start one with `steel browser start`."
+                    .to_string(),
             };
             anyhow::bail!("{msg}");
         }

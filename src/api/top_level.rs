@@ -114,8 +114,15 @@ impl SteelClient {
             obj.insert("region".into(), json!(r));
         }
 
-        self.request(base_url, mode, reqwest::Method::POST, "/scrape", Some(body), auth)
-            .await
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::POST,
+            "/scrape",
+            Some(body),
+            auth,
+        )
+        .await
     }
 
     pub async fn screenshot(
@@ -145,8 +152,15 @@ impl SteelClient {
             obj.insert("region".into(), json!(r));
         }
 
-        self.request(base_url, mode, reqwest::Method::POST, "/screenshot", Some(body), auth)
-            .await
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::POST,
+            "/screenshot",
+            Some(body),
+            auth,
+        )
+        .await
     }
 
     pub async fn pdf(
@@ -172,8 +186,15 @@ impl SteelClient {
             obj.insert("region".into(), json!(r));
         }
 
-        self.request(base_url, mode, reqwest::Method::POST, "/pdf", Some(body), auth)
-            .await
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::POST,
+            "/pdf",
+            Some(body),
+            auth,
+        )
+        .await
     }
 }
 
@@ -224,8 +245,7 @@ mod tests {
             }
         });
 
-        let text =
-            get_scrape_output_text(&data, &["html".into()]).unwrap();
+        let text = get_scrape_output_text(&data, &["html".into()]).unwrap();
         assert_eq!(text, "<h1>Hello</h1>");
     }
 
@@ -290,9 +310,9 @@ mod tests {
 
     // --- Integration tests with wiremock ---
 
-    use wiremock::{Mock, MockServer, ResponseTemplate};
-    use wiremock::matchers::{method, path};
     use crate::config::auth::AuthSource;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn test_auth() -> Auth {
         Auth {
@@ -349,7 +369,16 @@ mod tests {
 
         let client = SteelClient::new().unwrap();
         let data = client
-            .screenshot(&server.uri(), ApiMode::Local, &test_auth(), "https://example.com", None, false, false, None)
+            .screenshot(
+                &server.uri(),
+                ApiMode::Local,
+                &test_auth(),
+                "https://example.com",
+                None,
+                false,
+                false,
+                None,
+            )
             .await
             .unwrap();
 
@@ -374,7 +403,15 @@ mod tests {
 
         let client = SteelClient::new().unwrap();
         let data = client
-            .pdf(&server.uri(), ApiMode::Local, &test_auth(), "https://example.com", None, false, None)
+            .pdf(
+                &server.uri(),
+                ApiMode::Local,
+                &test_auth(),
+                "https://example.com",
+                None,
+                false,
+                None,
+            )
             .await
             .unwrap();
 

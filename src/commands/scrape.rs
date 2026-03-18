@@ -2,8 +2,8 @@ use clap::Parser;
 
 use crate::api::client::SteelClient;
 use crate::api::top_level::{get_scrape_output_text, parse_scrape_formats};
-use crate::util::{api, output};
 use crate::util::url::resolve_tool_url;
+use crate::util::{api, output};
 
 #[derive(Parser)]
 pub struct Args {

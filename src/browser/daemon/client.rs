@@ -16,9 +16,9 @@ pub struct DaemonClient {
 impl DaemonClient {
     pub async fn connect(session_id: &str) -> Result<Self> {
         let sock = process::socket_path(session_id);
-        let stream = UnixStream::connect(&sock)
-            .await
-            .map_err(|_| anyhow::anyhow!("Cannot connect to browser daemon. Is a session running?"))?;
+        let stream = UnixStream::connect(&sock).await.map_err(|_| {
+            anyhow::anyhow!("Cannot connect to browser daemon. Is a session running?")
+        })?;
         let (read_half, write_half) = tokio::io::split(stream);
         Ok(Self {
             reader: BufReader::new(read_half),

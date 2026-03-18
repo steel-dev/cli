@@ -58,10 +58,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let example = if let Some(ref template_arg) = args.template {
         cli_examples
             .iter()
-            .find(|e| {
-                e.slug == *template_arg
-                    || e.shorthand.as_deref() == Some(template_arg)
-            })
+            .find(|e| e.slug == *template_arg || e.shorthand.as_deref() == Some(template_arg))
             .copied()
             .ok_or_else(|| anyhow::anyhow!("Template not found: {template_arg}"))?
     } else {
@@ -139,7 +136,11 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         anyhow::bail!("Failed to extract template archive.");
     }
 
-    println!("Project '{}' created at {}", project_name, target_dir.display());
+    println!(
+        "Project '{}' created at {}",
+        project_name,
+        target_dir.display()
+    );
     println!("\nNext steps:");
     println!("  cd {project_name}");
 

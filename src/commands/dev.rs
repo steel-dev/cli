@@ -62,10 +62,7 @@ pub async fn run(command: Command) -> anyhow::Result<()> {
 }
 
 fn run_install(args: InstallArgs) -> anyhow::Result<()> {
-    let repo_url = args
-        .repo_url
-        .as_deref()
-        .unwrap_or(config::REPO_URL);
+    let repo_url = args.repo_url.as_deref().unwrap_or(config::REPO_URL);
     let path = repo_path();
 
     if path.exists() {
@@ -107,9 +104,7 @@ fn run_start(args: StartArgs) -> anyhow::Result<()> {
 
     let path = repo_path();
     if !path.exists() {
-        anyhow::bail!(
-            "Local Steel Browser runtime not installed. Run `steel dev install` first."
-        );
+        anyhow::bail!("Local Steel Browser runtime not installed. Run `steel dev install` first.");
     }
 
     let port = args.port.unwrap_or(3000);
@@ -139,9 +134,7 @@ fn run_start(args: StartArgs) -> anyhow::Result<()> {
 fn run_stop(args: StopArgs) -> anyhow::Result<()> {
     let path = repo_path();
     if !path.exists() {
-        anyhow::bail!(
-            "Local Steel Browser runtime not installed. Run `steel dev install` first."
-        );
+        anyhow::bail!("Local Steel Browser runtime not installed. Run `steel dev install` first.");
     }
 
     let mut cmd = ProcessCommand::new("docker");

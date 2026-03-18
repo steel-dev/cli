@@ -8,7 +8,6 @@ use crate::util::{api, output};
 #[derive(Parser)]
 pub struct Args {}
 
-
 pub async fn run(_args: Args) -> anyhow::Result<()> {
     let (mode, base_url, auth) = api::resolve_with_auth();
 
@@ -44,7 +43,12 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         println!("No active browser sessions.");
     } else {
         // Human-readable table
-        let max_id = sessions.iter().map(|s| s.id.len()).max().unwrap_or(2).max(2);
+        let max_id = sessions
+            .iter()
+            .map(|s| s.id.len())
+            .max()
+            .unwrap_or(2)
+            .max(2);
         let max_name = sessions
             .iter()
             .filter_map(|s| s.name.as_ref())
@@ -58,7 +62,10 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         );
         for s in &sessions {
             let name = s.name.as_deref().unwrap_or("-");
-            let status = s.status.as_deref().unwrap_or(if s.live { "live" } else { "-" });
+            let status = s
+                .status
+                .as_deref()
+                .unwrap_or(if s.live { "live" } else { "-" });
             println!(
                 "{:<max_id$}  {:<max_name$}  {:<6}  {status}",
                 s.id, name, s.mode

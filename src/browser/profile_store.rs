@@ -196,7 +196,14 @@ mod tests {
     fn write_read_delete_roundtrip() {
         let (_tmp, dir) = tmp_profiles_dir();
 
-        write_profile_in("test-prof", "prof_123", Some("Default"), Some("chrome"), &dir).unwrap();
+        write_profile_in(
+            "test-prof",
+            "prof_123",
+            Some("Default"),
+            Some("chrome"),
+            &dir,
+        )
+        .unwrap();
 
         let data = read_profile_in("test-prof", &dir).unwrap().unwrap();
         assert_eq!(data.profile_id, "prof_123");
