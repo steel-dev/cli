@@ -13,6 +13,10 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
 
     let mut sessions: Vec<SessionInfo> = Vec::new();
     for name in &names {
+        // Fast path: skip sockets whose daemon process is already dead
+        if process::cleanup_if_dead(name) {
+            continue;
+        }
         match DaemonClient::connect(name).await {
             Ok(mut client) => {
                 if let Ok(data) = client.send(DaemonCommand::GetSessionInfo).await {
@@ -22,7 +26,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
                 }
             }
             Err(_) => {
-                // Stale socket — clean up
+                // Socket exists but connection failed — clean up
                 process::cleanup_stale(name);
             }
         }

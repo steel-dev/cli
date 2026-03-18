@@ -813,10 +813,17 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
 
 async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
     let name = session_name.unwrap_or("default");
+    // connect() already cleans up stale sockets via cleanup_if_dead()
     DaemonClient::connect(name).await.map_err(|_| {
-        anyhow::anyhow!(
-            "No running session \"{name}\". Start one with: steel browser start --session {name}"
-        )
+        if name == "default" {
+            anyhow::anyhow!(
+                "No active browser session. Start one with: steel browser start"
+            )
+        } else {
+            anyhow::anyhow!(
+                "No running session \"{name}\". Start one with: steel browser start --session {name}"
+            )
+        }
     })
 }
 

@@ -381,6 +381,8 @@ fn session_info_json_roundtrip() {
         connect_url: Some("wss://connect.steel.dev?sessionId=sess-123".to_string()),
         viewer_url: Some("https://app.steel.dev/sessions/sess-123".to_string()),
         profile_id: Some("prof-1".to_string()),
+        timeout_ms: Some(300_000),
+        created_at_ms: Some(1_700_000_000_000),
     };
 
     let json_str = serde_json::to_string(&info).unwrap();
@@ -393,6 +395,8 @@ fn session_info_json_roundtrip() {
     assert!(back.connect_url.is_some());
     assert!(back.viewer_url.is_some());
     assert_eq!(back.profile_id.as_deref(), Some("prof-1"));
+    assert_eq!(back.timeout_ms, Some(300_000));
+    assert_eq!(back.created_at_ms, Some(1_700_000_000_000));
 }
 
 #[test]
@@ -405,6 +409,8 @@ fn session_info_minimal_roundtrip() {
         connect_url: None,
         viewer_url: None,
         profile_id: None,
+        timeout_ms: None,
+        created_at_ms: None,
     };
 
     let json_str = serde_json::to_string(&info).unwrap();
@@ -414,6 +420,12 @@ fn session_info_minimal_roundtrip() {
     assert_eq!(back.mode, ApiMode::Local);
     assert!(back.status.is_none());
     assert!(back.connect_url.is_none());
+    assert!(back.timeout_ms.is_none());
+    assert!(back.created_at_ms.is_none());
+
+    // Optional fields should be omitted from JSON when None
+    assert!(!json_str.contains("timeout_ms"));
+    assert!(!json_str.contains("created_at_ms"));
 }
 
 // ===========================================================================

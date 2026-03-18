@@ -43,6 +43,36 @@ pub fn cleanup_stale(session_name: &str) {
     let _ = std::fs::remove_file(pid_path(session_name));
 }
 
+/// Check if the daemon process for this session is still alive using its PID file.
+/// Returns `false` if the PID file is missing, unreadable, or the process is not running.
+pub fn is_daemon_alive(session_name: &str) -> bool {
+    let pid_file = pid_path(session_name);
+    let Ok(contents) = std::fs::read_to_string(&pid_file) else {
+        return false;
+    };
+    let Ok(pid) = contents.trim().parse::<i32>() else {
+        return false;
+    };
+    // kill -0 checks process existence without sending a signal
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// If a daemon's socket file exists but its process is dead, clean up stale files.
+/// Returns `true` if stale files were removed.
+pub fn cleanup_if_dead(session_name: &str) -> bool {
+    if socket_path(session_name).exists() && !is_daemon_alive(session_name) {
+        cleanup_stale(session_name);
+        return true;
+    }
+    false
+}
+
 /// Spawn a daemon process for the given session. The create params are passed via
 /// environment variable to avoid leaking API keys in the process list.
 pub fn spawn_daemon(session_name: &str, params: &DaemonCreateParams) -> Result<()> {

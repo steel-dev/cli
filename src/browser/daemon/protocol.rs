@@ -53,6 +53,13 @@ pub struct SessionInfo {
     pub connect_url: Option<String>,
     pub viewer_url: Option<String>,
     pub profile_id: Option<String>,
+    /// Session timeout in milliseconds (from create params). `None` = no timeout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+    /// Epoch milliseconds when the session was created. Used with `timeout_ms`
+    /// to compute remaining time on the client side.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at_ms: Option<u64>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

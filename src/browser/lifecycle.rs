@@ -91,6 +91,47 @@ fn get_session_status(session: &Value) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
+/// Extract session timeout (milliseconds) from API response.
+/// The API may return it as `timeout`, `sessionTimeout`, or `timeoutMs`.
+pub fn get_session_timeout(session: &Value) -> Option<u64> {
+    let keys = ["timeout", "sessionTimeout", "timeoutMs"];
+    for key in &keys {
+        if let Some(v) = session.get(key) {
+            if let Some(n) = v.as_u64() {
+                return Some(n);
+            }
+            // Handle string numbers
+            if let Some(s) = v.as_str() {
+                if let Ok(n) = s.trim().parse::<u64>() {
+                    return Some(n);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Extract session creation timestamp as epoch milliseconds from API response.
+/// Looks for `createdAt` or `created_at` as ISO 8601 / RFC 3339 string.
+pub fn get_session_created_at_ms(session: &Value) -> Option<u64> {
+    let keys = ["createdAt", "created_at"];
+    for key in &keys {
+        if let Some(v) = session.get(key)
+            && let Some(s) = v.as_str()
+        {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                if let Ok(ts) = jiff::Timestamp::strptime("%Y-%m-%dT%H:%M:%S%.fZ", trimmed)
+                    .or_else(|_| trimmed.parse::<jiff::Timestamp>())
+                {
+                    return Some(ts.as_millisecond() as u64);
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn get_connect_url(session: &Value) -> Option<String> {
     let keys = [
         "websocketUrl",
@@ -446,6 +487,50 @@ mod tests {
         let sanitized = sanitize_connect_url(url);
         assert!(sanitized.contains("sk-1234..."));
         assert!(sanitized.contains("sessionId=s1"));
+    }
+
+    #[test]
+    fn session_timeout_from_response() {
+        assert_eq!(get_session_timeout(&json!({"timeout": 300000})), Some(300000));
+        assert_eq!(get_session_timeout(&json!({"sessionTimeout": 60000})), Some(60000));
+        assert_eq!(get_session_timeout(&json!({"timeoutMs": 120000})), Some(120000));
+    }
+
+    #[test]
+    fn session_timeout_string_number() {
+        assert_eq!(get_session_timeout(&json!({"timeout": "300000"})), Some(300000));
+    }
+
+    #[test]
+    fn session_timeout_missing() {
+        assert_eq!(get_session_timeout(&json!({"id": "s1"})), None);
+    }
+
+    #[test]
+    fn session_created_at_iso() {
+        let s = json!({"createdAt": "2025-01-15T10:30:00Z"});
+        let ms = get_session_created_at_ms(&s).unwrap();
+        // 2025-01-15T10:30:00Z in epoch ms
+        assert!(ms > 1_700_000_000_000);
+        assert!(ms < 1_800_000_000_000);
+    }
+
+    #[test]
+    fn session_created_at_with_fractional() {
+        let s = json!({"createdAt": "2025-01-15T10:30:00.123Z"});
+        let ms = get_session_created_at_ms(&s).unwrap();
+        assert!(ms > 1_700_000_000_000);
+    }
+
+    #[test]
+    fn session_created_at_missing() {
+        assert_eq!(get_session_created_at_ms(&json!({"id": "s1"})), None);
+    }
+
+    #[test]
+    fn session_created_at_snake_case() {
+        let s = json!({"created_at": "2025-01-15T10:30:00Z"});
+        assert!(get_session_created_at_ms(&s).is_some());
     }
 
     #[test]

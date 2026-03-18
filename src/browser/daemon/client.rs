@@ -16,9 +16,16 @@ pub struct DaemonClient {
 impl DaemonClient {
     pub async fn connect(session_name: &str) -> Result<Self> {
         let sock = process::socket_path(session_name);
-        let stream = UnixStream::connect(&sock).await.map_err(|_| {
-            anyhow::anyhow!("Cannot connect to browser daemon. Is a session running?")
-        })?;
+        let stream = match UnixStream::connect(&sock).await {
+            Ok(s) => s,
+            Err(_) => {
+                // Socket file may exist but the daemon process is dead — clean up
+                process::cleanup_if_dead(session_name);
+                return Err(anyhow::anyhow!(
+                    "Cannot connect to browser daemon. Is a session running?"
+                ));
+            }
+        };
         let (read_half, write_half) = tokio::io::split(stream);
         Ok(Self {
             reader: BufReader::new(read_half),

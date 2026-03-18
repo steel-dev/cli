@@ -73,11 +73,16 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
 
     let persist_profile = args.profile.is_some() && args.update_profile;
 
-    // Check if daemon already running → reattach
+    // Check if daemon already running → verify health then reattach
     if let Ok(mut client) = DaemonClient::connect(&session_name).await {
-        let info = get_session_info(&mut client).await?;
-        display_session_info(&info);
-        return Ok(());
+        if client.send(DaemonCommand::Ping).await.is_ok() {
+            let info = get_session_info(&mut client).await?;
+            display_session_info(&info);
+            return Ok(());
+        }
+        // Daemon socket connected but not responding — clean up and start fresh
+        drop(client);
+        process::cleanup_stale(&session_name);
     }
 
     // Build params and spawn daemon
@@ -129,6 +134,8 @@ async fn get_session_info(client: &mut DaemonClient) -> anyhow::Result<SessionIn
 }
 
 fn display_session_info(info: &SessionInfo) {
+    let remaining = remaining_time_str(info);
+
     if output::is_json() {
         let mut data = json!({
             "id": info.session_id,
@@ -141,6 +148,9 @@ fn display_session_info(info: &SessionInfo) {
         if let Some(ref url) = info.connect_url {
             data["connectUrl"] = json!(sanitize_connect_url(url));
         }
+        if let Some(ref rem) = remaining {
+            data["remainingMs"] = json!(rem.0);
+        }
         output::success_data(data);
     } else {
         println!("id: {}", info.session_id);
@@ -152,5 +162,36 @@ fn display_session_info(info: &SessionInfo) {
         if let Some(ref url) = info.connect_url {
             println!("connect_url: {}", sanitize_connect_url(url));
         }
+        if let Some((ms, label)) = remaining {
+            if ms < 120_000 {
+                eprintln!("warning: session expires in {label}");
+            } else {
+                println!("expires_in: {label}");
+            }
+        }
     }
+}
+
+/// Compute (remaining_ms, human label) from session info, if timeout is set.
+fn remaining_time_str(info: &SessionInfo) -> Option<(u64, String)> {
+    let timeout = info.timeout_ms?;
+    let created = info.created_at_ms?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis() as u64;
+    let expires_at = created.checked_add(timeout)?;
+    if now >= expires_at {
+        return Some((0, "expired".to_string()));
+    }
+    let remaining = expires_at - now;
+    let secs = remaining / 1000;
+    let label = if secs >= 3600 {
+        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
+    } else if secs >= 60 {
+        format!("{}m {}s", secs / 60, secs % 60)
+    } else {
+        format!("{secs}s")
+    };
+    Some((remaining, label))
 }
