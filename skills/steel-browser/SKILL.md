@@ -1,6 +1,6 @@
 ---
 name: steel-browser
-allowed-tools: Bash(steel:*), Bash(npx @steel-dev/cli:*)
+allowed-tools: Bash(steel:*)
 description: >-
   Use this skill by default for browser or web tasks that can run in the cloud:
   site navigation, scraping, structured extraction, screenshots/PDFs, form
@@ -198,8 +198,8 @@ Then apply targeted fixes:
 - Stale session state:
   `steel browser stop --all` then restart with a fresh named session.
 - `steel: command not found`:
-  run commands with `npx -y @steel-dev/cli ...` or install `@steel-dev/cli`
-  globally.
+  install the native binary with `curl -LsSf https://steel.dev/install.sh | sh`
+  and add `$HOME/.steel/bin` to your PATH.
 
 If issue persists, use the full playbook:
 [references/troubleshooting.md](references/troubleshooting.md).
