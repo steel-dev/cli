@@ -2,8 +2,9 @@ use clap::{Parser, Subcommand};
 use serde_json::json;
 
 use crate::api::client::SteelClient;
+use crate::browser::daemon::client::DaemonClient;
+use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
 use crate::browser::lifecycle;
-use crate::config::session_state::SessionStatePaths;
 use crate::util::{api, output};
 
 #[derive(Subcommand)]
@@ -64,19 +65,43 @@ pub async fn run(command: Command, session: Option<&str>) -> anyhow::Result<()> 
     }
 }
 
+/// Resolve session_id: explicit --session-id flag, or query daemon.
+async fn resolve_session_id(
+    explicit_session_id: Option<&str>,
+    session: Option<&str>,
+) -> anyhow::Result<String> {
+    if let Some(id) = explicit_session_id {
+        let trimmed = id.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    let session_name = session.unwrap_or("default");
+    let mut client = DaemonClient::connect(session_name).await.map_err(|_| {
+        anyhow::anyhow!(
+            "No running session \"{session_name}\". \
+             Pass `--session-id`, or start a session with `steel browser start`."
+        )
+    })?;
+
+    let data = client.send(DaemonCommand::GetSessionInfo).await?;
+    let info: SessionInfo = serde_json::from_value(data)?;
+    Ok(info.session_id)
+}
+
 async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()> {
     let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
-    let paths = SessionStatePaths::default_paths();
+
+    let session_id = resolve_session_id(args.session_id.as_deref(), session).await?;
 
     let result = lifecycle::solve_captcha(
         &client,
         &base_url,
         mode,
         &auth,
-        &paths,
-        args.session_id.as_deref(),
-        session,
+        &session_id,
         args.page_id.as_deref(),
         args.url.as_deref(),
         args.task_id.as_deref(),
@@ -112,16 +137,15 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
 async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<()> {
     let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
-    let paths = SessionStatePaths::default_paths();
+
+    let session_id = resolve_session_id(args.session_id.as_deref(), session).await?;
 
     let result = lifecycle::captcha_status(
         &client,
         &base_url,
         mode,
         &auth,
-        &paths,
-        args.session_id.as_deref(),
-        session,
+        &session_id,
         args.page_id.as_deref(),
         args.wait,
         args.timeout,

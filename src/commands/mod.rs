@@ -234,7 +234,7 @@ pub enum Command {
     #[command(name = "__daemon", hide = true)]
     Daemon {
         #[arg(long)]
-        session_id: String,
+        session_name: String,
     },
 
     /// Scrape webpage content (markdown output by default)
@@ -292,10 +292,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     crate::util::api::init(cli.local, cli.api_url);
 
     match cli.command {
-        Command::Daemon { session_id } => {
-            let cdp_url = std::env::var("STEEL_DAEMON_CDP_URL")
-                .map_err(|_| anyhow::anyhow!("Missing STEEL_DAEMON_CDP_URL"))?;
-            crate::browser::daemon::server::run(session_id, cdp_url).await
+        Command::Daemon { session_name } => {
+            let params_json = std::env::var("STEEL_DAEMON_PARAMS")
+                .map_err(|_| anyhow::anyhow!("Missing STEEL_DAEMON_PARAMS"))?;
+            let params: crate::browser::daemon::protocol::DaemonCreateParams =
+                serde_json::from_str(&params_json)
+                    .map_err(|e| anyhow::anyhow!("Invalid STEEL_DAEMON_PARAMS: {e}"))?;
+            crate::browser::daemon::server::run(session_name, params).await
         }
         Command::Scrape(args) => scrape::run(args).await,
         Command::Screenshot(args) => screenshot::run(args).await,

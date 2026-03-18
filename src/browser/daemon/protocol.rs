@@ -2,6 +2,66 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::api::session::CreateSessionOptions;
+use crate::config::settings::ApiMode;
+
+/// Parameters passed to the daemon subprocess via env var so it can create
+/// the cloud session itself.  Serialized as JSON into `STEEL_DAEMON_PARAMS`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonCreateParams {
+    pub api_key: Option<String>,
+    pub base_url: String,
+    pub mode: ApiMode,
+    pub session_name: String,
+    // Flattened CreateSessionOptions fields:
+    pub stealth: bool,
+    pub proxy_url: Option<String>,
+    pub timeout_ms: Option<u64>,
+    pub headless: Option<bool>,
+    pub region: Option<String>,
+    pub solve_captcha: bool,
+    pub profile_id: Option<String>,
+    pub persist_profile: bool,
+    pub namespace: Option<String>,
+    pub credentials: bool,
+}
+
+impl DaemonCreateParams {
+    pub fn to_create_options(&self) -> CreateSessionOptions {
+        CreateSessionOptions {
+            stealth: self.stealth,
+            proxy_url: self.proxy_url.clone(),
+            timeout_ms: self.timeout_ms,
+            headless: self.headless,
+            region: self.region.clone(),
+            solve_captcha: self.solve_captcha,
+            profile_id: self.profile_id.clone(),
+            persist_profile: self.persist_profile,
+            namespace: self.namespace.clone(),
+            credentials: self.credentials,
+        }
+    }
+}
+
+/// Information about the daemon-managed session, returned by `GetSessionInfo`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub session_id: String,
+    pub session_name: String,
+    pub mode: ApiMode,
+    pub status: Option<String>,
+    pub connect_url: Option<String>,
+    pub viewer_url: Option<String>,
+    pub profile_id: Option<String>,
+    /// Session timeout in milliseconds (from create params). `None` = no timeout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+    /// Epoch milliseconds when the session was created. Used with `timeout_ms`
+    /// to compute remaining time on the client side.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at_ms: Option<u64>,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct DaemonRequest {
     pub id: u64,
@@ -158,6 +218,7 @@ pub enum DaemonCommand {
     Close,
     Ping,
     Shutdown,
+    GetSessionInfo,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

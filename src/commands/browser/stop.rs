@@ -1,10 +1,8 @@
 use clap::Parser;
 use serde_json::json;
 
-use crate::api::client::SteelClient;
-use crate::browser::lifecycle::stop_session;
-use crate::config::session_state::SessionStatePaths;
-use crate::util::{api, output};
+use crate::browser::daemon::process;
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {
@@ -18,33 +16,35 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         anyhow::bail!("Cannot combine `--all` with `--session`.");
     }
 
-    let (mode, base_url, auth) = api::resolve_with_auth();
+    if args.all {
+        let names = process::list_daemon_names();
+        if names.is_empty() {
+            if output::is_json() {
+                output::success_data(json!({ "stoppedSessions": [] }));
+            } else {
+                println!("No active browser sessions to stop.");
+            }
+            return Ok(());
+        }
 
-    let client = SteelClient::new()?;
-    let paths = SessionStatePaths::default_paths();
+        for name in &names {
+            let _ = process::stop_daemon(name).await;
+        }
 
-    let result = stop_session(&client, &base_url, mode, &auth, &paths, session, args.all).await?;
-
-    // Stop daemons for released sessions
-    for id in &result.stopped_session_ids {
-        let _ = crate::browser::daemon::process::stop_daemon(id).await;
-    }
-
-    if output::is_json() {
-        output::success_data(json!({
-            "stoppedSessionIds": result.stopped_session_ids,
-            "mode": result.mode.to_string(),
-        }));
-    } else if result.stopped_session_ids.is_empty() {
-        println!("No active browser sessions to stop.");
-    } else if result.all {
-        println!(
-            "Stopped {} sessions in {} mode.",
-            result.stopped_session_ids.len(),
-            result.mode
-        );
+        if output::is_json() {
+            output::success_data(json!({ "stoppedSessions": names }));
+        } else {
+            println!("Stopped {} sessions.", names.len());
+        }
     } else {
-        println!("Stopped session {}.", result.stopped_session_ids[0]);
+        let session_name = session.unwrap_or("default");
+        process::stop_daemon(session_name).await?;
+
+        if output::is_json() {
+            output::success_data(json!({ "stoppedSessions": [session_name] }));
+        } else {
+            println!("Stopped session \"{session_name}\".");
+        }
     }
 
     Ok(())

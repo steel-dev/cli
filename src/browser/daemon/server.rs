@@ -5,28 +5,119 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 
+use crate::api::client::SteelClient;
 use crate::browser::engine::BrowserEngine;
+use crate::browser::lifecycle::{
+    get_session_created_at_ms, get_session_timeout, to_session_summary,
+};
+use crate::config::auth::{Auth, AuthSource};
 
 use super::process;
 use super::protocol::*;
 
 const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(30);
+/// Shut down proactively this long before the cloud session is expected to expire,
+/// giving us time to release cleanly rather than having the server kill the CDP socket.
+const EXPIRY_BUFFER: Duration = Duration::from_secs(30);
 
-pub async fn run(session_id: String, cdp_url: String) -> Result<()> {
-    let pid_path = process::pid_path(&session_id);
+pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()> {
+    let pid_path = process::pid_path(&session_name);
     std::fs::create_dir_all(pid_path.parent().unwrap())?;
     std::fs::write(&pid_path, std::process::id().to_string())?;
 
-    let mut engine = match BrowserEngine::connect(&cdp_url).await {
-        Ok(e) => e,
+    // Build API client + auth from params
+    let api_client = SteelClient::new()?;
+    let auth = Auth {
+        api_key: params.api_key.clone(),
+        source: AuthSource::Env,
+    };
+    let options = params.to_create_options();
+
+    // Create the cloud session
+    let session = match api_client
+        .create_session(&params.base_url, params.mode, &options, &auth)
+        .await
+    {
+        Ok(s) => s,
         Err(e) => {
-            cleanup(&session_id);
+            cleanup(&session_name);
+            return Err(anyhow::anyhow!("{e}"));
+        }
+    };
+
+    let summary = match to_session_summary(&session, params.mode, Some(&session_name), &auth) {
+        Ok(s) => s,
+        Err(e) => {
+            cleanup(&session_name);
             return Err(e);
         }
     };
 
-    let socket_path = process::socket_path(&session_id);
+    let cdp_url = match summary.connect_url {
+        Some(ref url) => url.clone(),
+        None => {
+            cleanup(&session_name);
+            return Err(anyhow::anyhow!("Session has no CDP connect URL"));
+        }
+    };
+
+    // Prefer API-reported timeout over what we requested — the server may apply defaults
+    let effective_timeout = get_session_timeout(&session).or(params.timeout_ms);
+    // Prefer API-reported createdAt; fall back to local clock
+    let created_at_ms = get_session_created_at_ms(&session).or_else(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .ok()
+    });
+
+    let session_info = SessionInfo {
+        session_id: summary.id.clone(),
+        session_name: session_name.clone(),
+        mode: params.mode,
+        status: summary.status,
+        connect_url: Some(cdp_url.clone()),
+        viewer_url: summary.viewer_url,
+        profile_id: summary.profile_id,
+        timeout_ms: effective_timeout,
+        created_at_ms,
+    };
+
+    // Compute when the session will expire (if timeout is known).
+    // Use wall-clock math: `created_at_ms + timeout - buffer` converted to a tokio Instant.
+    let expires_at = match (effective_timeout, created_at_ms) {
+        (Some(timeout), Some(created)) => {
+            let now_epoch = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            let expire_epoch = created.saturating_add(timeout);
+            let buffer = EXPIRY_BUFFER.as_millis() as u64;
+            if now_epoch >= expire_epoch.saturating_sub(buffer) {
+                // Already past expiry — will exit on the first loop iteration
+                Some(tokio::time::Instant::now())
+            } else {
+                let remaining = expire_epoch.saturating_sub(buffer).saturating_sub(now_epoch);
+                Some(tokio::time::Instant::now() + Duration::from_millis(remaining))
+            }
+        }
+        _ => None,
+    };
+
+    let mut engine = match BrowserEngine::connect(&cdp_url).await {
+        Ok(e) => e,
+        Err(e) => {
+            // Best-effort release
+            let _ = api_client
+                .release_session(&params.base_url, params.mode, &session_info.session_id, &auth)
+                .await;
+            cleanup(&session_name);
+            return Err(e);
+        }
+    };
+
+    let socket_path = process::socket_path(&session_name);
     let _ = std::fs::remove_file(&socket_path);
     let listener = UnixListener::bind(&socket_path)?;
 
@@ -36,27 +127,48 @@ pub async fn run(session_id: String, cdp_url: String) -> Result<()> {
         // Periodic health check: exit if CDP connection is dead
         if last_health_check.elapsed() >= HEALTH_CHECK_INTERVAL {
             if !engine.is_alive().await {
+                eprintln!("[daemon] CDP connection lost, shutting down");
                 break;
             }
             last_health_check = tokio::time::Instant::now();
         }
 
+        // Proactive expiry check: exit before the server kills the session
+        if let Some(deadline) = expires_at {
+            if tokio::time::Instant::now() >= deadline {
+                eprintln!("[daemon] Session timeout reached, shutting down");
+                break;
+            }
+        }
+
         match tokio::time::timeout(IDLE_TIMEOUT, listener.accept()).await {
-            Err(_) => break,
+            Err(_) => {
+                eprintln!("[daemon] Idle timeout ({IDLE_TIMEOUT:?}), shutting down");
+                break;
+            }
             Ok(Err(_)) => continue,
             Ok(Ok((stream, _))) => {
-                let result = handle_connection(&mut engine, stream).await;
+                let result = handle_connection(&mut engine, &session_info, stream).await;
                 match result {
                     ConnectionResult::Continue => {}
                     ConnectionResult::Shutdown => break,
-                    ConnectionResult::Disconnected => break,
+                    ConnectionResult::Disconnected => {
+                        eprintln!("[daemon] CDP disconnected during command, shutting down");
+                        break;
+                    }
                 }
             }
         }
     }
 
     engine.close().await.ok();
-    cleanup(&session_id);
+
+    // Best-effort release the API session
+    let _ = api_client
+        .release_session(&params.base_url, params.mode, &session_info.session_id, &auth)
+        .await;
+
+    cleanup(&session_name);
     Ok(())
 }
 
@@ -68,6 +180,7 @@ enum ConnectionResult {
 
 async fn handle_connection(
     engine: &mut BrowserEngine,
+    session_info: &SessionInfo,
     stream: tokio::net::UnixStream,
 ) -> ConnectionResult {
     let (read_half, mut write_half) = tokio::io::split(stream);
@@ -98,7 +211,7 @@ async fn handle_connection(
                     request.command,
                     DaemonCommand::Shutdown | DaemonCommand::Close
                 );
-                let result = dispatch(engine, request.command).await;
+                let result = dispatch(engine, session_info, request.command).await;
 
                 // Check if CDP connection died during dispatch
                 let cdp_dead =
@@ -123,8 +236,12 @@ async fn handle_connection(
     }
 }
 
-async fn dispatch(engine: &mut BrowserEngine, cmd: DaemonCommand) -> DaemonResult {
-    match dispatch_inner(engine, cmd).await {
+async fn dispatch(
+    engine: &mut BrowserEngine,
+    session_info: &SessionInfo,
+    cmd: DaemonCommand,
+) -> DaemonResult {
+    match dispatch_inner(engine, session_info, cmd).await {
         Ok(data) => DaemonResult::Ok { data },
         Err(e) => DaemonResult::Error {
             message: e.to_string(),
@@ -171,7 +288,11 @@ fn build_screenshot_options(
     }
 }
 
-async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Result<Value> {
+async fn dispatch_inner(
+    engine: &mut BrowserEngine,
+    session_info: &SessionInfo,
+    cmd: DaemonCommand,
+) -> Result<Value> {
     match cmd {
         DaemonCommand::Navigate {
             url,
@@ -412,12 +533,16 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
             Ok(Value::Null)
         }
         DaemonCommand::Ping => Ok(json!("pong")),
+        DaemonCommand::GetSessionInfo => {
+            let info_json = serde_json::to_value(session_info)?;
+            Ok(info_json)
+        }
     }
 }
 
-fn cleanup(session_id: &str) {
-    let _ = std::fs::remove_file(process::socket_path(session_id));
-    let _ = std::fs::remove_file(process::pid_path(session_id));
+fn cleanup(session_name: &str) {
+    let _ = std::fs::remove_file(process::socket_path(session_name));
+    let _ = std::fs::remove_file(process::pid_path(session_name));
 }
 
 #[cfg(test)]

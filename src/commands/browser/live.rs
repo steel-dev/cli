@@ -1,36 +1,38 @@
 use clap::Parser;
 use serde_json::json;
 
-use crate::api::client::SteelClient;
-use crate::browser::lifecycle::get_live_url;
-use crate::config::session_state::SessionStatePaths;
-use crate::util::{api, output};
+use crate::browser::daemon::client::DaemonClient;
+use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {}
 
 pub async fn run(_args: Args, session: Option<&str>) -> anyhow::Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
+    let session_name = session.unwrap_or("default");
 
-    let client = SteelClient::new()?;
-    let paths = SessionStatePaths::default_paths();
+    let mut client = DaemonClient::connect(session_name).await.map_err(|_| {
+        let msg = match session {
+            Some(name) => format!(
+                "No running session \"{name}\". \
+                 Start one with `steel browser start --session {name}`."
+            ),
+            None => "No active browser session. Start one with `steel browser start`.".to_string(),
+        };
+        anyhow::anyhow!("{msg}")
+    })?;
 
-    let live_url = get_live_url(&client, &base_url, mode, &auth, &paths, session).await?;
+    let data = client.send(DaemonCommand::GetSessionInfo).await?;
+    let info: SessionInfo = serde_json::from_value(data)?;
 
-    match live_url {
+    match info.viewer_url {
         Some(url) => {
             output::success(json!(url), &format!("{url}\n"));
         }
         None => {
-            let msg = match session {
-                Some(name) => format!(
-                    "No live session found for \"{name}\". \
-                     Start one with `steel browser start --session {name}`."
-                ),
-                None => "No active live session found. Start one with `steel browser start`."
-                    .to_string(),
-            };
-            anyhow::bail!("{msg}");
+            anyhow::bail!(
+                "Session \"{session_name}\" has no live viewer URL."
+            );
         }
     }
 

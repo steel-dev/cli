@@ -1,12 +1,11 @@
 use clap::Parser;
-
 use serde_json::json;
 
-use crate::api::client::SteelClient;
-use crate::api::session::CreateSessionOptions;
-use crate::browser::lifecycle::{sanitize_connect_url, start_session};
+use crate::browser::daemon::client::DaemonClient;
+use crate::browser::daemon::process;
+use crate::browser::daemon::protocol::{DaemonCommand, DaemonCreateParams, SessionInfo};
+use crate::browser::lifecycle::sanitize_connect_url;
 use crate::browser::profile_store;
-use crate::config::session_state::SessionStatePaths;
 use crate::util::{api, output};
 
 #[derive(Parser)]
@@ -55,8 +54,7 @@ pub struct Args {
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let (mode, base_url, auth) = api::resolve_with_auth();
 
-    let client = SteelClient::new()?;
-    let paths = SessionStatePaths::default_paths();
+    let session_name = session.unwrap_or("default").to_string();
 
     // Resolve profile
     let mut resolved_profile_id = None;
@@ -75,7 +73,24 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
 
     let persist_profile = args.profile.is_some() && args.update_profile;
 
-    let options = CreateSessionOptions {
+    // Check if daemon already running → verify health then reattach
+    if let Ok(mut client) = DaemonClient::connect(&session_name).await {
+        if client.send(DaemonCommand::Ping).await.is_ok() {
+            let info = get_session_info(&mut client).await?;
+            display_session_info(&info);
+            return Ok(());
+        }
+        // Daemon socket connected but not responding — clean up and start fresh
+        drop(client);
+        process::cleanup_stale(&session_name);
+    }
+
+    // Build params and spawn daemon
+    let params = DaemonCreateParams {
+        api_key: auth.api_key,
+        base_url,
+        mode,
+        session_name: session_name.clone(),
         stealth: args.stealth,
         proxy_url: args.proxy,
         timeout_ms: args.session_timeout,
@@ -88,11 +103,16 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         credentials: args.credentials,
     };
 
-    let session = start_session(&client, &base_url, mode, &auth, &paths, session, &options).await?;
+    process::spawn_daemon(&session_name, &params)?;
+    process::wait_for_daemon(&session_name, std::time::Duration::from_secs(30)).await?;
 
-    // Write profile mapping back if a profile was specified
+    // Connect and get session info
+    let mut client = DaemonClient::connect(&session_name).await?;
+    let info = get_session_info(&mut client).await?;
+
+    // Profile write-back using session_info.profile_id
     if let Some(ref profile_name) = args.profile
-        && let Some(ref returned_profile_id) = session.profile_id
+        && let Some(ref returned_profile_id) = info.profile_id
     {
         profile_store::write_profile(
             profile_name,
@@ -102,48 +122,76 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         )?;
     }
 
-    // Eagerly spawn daemon so subsequent commands are fast
-    if let Some(ref url) = session.connect_url {
-        use crate::browser::daemon::process;
-        if !process::socket_path(&session.id).exists() {
-            if let Err(e) = process::spawn_daemon(&session.id, url) {
-                eprintln!("Warning: failed to start browser daemon: {e}");
-            } else if let Err(e) =
-                process::wait_for_daemon(&session.id, std::time::Duration::from_secs(10)).await
-            {
-                eprintln!("Warning: browser daemon did not become ready: {e}");
-            }
-        }
-    }
+    display_session_info(&info);
+
+    Ok(())
+}
+
+async fn get_session_info(client: &mut DaemonClient) -> anyhow::Result<SessionInfo> {
+    let data = client.send(DaemonCommand::GetSessionInfo).await?;
+    let info: SessionInfo = serde_json::from_value(data)?;
+    Ok(info)
+}
+
+fn display_session_info(info: &SessionInfo) {
+    let remaining = remaining_time_str(info);
 
     if output::is_json() {
         let mut data = json!({
-            "id": session.id,
-            "mode": session.mode.to_string(),
+            "id": info.session_id,
+            "mode": info.mode.to_string(),
         });
-        if let Some(ref name) = session.name {
-            data["name"] = json!(name);
-        }
-        if let Some(ref url) = session.viewer_url {
+        data["name"] = json!(&info.session_name);
+        if let Some(ref url) = info.viewer_url {
             data["liveUrl"] = json!(url);
         }
-        if let Some(ref url) = session.connect_url {
+        if let Some(ref url) = info.connect_url {
             data["connectUrl"] = json!(sanitize_connect_url(url));
+        }
+        if let Some(ref rem) = remaining {
+            data["remainingMs"] = json!(rem.0);
         }
         output::success_data(data);
     } else {
-        println!("id: {}", session.id);
-        println!("mode: {}", session.mode);
-        if let Some(ref name) = session.name {
-            println!("name: {name}");
-        }
-        if let Some(ref url) = session.viewer_url {
+        println!("id: {}", info.session_id);
+        println!("mode: {}", info.mode);
+        println!("name: {}", info.session_name);
+        if let Some(ref url) = info.viewer_url {
             println!("live_url: {url}");
         }
-        if let Some(ref url) = session.connect_url {
+        if let Some(ref url) = info.connect_url {
             println!("connect_url: {}", sanitize_connect_url(url));
         }
+        if let Some((ms, label)) = remaining {
+            if ms < 120_000 {
+                eprintln!("warning: session expires in {label}");
+            } else {
+                println!("expires_in: {label}");
+            }
+        }
     }
+}
 
-    Ok(())
+/// Compute (remaining_ms, human label) from session info, if timeout is set.
+fn remaining_time_str(info: &SessionInfo) -> Option<(u64, String)> {
+    let timeout = info.timeout_ms?;
+    let created = info.created_at_ms?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis() as u64;
+    let expires_at = created.checked_add(timeout)?;
+    if now >= expires_at {
+        return Some((0, "expired".to_string()));
+    }
+    let remaining = expires_at - now;
+    let secs = remaining / 1000;
+    let label = if secs >= 3600 {
+        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
+    } else if secs >= 60 {
+        format!("{}m {}s", secs / 60, secs % 60)
+    } else {
+        format!("{secs}s")
+    };
+    Some((remaining, label))
 }
