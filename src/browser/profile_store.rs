@@ -89,7 +89,10 @@ fn write_profile_in(
     };
 
     let contents = serde_json::to_string_pretty(&data)?;
-    std::fs::write(dir.join(format!("{name}.json")), contents)?;
+    let target = dir.join(format!("{name}.json"));
+    let tmp = dir.join(format!(".{name}.tmp"));
+    std::fs::write(&tmp, contents)?;
+    std::fs::rename(&tmp, &target)?;
     Ok(())
 }
 
