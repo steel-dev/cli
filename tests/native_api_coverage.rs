@@ -20,12 +20,23 @@ struct ModuleCoverage {
 const INTERACTION: ModuleCoverage = ModuleCoverage {
     file: "interaction.rs",
     covered: &[
-        "click", "hover", "fill", "type_text", "press_key", "scroll",
-        "select_option", "check", "uncheck",
-        "dblclick", "focus", "clear", "select_all", "scroll_into_view",
+        "click",
+        "hover",
+        "fill",
+        "type_text",
+        "press_key",
+        "scroll",
+        "select_option",
+        "check",
+        "uncheck",
+        "dblclick",
+        "focus",
+        "clear",
+        "select_all",
+        "scroll_into_view",
     ],
     skipped: &[
-        "press_key_with_modifiers",// TODO: modifier key combos
+        "press_key_with_modifiers", // TODO: modifier key combos
         "dispatch_event",
         "highlight",
         "tap_touch",
@@ -38,19 +49,31 @@ const ELEMENT: ModuleCoverage = ModuleCoverage {
     file: "element.rs",
     covered: &[
         // RefMap used internally by BrowserEngine
-        "new", "add", "add_selector", "get", "entries_sorted", "clear",
-        "next_ref_num", "set_next_ref_num", "parse_ref",
+        "new",
+        "add",
+        "add_selector",
+        "get",
+        "entries_sorted",
+        "clear",
+        "next_ref_num",
+        "set_next_ref_num",
+        "parse_ref",
         "resolve_element_object_id",
         // Element queries
-        "get_element_text", "get_element_attribute",
-        "is_element_visible", "is_element_enabled", "is_element_checked",
-        "get_element_inner_text", "get_element_inner_html",
-        "get_element_input_value", "set_element_value",
-        "get_element_count", "get_element_bounding_box", "get_element_styles",
+        "get_element_text",
+        "get_element_attribute",
+        "is_element_visible",
+        "is_element_enabled",
+        "is_element_checked",
+        "get_element_inner_text",
+        "get_element_inner_html",
+        "get_element_input_value",
+        "set_element_value",
+        "get_element_count",
+        "get_element_bounding_box",
+        "get_element_styles",
     ],
-    skipped: &[
-        "resolve_element_center",
-    ],
+    skipped: &["resolve_element_center"],
 };
 
 // ── cookies.rs ──────────────────────────────────────────────────────
@@ -92,13 +115,20 @@ const NETWORK: ModuleCoverage = ModuleCoverage {
     covered: &["set_extra_headers"],
     skipped: &[
         // EventTracker methods
-        "new", "add_console", "add_error", "get_console_json", "get_errors_json",
+        "new",
+        "add_console",
+        "add_error",
+        "get_console_json",
+        "get_errors_json",
         // DomainFilter methods
-        "is_allowed", "check_url",
+        "is_allowed",
+        "check_url",
         // Free functions
-        "set_offline", "set_content",
+        "set_offline",
+        "set_content",
         "sanitize_existing_pages",
-        "install_domain_filter", "install_domain_filter_script",
+        "install_domain_filter",
+        "install_domain_filter_script",
         "install_domain_filter_fetch",
     ],
 };
@@ -109,9 +139,15 @@ const STATE: ModuleCoverage = ModuleCoverage {
     file: "state.rs",
     covered: &[],
     skipped: &[
-        "save_state", "load_state",
-        "state_list", "state_show", "state_clear", "state_clean", "state_rename",
-        "find_auto_state_file", "get_sessions_dir",
+        "save_state",
+        "load_state",
+        "state_list",
+        "state_show",
+        "state_clear",
+        "state_clean",
+        "state_rename",
+        "find_auto_state_file",
+        "get_sessions_dir",
     ],
 };
 
@@ -120,7 +156,12 @@ const STATE: ModuleCoverage = ModuleCoverage {
 const DIFF: ModuleCoverage = ModuleCoverage {
     file: "diff.rs",
     covered: &[],
-    skipped: &["diff_screenshot", "diff_snapshots", "diff_text", "diff_unified"],
+    skipped: &[
+        "diff_screenshot",
+        "diff_snapshots",
+        "diff_text",
+        "diff_unified",
+    ],
 };
 
 // ── browser.rs (BrowserManager + helpers) ───────────────────────────
@@ -128,38 +169,76 @@ const DIFF: ModuleCoverage = ModuleCoverage {
 const BROWSER: ModuleCoverage = ModuleCoverage {
     file: "browser.rs",
     covered: &[
-        "connect_cdp", "active_session_id", "navigate", "get_url", "get_title",
-        "evaluate", "close", "is_connection_alive",
-        "tab_new", "tab_list", "tab_switch", "tab_close",
+        "connect_cdp",
+        "active_session_id",
+        "navigate",
+        "get_url",
+        "get_title",
+        "evaluate",
+        "close",
+        "is_connection_alive",
+        "tab_new",
+        "tab_list",
+        "tab_switch",
+        "tab_close",
         "wait_for_lifecycle_external",
-        "get_content", "bring_to_front",
+        "get_content",
+        "bring_to_front",
     ],
     skipped: &[
         // Launch / connect
-        "launch", "connect_auto", "validate_launch_options", "to_ai_friendly_error",
+        "launch",
+        "connect_auto",
+        "validate_launch_options",
+        "to_ai_friendly_error",
         // Page internals
-        "enable_domains_pub", "ensure_page", "update_active_page_if_needed",
-        "add_page", "remove_page_by_target_id", "has_target", "has_pages",
-        "page_count", "pages_list",
+        "enable_domains_pub",
+        "ensure_page",
+        "update_active_page_if_needed",
+        "add_page",
+        "remove_page_by_target_id",
+        "has_target",
+        "has_pages",
+        "page_count",
+        "pages_list",
         // Getters
-        "get_cdp_url", "chrome_host_port", "active_target_id",
+        "get_cdp_url",
+        "chrome_host_port",
+        "active_target_id",
         "is_cdp_connection",
         // Browser configuration
-        "set_viewport", "set_user_agent", "set_emulated_media", "set_timezone",
-        "set_locale", "set_geolocation", "set_download_behavior",
+        "set_viewport",
+        "set_user_agent",
+        "set_emulated_media",
+        "set_timezone",
+        "set_locale",
+        "set_geolocation",
+        "set_download_behavior",
         // Dialog / file / permissions
-        "handle_dialog", "upload_files", "grant_permissions",
+        "handle_dialog",
+        "upload_files",
+        "grant_permissions",
         "add_script_to_evaluate",
         // BrowserState methods
-        "from_str", "kill", "wait_or_kill",
+        "from_str",
+        "kill",
+        "wait_or_kill",
     ],
 };
 
 // ── Test ────────────────────────────────────────────────────────────
 
 const ALL_MODULES: &[&ModuleCoverage] = &[
-    &INTERACTION, &ELEMENT, &COOKIES, &STORAGE, &SCREENSHOT,
-    &SNAPSHOT, &NETWORK, &STATE, &DIFF, &BROWSER,
+    &INTERACTION,
+    &ELEMENT,
+    &COOKIES,
+    &STORAGE,
+    &SCREENSHOT,
+    &SNAPSHOT,
+    &NETWORK,
+    &STATE,
+    &DIFF,
+    &BROWSER,
 ];
 
 #[test]
@@ -179,7 +258,11 @@ fn native_api_coverage() {
     for module in ALL_MODULES {
         let path = native_src.join(module.file);
         if !path.exists() {
-            failures.push(format!("{}: file not found at {}", module.file, path.display()));
+            failures.push(format!(
+                "{}: file not found at {}",
+                module.file,
+                path.display()
+            ));
             continue;
         }
 
@@ -245,9 +328,7 @@ fn find_native_src() -> Option<PathBuf> {
 
     // Sibling directory (workspace layout)
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let sibling = manifest_dir
-        .parent()?
-        .join("agent-browser/cli/src/native");
+    let sibling = manifest_dir.parent()?.join("agent-browser/cli/src/native");
     if sibling.exists() {
         return Some(sibling);
     }

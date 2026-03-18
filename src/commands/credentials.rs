@@ -123,7 +123,14 @@ async fn run_list(args: ListArgs) -> anyhow::Result<()> {
     };
 
     let data = client
-        .request(&base_url, mode, reqwest::Method::GET, &path, None, &auth_info)
+        .request(
+            &base_url,
+            mode,
+            reqwest::Method::GET,
+            &path,
+            None,
+            &auth_info,
+        )
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -193,7 +200,14 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
     }
 
     let result = client
-        .request(&base_url, mode, reqwest::Method::POST, "/credentials", Some(body), &auth_info)
+        .request(
+            &base_url,
+            mode,
+            reqwest::Method::POST,
+            "/credentials",
+            Some(body),
+            &auth_info,
+        )
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -237,7 +251,8 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
     let mut body = json!({"origin": origin});
     let obj = body.as_object_mut().unwrap();
 
-    let has_value = args.username.is_some() || args.password.is_some() || args.totp_secret.is_some();
+    let has_value =
+        args.username.is_some() || args.password.is_some() || args.totp_secret.is_some();
     if has_value {
         let mut value = json!({});
         if let Some(ref u) = args.username {
@@ -274,7 +289,14 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
     }
 
     let result = client
-        .request(&base_url, mode, reqwest::Method::PUT, "/credentials", Some(body), &auth_info)
+        .request(
+            &base_url,
+            mode,
+            reqwest::Method::PUT,
+            "/credentials",
+            Some(body),
+            &auth_info,
+        )
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -317,7 +339,14 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
     }
 
     client
-        .request(&base_url, mode, reqwest::Method::DELETE, "/credentials", Some(body), &auth_info)
+        .request(
+            &base_url,
+            mode,
+            reqwest::Method::DELETE,
+            "/credentials",
+            Some(body),
+            &auth_info,
+        )
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 

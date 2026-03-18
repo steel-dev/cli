@@ -29,10 +29,7 @@ pub struct Auth {
 ///
 /// Priority: env var → config file → none.
 /// Matches TS `resolveBrowserAuth()` in `auth.ts`.
-pub fn resolve_auth_with(
-    env_api_key: Option<&str>,
-    config_api_key: Option<&str>,
-) -> Auth {
+pub fn resolve_auth_with(env_api_key: Option<&str>, config_api_key: Option<&str>) -> Auth {
     // 1. STEEL_API_KEY env var
     if let Some(key) = env_api_key {
         let trimmed = key.trim();
@@ -129,7 +126,10 @@ mod tests {
         let path = dir.path().join("config.json");
         std::fs::write(&path, r#"{"apiKey": "from-file"}"#).unwrap();
 
-        assert_eq!(read_api_key_from_config(&path).as_deref(), Some("from-file"));
+        assert_eq!(
+            read_api_key_from_config(&path).as_deref(),
+            Some("from-file")
+        );
     }
 
     #[test]

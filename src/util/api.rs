@@ -3,8 +3,8 @@
 //! Mirrors the `output` module pattern: call `init()` once at startup,
 //! then `resolve()` / `resolve_with_auth()` from any command handler.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::config::auth::{self, Auth};
 use crate::config::settings::{ApiMode, EnvVars};

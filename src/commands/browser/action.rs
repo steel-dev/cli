@@ -499,9 +499,7 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
             output::success_silent();
         }
         ActionCommand::Press(args) => {
-            client
-                .send(DaemonCommand::Press { key: args.key })
-                .await?;
+            client.send(DaemonCommand::Press { key: args.key }).await?;
             output::success_silent();
         }
         ActionCommand::Hover(args) => {
@@ -785,9 +783,7 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
                 }
             }
             TabCommand::New(args) => {
-                let data = client
-                    .send(DaemonCommand::TabNew { url: args.url })
-                    .await?;
+                let data = client.send(DaemonCommand::TabNew { url: args.url }).await?;
                 output::success_field(data, "url");
             }
             TabCommand::Switch(args) => {
@@ -838,10 +834,9 @@ async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
                 )
             })?
     } else {
-        state
-            .active_session_id
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("No active browser session. Run `steel browser start` first."))?
+        state.active_session_id.as_deref().ok_or_else(|| {
+            anyhow::anyhow!("No active browser session. Run `steel browser start` first.")
+        })?
     };
 
     // Fast path: daemon already running
@@ -921,20 +916,18 @@ async fn check_session_health(
     }
 
     // Session is alive — check if close to expiry and warn
-    if let Some(timeout) = session.get("timeout").and_then(|v| v.as_u64()) {
-        if let Some(created) = session.get("createdAt").and_then(|v| v.as_str()) {
-            if let Some(remaining_ms) = estimate_remaining_ms(created, timeout) {
-                if remaining_ms < 5 * 60 * 1000 {
-                    let remaining_secs = remaining_ms / 1000;
-                    let mins = remaining_secs / 60;
-                    let secs = remaining_secs % 60;
-                    eprintln!(
-                        "Warning: Session expires in {mins}m{secs}s. \
+    if let Some(timeout) = session.get("timeout").and_then(|v| v.as_u64())
+        && let Some(created) = session.get("createdAt").and_then(|v| v.as_str())
+        && let Some(remaining_ms) = estimate_remaining_ms(created, timeout)
+        && remaining_ms < 5 * 60 * 1000
+    {
+        let remaining_secs = remaining_ms / 1000;
+        let mins = remaining_secs / 60;
+        let secs = remaining_secs % 60;
+        eprintln!(
+            "Warning: Session expires in {mins}m{secs}s. \
                          Run `steel browser start` to create a new one."
-                    );
-                }
-            }
-        }
+        );
     }
 
     None
@@ -985,7 +978,9 @@ fn parse_rfc3339_to_epoch_ms(s: &str) -> Option<u64> {
         return None;
     };
 
-    let (date_part, time_part) = datetime_part.split_once('T').or_else(|| datetime_part.split_once('t'))?;
+    let (date_part, time_part) = datetime_part
+        .split_once('T')
+        .or_else(|| datetime_part.split_once('t'))?;
     let date_fields: Vec<&str> = date_part.split('-').collect();
     if date_fields.len() != 3 {
         return None;
@@ -1017,8 +1012,8 @@ fn parse_rfc3339_to_epoch_ms(s: &str) -> Option<u64> {
 
     // Convert to epoch using a simplified calculation
     let days = days_from_civil(year, month, day);
-    let epoch_secs = days as i64 * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64
-        - tz_offset_secs;
+    let epoch_secs =
+        days * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64 - tz_offset_secs;
 
     if epoch_secs < 0 {
         return None;
@@ -1043,7 +1038,7 @@ fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
     let m = if month <= 2 { month + 9 } else { month - 3 };
     let era = if y >= 0 { y } else { y - 399 } / 400;
     let yoe = (y - era * 400) as u32;
-    let doy = (153 * m as u32 + 2) / 5 + day - 1;
+    let doy = (153 * m + 2) / 5 + day - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     era * 146097 + doe as i64 - 719468
 }

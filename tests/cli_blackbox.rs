@@ -304,9 +304,7 @@ fn steel_config_dir_is_respected() {
     // by checking the custom dir was used (if any files were created).
     if config_dir.exists() {
         // If files were written, they should be in our custom dir.
-        let entries: Vec<_> = std::fs::read_dir(&config_dir)
-            .unwrap()
-            .collect();
+        let entries: Vec<_> = std::fs::read_dir(&config_dir).unwrap().collect();
         // This is a positive signal that the custom dir was used.
         // (The dir might not exist if config command only reads.)
         let _ = entries;
@@ -523,8 +521,11 @@ fn scrape_unknown_flag_fails() {
     );
     let err = stderr(&output);
     assert!(
-        err.contains("unexpected") || err.contains("not expected") || err.contains("unrecognized")
-            || err.contains("unknown") || err.contains("found argument"),
+        err.contains("unexpected")
+            || err.contains("not expected")
+            || err.contains("unrecognized")
+            || err.contains("unknown")
+            || err.contains("found argument"),
         "stderr should indicate an unknown flag, got: {err}"
     );
 }

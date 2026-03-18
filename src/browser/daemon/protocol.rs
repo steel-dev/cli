@@ -322,7 +322,8 @@ mod tests {
 
     #[test]
     fn deserialize_navigate_raw_json() {
-        let raw = r#"{"action":"navigate","url":"https://example.com","wait_until":null,"headers":null}"#;
+        let raw =
+            r#"{"action":"navigate","url":"https://example.com","wait_until":null,"headers":null}"#;
         let cmd: DaemonCommand = serde_json::from_str(raw).unwrap();
         assert_eq!(
             cmd,

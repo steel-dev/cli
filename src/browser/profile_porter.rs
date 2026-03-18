@@ -28,6 +28,7 @@ impl BrowserId {
         ]
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<BrowserId> {
         match s.to_lowercase().as_str() {
             "chrome" => Some(BrowserId::Chrome),
@@ -240,18 +241,25 @@ impl BrowserDescriptor {
 
 const IV: [u8; 16] = [0x20; 16]; // 16 space bytes
 
-const INCLUDE_ENTRIES: &[&str] = &[
+const DEFAULT_ENTRIES: &[&str] = &["Cookies", "Local Storage", "Preferences"];
+
+const FULL_ENTRIES: &[&str] = &[
     "Cookies",
     "Local Storage",
-    "IndexedDB",
     "Preferences",
+    "IndexedDB",
     "Bookmarks",
     "Favicons",
     "History",
     "Web Data",
 ];
 
-const SKIP_NAMES: &[&str] = &["LOCK", "SingletonLock", "SingletonCookie", "SingletonSocket"];
+const SKIP_NAMES: &[&str] = &[
+    "LOCK",
+    "SingletonLock",
+    "SingletonCookie",
+    "SingletonSocket",
+];
 const SKIP_EXTS: &[&str] = &[".log", ".pma"];
 
 // ─── Profile discovery ──────────────────────────────────────────────────────
@@ -307,28 +315,27 @@ pub fn detect_installed_browsers() -> Vec<BrowserId> {
 
 fn get_profile_display_name(base: &Path, dir_name: &str) -> String {
     let prefs_path = base.join(dir_name).join("Preferences");
-    if let Ok(contents) = std::fs::read_to_string(&prefs_path) {
-        if let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&contents) {
-            if let Some(name) = prefs
-                .get("profile")
-                .and_then(|p| p.get("name"))
-                .and_then(|n| n.as_str())
-            {
-                if !name.is_empty() && name != dir_name {
-                    return name.to_string();
-                }
-            }
-            if let Some(full_name) = prefs
-                .get("account_info")
-                .and_then(|a| a.as_array())
-                .and_then(|a| a.first())
-                .and_then(|a| a.get("full_name"))
-                .and_then(|n| n.as_str())
-            {
-                if !full_name.is_empty() {
-                    return full_name.to_string();
-                }
-            }
+    if let Ok(contents) = std::fs::read_to_string(&prefs_path)
+        && let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&contents)
+    {
+        if let Some(name) = prefs
+            .get("profile")
+            .and_then(|p| p.get("name"))
+            .and_then(|n| n.as_str())
+            && !name.is_empty()
+            && name != dir_name
+        {
+            return name.to_string();
+        }
+        if let Some(full_name) = prefs
+            .get("account_info")
+            .and_then(|a| a.as_array())
+            .and_then(|a| a.first())
+            .and_then(|a| a.get("full_name"))
+            .and_then(|n| n.as_str())
+            && !full_name.is_empty()
+        {
+            return full_name.to_string();
         }
     }
     dir_name.to_string()
@@ -397,9 +404,12 @@ fn get_key_provider(browser: BrowserId) -> Result<KeyProvider> {
 
 fn get_macos_key_provider(browser: BrowserId) -> Result<KeyProvider> {
     let desc = browser.descriptor();
-    let service = desc
-        .keychain_service_for_current_os()
-        .ok_or_else(|| anyhow::anyhow!("{} has no macOS Keychain service configured.", browser.display_name()))?;
+    let service = desc.keychain_service_for_current_os().ok_or_else(|| {
+        anyhow::anyhow!(
+            "{} has no macOS Keychain service configured.",
+            browser.display_name()
+        )
+    })?;
 
     let output = std::process::Command::new("security")
         .args(["find-generic-password", "-w", "-s", service])
@@ -455,13 +465,17 @@ fn get_linux_key_provider(browser: BrowserId) -> Result<KeyProvider> {
 
 fn get_windows_key_provider(browser: BrowserId) -> Result<KeyProvider> {
     let desc = browser.descriptor();
-    let base_dir = desc
-        .profile_base_dir()
-        .ok_or_else(|| anyhow::anyhow!("{} is not supported on Windows.", browser.display_name()))?;
+    let base_dir = desc.profile_base_dir().ok_or_else(|| {
+        anyhow::anyhow!("{} is not supported on Windows.", browser.display_name())
+    })?;
 
     let local_state_path = base_dir.join("Local State");
-    let local_state_str = std::fs::read_to_string(&local_state_path)
-        .with_context(|| format!("Could not read Local State at {}", local_state_path.display()))?;
+    let local_state_str = std::fs::read_to_string(&local_state_path).with_context(|| {
+        format!(
+            "Could not read Local State at {}",
+            local_state_path.display()
+        )
+    })?;
 
     let local_state: serde_json::Value = serde_json::from_str(&local_state_str)?;
     let encrypted_key_b64 = local_state
@@ -506,7 +520,10 @@ fn get_windows_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         .context("Failed to decode DPAPI result")?;
 
     if key_bytes.len() != 32 {
-        anyhow::bail!("DPAPI decrypted key is {} bytes, expected 32", key_bytes.len());
+        anyhow::bail!(
+            "DPAPI decrypted key is {} bytes, expected 32",
+            key_bytes.len()
+        );
     }
 
     let mut source_key = [0u8; 32];
@@ -567,8 +584,8 @@ fn decrypt_cookie(
             strip_domain_hash(plaintext, host_key, meta_version)
         }
         CryptoAlgorithm::Aes256Gcm => {
-            use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
             use aes_gcm::aead::Aead;
+            use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 
             const NONCE_LEN: usize = 12;
             const TAG_LEN: usize = 16;
@@ -599,12 +616,7 @@ fn strip_domain_hash(plaintext: &[u8], host_key: &str, meta_version: i64) -> Opt
     Some(String::from_utf8_lossy(plaintext).to_string())
 }
 
-fn encrypt_cookie(
-    value: &str,
-    key: &[u8; 16],
-    host_key: &str,
-    meta_version: i64,
-) -> Vec<u8> {
+fn encrypt_cookie(value: &str, key: &[u8; 16], host_key: &str, meta_version: i64) -> Vec<u8> {
     use aes::Aes128;
     use cbc::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
 
@@ -636,10 +648,7 @@ fn encrypt_cookie(
 
 // ─── Cookie re-encryption ────────────────────────────────────────────────────
 
-fn reencrypt_cookies_db(
-    original_path: &Path,
-    provider: &KeyProvider,
-) -> Result<(Vec<u8>, u64)> {
+fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<(Vec<u8>, u64)> {
     let peanuts_key = derive_target_key();
 
     let tmp_path = std::env::temp_dir().join(format!(
@@ -657,11 +666,9 @@ fn reencrypt_cookies_db(
         let conn = rusqlite::Connection::open(&tmp_path)?;
 
         let meta_version: i64 = conn
-            .query_row(
-                "SELECT value FROM meta WHERE key='version'",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT value FROM meta WHERE key='version'", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let mut stmt = conn.prepare(
@@ -749,12 +756,11 @@ fn collect_files_recursive(dir_path: &Path, base_dir: &Path, files: &mut HashMap
 
         if path.is_dir() {
             collect_files_recursive(&path, base_dir, files);
-        } else if path.is_file() {
-            if let Ok(rel) = path.strip_prefix(base_dir) {
-                if let Ok(data) = std::fs::read(&path) {
-                    files.insert(rel.to_string_lossy().to_string(), data);
-                }
-            }
+        } else if path.is_file()
+            && let Ok(rel) = path.strip_prefix(base_dir)
+            && let Ok(data) = std::fs::read(&path)
+        {
+            files.insert(rel.to_string_lossy().to_string(), data);
         }
     }
 }
@@ -770,12 +776,16 @@ pub struct PackageResult {
 pub fn package_profile(
     browser: BrowserId,
     profile_dir_name: &str,
+    full: bool,
     on_progress: &dyn Fn(&str),
 ) -> Result<PackageResult> {
     let desc = browser.descriptor();
-    let base_dir = desc
-        .profile_base_dir()
-        .ok_or_else(|| anyhow::anyhow!("{} is not supported on this platform.", browser.display_name()))?;
+    let base_dir = desc.profile_base_dir().ok_or_else(|| {
+        anyhow::anyhow!(
+            "{} is not supported on this platform.",
+            browser.display_name()
+        )
+    })?;
 
     let profile_dir = base_dir.join(profile_dir_name);
 
@@ -794,7 +804,9 @@ pub fn package_profile(
     let mut zip_files: Vec<(String, Vec<u8>)> = Vec::new();
     let mut cookies_reencrypted: u64 = 0;
 
-    for entry_name in INCLUDE_ENTRIES {
+    let entries = if full { FULL_ENTRIES } else { DEFAULT_ENTRIES };
+
+    for entry_name in entries {
         let full_path = profile_dir.join(entry_name);
         if !full_path.exists() {
             continue;
@@ -969,14 +981,22 @@ mod tests {
         let key1 = derive_key("key1", 1);
         let key2 = derive_key("key2", 1);
         let encrypted = encrypt_cookie("data", &key1, ".test.com", 20);
-        let result = decrypt_cookie(&encrypted, &key2, ".test.com", 20, CryptoAlgorithm::Aes128Cbc);
+        let result = decrypt_cookie(
+            &encrypted,
+            &key2,
+            ".test.com",
+            20,
+            CryptoAlgorithm::Aes128Cbc,
+        );
         assert!(result.is_none());
     }
 
     #[test]
     fn decrypt_no_v10_prefix_returns_none() {
         let key = derive_key("k", 1);
-        assert!(decrypt_cookie(b"xyz_data", &key, "host", 20, CryptoAlgorithm::Aes128Cbc).is_none());
+        assert!(
+            decrypt_cookie(b"xyz_data", &key, "host", 20, CryptoAlgorithm::Aes128Cbc).is_none()
+        );
     }
 
     #[test]

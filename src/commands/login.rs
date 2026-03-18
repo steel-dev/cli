@@ -5,7 +5,7 @@ use tokio::net::TcpListener;
 
 use crate::config;
 use crate::config::auth;
-use crate::config::settings::{read_config_from, write_config_to, Config};
+use crate::config::settings::{Config, read_config_from, write_config_to};
 
 #[derive(Parser)]
 pub struct Args {}
@@ -180,11 +180,7 @@ fn parse_query_from_request(request_line: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-fn send_response(
-    stream: &std::net::TcpStream,
-    status: u16,
-    body: &str,
-) -> anyhow::Result<()> {
+fn send_response(stream: &std::net::TcpStream, status: u16, body: &str) -> anyhow::Result<()> {
     let response = format!(
         "HTTP/1.1 {status} Error\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{body}"
     );

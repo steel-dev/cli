@@ -373,11 +373,7 @@ fn parse_arm_commands(line: &str) -> Option<Vec<String>> {
         }
     }
 
-    if cmds.is_empty() {
-        None
-    } else {
-        Some(cmds)
-    }
+    if cmds.is_empty() { None } else { Some(cmds) }
 }
 
 /// Extract flag-like string literals from a line.

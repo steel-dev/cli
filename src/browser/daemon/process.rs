@@ -49,15 +49,16 @@ pub async fn wait_for_daemon(session_id: &str, timeout: Duration) -> Result<()> 
     let start = std::time::Instant::now();
 
     while start.elapsed() < timeout {
-        if sock.exists() {
-            if tokio::net::UnixStream::connect(&sock).await.is_ok() {
-                return Ok(());
-            }
+        if sock.exists() && tokio::net::UnixStream::connect(&sock).await.is_ok() {
+            return Ok(());
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
-    bail!("Browser daemon failed to start within {}s", timeout.as_secs());
+    bail!(
+        "Browser daemon failed to start within {}s",
+        timeout.as_secs()
+    );
 }
 
 /// Send a shutdown command to a running daemon and clean up files.
@@ -78,15 +79,15 @@ pub async fn stop_daemon(session_id: &str) -> Result<()> {
 /// Kill a daemon process by reading its PID file, then clean up.
 pub fn kill_daemon(session_id: &str) -> Result<()> {
     let pid_file = pid_path(session_id);
-    if let Ok(contents) = std::fs::read_to_string(&pid_file) {
-        if let Ok(pid) = contents.trim().parse::<u32>() {
-            // Best-effort kill via command
-            let _ = std::process::Command::new("kill")
-                .arg(pid.to_string())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
-        }
+    if let Ok(contents) = std::fs::read_to_string(&pid_file)
+        && let Ok(pid) = contents.trim().parse::<u32>()
+    {
+        // Best-effort kill via command
+        let _ = std::process::Command::new("kill")
+            .arg(pid.to_string())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
     }
     cleanup_stale(session_id);
     Ok(())

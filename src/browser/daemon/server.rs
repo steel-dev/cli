@@ -94,13 +94,15 @@ async fn handle_connection(
                     }
                 };
 
-                let is_shutdown =
-                    matches!(request.command, DaemonCommand::Shutdown | DaemonCommand::Close);
+                let is_shutdown = matches!(
+                    request.command,
+                    DaemonCommand::Shutdown | DaemonCommand::Close
+                );
                 let result = dispatch(engine, request.command).await;
 
                 // Check if CDP connection died during dispatch
-                let cdp_dead = matches!(&result, DaemonResult::Error { .. })
-                    && !engine.is_alive().await;
+                let cdp_dead =
+                    matches!(&result, DaemonResult::Error { .. }) && !engine.is_alive().await;
 
                 let resp = DaemonResponse {
                     id: request.id,
@@ -212,7 +214,8 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
             max_depth,
             cursor,
         } => {
-            let options = build_snapshot_options(interactive_only, selector, compact, max_depth, cursor);
+            let options =
+                build_snapshot_options(interactive_only, selector, compact, max_depth, cursor);
             let text = engine.snapshot(options).await?;
             Ok(Value::String(text))
         }
@@ -225,7 +228,15 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
             path,
             screenshot_dir,
         } => {
-            let options = build_screenshot_options(full_page, selector, format, quality, annotate, path, screenshot_dir);
+            let options = build_screenshot_options(
+                full_page,
+                selector,
+                format,
+                quality,
+                annotate,
+                path,
+                screenshot_dir,
+            );
             let result = engine.take_screenshot(options).await?;
             Ok(json!({ "path": result.path }))
         }
@@ -242,9 +253,7 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
             delta_x,
             delta_y,
         } => {
-            engine
-                .scroll(selector.as_deref(), delta_x, delta_y)
-                .await?;
+            engine.scroll(selector.as_deref(), delta_x, delta_y).await?;
             Ok(Value::Null)
         }
         DaemonCommand::Select { selector, values } => {
@@ -368,19 +377,16 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
             let count = engine.count(&selector).await?;
             Ok(json!({ "count": count, "selector": selector }))
         }
-        DaemonCommand::BoundingBox { selector } => {
-            engine.bounding_box(&selector).await
-        }
-        DaemonCommand::Styles { selector, properties } => {
-            engine.styles(&selector, properties).await
-        }
+        DaemonCommand::BoundingBox { selector } => engine.bounding_box(&selector).await,
+        DaemonCommand::Styles {
+            selector,
+            properties,
+        } => engine.styles(&selector, properties).await,
         DaemonCommand::Content => {
             let html = engine.content().await?;
             Ok(Value::String(html))
         }
-        DaemonCommand::Find { selector } => {
-            engine.find(&selector).await
-        }
+        DaemonCommand::Find { selector } => engine.find(&selector).await,
         DaemonCommand::BringToFront => {
             engine.bring_to_front().await?;
             Ok(Value::Null)

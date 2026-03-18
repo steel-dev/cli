@@ -26,21 +26,13 @@ pub struct CreateSessionOptions {
 fn extract_session_list(data: &Value) -> Vec<Value> {
     // Direct array
     if let Some(arr) = data.as_array() {
-        return arr
-            .iter()
-            .filter(|v| v.is_object())
-            .cloned()
-            .collect();
+        return arr.iter().filter(|v| v.is_object()).cloned().collect();
     }
 
     // Nested { sessions: [...] }
     if let Some(obj) = data.as_object() {
         if let Some(Value::Array(arr)) = obj.get("sessions") {
-            return arr
-                .iter()
-                .filter(|v| v.is_object())
-                .cloned()
-                .collect();
+            return arr.iter().filter(|v| v.is_object()).cloned().collect();
         }
 
         // Single session object with id
@@ -56,10 +48,10 @@ fn extract_session_list(data: &Value) -> Vec<Value> {
 fn extract_single_session(data: &Value) -> Result<Value, ApiError> {
     if let Some(obj) = data.as_object() {
         // Nested { session: {...} }
-        if let Some(session) = obj.get("session") {
-            if session.is_object() {
-                return Ok(session.clone());
-            }
+        if let Some(session) = obj.get("session")
+            && session.is_object()
+        {
+            return Ok(session.clone());
         }
         return Ok(data.clone());
     }
@@ -140,7 +132,14 @@ impl SteelClient {
         auth: &Auth,
     ) -> Result<Vec<Value>, ApiError> {
         let data = self
-            .request(base_url, mode, reqwest::Method::GET, "/sessions", None, auth)
+            .request(
+                base_url,
+                mode,
+                reqwest::Method::GET,
+                "/sessions",
+                None,
+                auth,
+            )
             .await?;
         Ok(extract_session_list(&data))
     }
@@ -382,9 +381,9 @@ mod tests {
 
     // --- Integration tests with wiremock ---
 
-    use wiremock::{Mock, MockServer, ResponseTemplate};
-    use wiremock::matchers::{method, path, header};
     use crate::config::auth::AuthSource;
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn test_auth() -> Auth {
         Auth {
@@ -401,8 +400,7 @@ mod tests {
             .and(path("/sessions"))
             .and(header("Steel-Api-Key", "test-key"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(json!([{"id": "s1", "status": "live"}])),
+                ResponseTemplate::new(200).set_body_json(json!([{"id": "s1", "status": "live"}])),
             )
             .mount(&server)
             .await;
@@ -489,8 +487,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/sessions"))
             .respond_with(
-                ResponseTemplate::new(403)
-                    .set_body_json(json!({"message": "Invalid API key"})),
+                ResponseTemplate::new(403).set_body_json(json!({"message": "Invalid API key"})),
             )
             .mount(&server)
             .await;
@@ -503,7 +500,10 @@ mod tests {
 
         let msg = err.to_string();
         assert!(msg.contains("403"), "expected 403 in: {msg}");
-        assert!(msg.contains("Invalid API key"), "expected error message in: {msg}");
+        assert!(
+            msg.contains("Invalid API key"),
+            "expected error message in: {msg}"
+        );
     }
 
     #[tokio::test]

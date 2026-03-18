@@ -55,9 +55,7 @@ pub fn resolve_tool_url(url_arg: Option<&str>) -> anyhow::Result<String> {
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Missing URL. Provide a target URL as the first argument."
-            )
+            anyhow::anyhow!("Missing URL. Provide a target URL as the first argument.")
         })?;
 
     let normalized = normalize_url(candidate);

@@ -14,6 +14,7 @@ const LOCK_STALE: Duration = Duration::from_millis(15_000);
 /// Persistent session state. Matches TS `BrowserSessionState`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct SessionState {
     pub active_session_id: Option<String>,
     pub active_api_mode: Option<ApiMode>,
@@ -44,26 +45,9 @@ impl NamedSessions {
     }
 }
 
-impl Default for SessionState {
-    fn default() -> Self {
-        Self {
-            active_session_id: None,
-            active_api_mode: None,
-            active_session_name: None,
-            named_sessions: NamedSessions::default(),
-            updated_at: None,
-        }
-    }
-}
-
 impl SessionState {
     /// Set the active session. Matches TS `setActiveSessionState()`.
-    pub fn set_active(
-        &mut self,
-        mode: ApiMode,
-        session_id: &str,
-        session_name: Option<&str>,
-    ) {
+    pub fn set_active(&mut self, mode: ApiMode, session_id: &str, session_name: Option<&str>) {
         self.active_api_mode = Some(mode);
         self.active_session_id = Some(session_id.to_string());
         self.active_session_name = session_name.map(|s| s.to_string());
@@ -86,11 +70,7 @@ impl SessionState {
     }
 
     /// Find a candidate session ID. Matches TS `resolveCandidateSessionId()`.
-    pub fn resolve_candidate(
-        &self,
-        mode: ApiMode,
-        session_name: Option<&str>,
-    ) -> Option<&str> {
+    pub fn resolve_candidate(&self, mode: ApiMode, session_name: Option<&str>) -> Option<&str> {
         if let Some(name) = session_name {
             return self.named_sessions.get(mode).get(name).map(|s| s.as_str());
         }
@@ -205,15 +185,13 @@ fn acquire_lock(lock_path: &Path) -> Result<()> {
             Ok(_) => return Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 // Check if lock is stale
-                if let Ok(metadata) = std::fs::metadata(lock_path) {
-                    if let Ok(modified) = metadata.modified() {
-                        if let Ok(age) = SystemTime::now().duration_since(modified) {
-                            if age > LOCK_STALE {
-                                let _ = std::fs::remove_file(lock_path);
-                                continue;
-                            }
-                        }
-                    }
+                if let Ok(metadata) = std::fs::metadata(lock_path)
+                    && let Ok(modified) = metadata.modified()
+                    && let Ok(age) = SystemTime::now().duration_since(modified)
+                    && age > LOCK_STALE
+                {
+                    let _ = std::fs::remove_file(lock_path);
+                    continue;
                 }
 
                 if started.elapsed() >= LOCK_TIMEOUT {
@@ -353,10 +331,7 @@ mod tests {
             .cloud
             .insert("work".into(), "sess-1".into());
 
-        assert_eq!(
-            state.resolve_name(ApiMode::Cloud, "sess-1"),
-            Some("work")
-        );
+        assert_eq!(state.resolve_name(ApiMode::Cloud, "sess-1"), Some("work"));
         assert_eq!(state.resolve_name(ApiMode::Cloud, "other"), None);
     }
 
@@ -365,10 +340,7 @@ mod tests {
         let mut state = SessionState::default();
         state.set_active(ApiMode::Cloud, "sess-1", Some("dev"));
 
-        assert_eq!(
-            state.resolve_name(ApiMode::Cloud, "sess-1"),
-            Some("dev")
-        );
+        assert_eq!(state.resolve_name(ApiMode::Cloud, "sess-1"), Some("dev"));
     }
 
     // --- Serialization ---
@@ -514,7 +486,11 @@ mod tests {
             ts.ends_with(".000Z"),
             "Timestamp should end with .000Z, got: {ts}"
         );
-        assert_eq!(ts.len(), 24, "ISO 8601 timestamp should be 24 chars, got: {ts}");
+        assert_eq!(
+            ts.len(),
+            24,
+            "ISO 8601 timestamp should be 24 chars, got: {ts}"
+        );
         assert_eq!(&ts[4..5], "-");
         assert_eq!(&ts[7..8], "-");
         assert_eq!(&ts[10..11], "T");
