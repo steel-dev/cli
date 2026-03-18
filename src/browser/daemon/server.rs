@@ -119,7 +119,16 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
 
     let socket_path = process::socket_path(&session_name);
     let _ = std::fs::remove_file(&socket_path);
-    let listener = UnixListener::bind(&socket_path)?;
+    let listener = match UnixListener::bind(&socket_path) {
+        Ok(l) => l,
+        Err(e) => {
+            let _ = api_client
+                .release_session(&params.base_url, params.mode, &session_info.session_id, &auth)
+                .await;
+            cleanup(&session_name);
+            return Err(e.into());
+        }
+    };
 
     let mut last_health_check = tokio::time::Instant::now();
 
