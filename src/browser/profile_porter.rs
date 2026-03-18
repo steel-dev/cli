@@ -28,6 +28,7 @@ impl BrowserId {
         ]
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<BrowserId> {
         match s.to_lowercase().as_str() {
             "chrome" => Some(BrowserId::Chrome),
@@ -314,28 +315,27 @@ pub fn detect_installed_browsers() -> Vec<BrowserId> {
 
 fn get_profile_display_name(base: &Path, dir_name: &str) -> String {
     let prefs_path = base.join(dir_name).join("Preferences");
-    if let Ok(contents) = std::fs::read_to_string(&prefs_path) {
-        if let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&contents) {
-            if let Some(name) = prefs
-                .get("profile")
-                .and_then(|p| p.get("name"))
-                .and_then(|n| n.as_str())
-            {
-                if !name.is_empty() && name != dir_name {
-                    return name.to_string();
-                }
-            }
-            if let Some(full_name) = prefs
-                .get("account_info")
-                .and_then(|a| a.as_array())
-                .and_then(|a| a.first())
-                .and_then(|a| a.get("full_name"))
-                .and_then(|n| n.as_str())
-            {
-                if !full_name.is_empty() {
-                    return full_name.to_string();
-                }
-            }
+    if let Ok(contents) = std::fs::read_to_string(&prefs_path)
+        && let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&contents)
+    {
+        if let Some(name) = prefs
+            .get("profile")
+            .and_then(|p| p.get("name"))
+            .and_then(|n| n.as_str())
+            && !name.is_empty()
+            && name != dir_name
+        {
+            return name.to_string();
+        }
+        if let Some(full_name) = prefs
+            .get("account_info")
+            .and_then(|a| a.as_array())
+            .and_then(|a| a.first())
+            .and_then(|a| a.get("full_name"))
+            .and_then(|n| n.as_str())
+            && !full_name.is_empty()
+        {
+            return full_name.to_string();
         }
     }
     dir_name.to_string()
@@ -756,12 +756,11 @@ fn collect_files_recursive(dir_path: &Path, base_dir: &Path, files: &mut HashMap
 
         if path.is_dir() {
             collect_files_recursive(&path, base_dir, files);
-        } else if path.is_file() {
-            if let Ok(rel) = path.strip_prefix(base_dir) {
-                if let Ok(data) = std::fs::read(&path) {
-                    files.insert(rel.to_string_lossy().to_string(), data);
-                }
-            }
+        } else if path.is_file()
+            && let Ok(rel) = path.strip_prefix(base_dir)
+            && let Ok(data) = std::fs::read(&path)
+        {
+            files.insert(rel.to_string_lossy().to_string(), data);
         }
     }
 }

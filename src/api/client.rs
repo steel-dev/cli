@@ -39,10 +39,10 @@ impl ApiError {
 /// Matches TS `extractApiErrorMessage()`.
 fn extract_error_message(body: &Value, status_text: &str) -> String {
     // Try body.message
-    if let Some(msg) = body.get("message").and_then(|v| v.as_str()) {
-        if !msg.trim().is_empty() {
-            return msg.to_string();
-        }
+    if let Some(msg) = body.get("message").and_then(|v| v.as_str())
+        && !msg.trim().is_empty()
+    {
+        return msg.to_string();
     }
 
     // Try body.error.message
@@ -50,10 +50,9 @@ fn extract_error_message(body: &Value, status_text: &str) -> String {
         .get("error")
         .and_then(|e| e.get("message"))
         .and_then(|v| v.as_str())
+        && !msg.trim().is_empty()
     {
-        if !msg.trim().is_empty() {
-            return msg.to_string();
-        }
+        return msg.to_string();
     }
 
     if !status_text.is_empty() {

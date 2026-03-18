@@ -72,19 +72,18 @@ pub fn get_session_id(session: &Value) -> Option<String> {
 pub fn is_session_live(session: &Value) -> bool {
     let live_keys = ["isLive", "live", "active"];
     for key in &live_keys {
-        if let Some(v) = session.get(key) {
-            if let Some(b) = v.as_bool() {
-                return b;
-            }
+        if let Some(v) = session.get(key)
+            && let Some(b) = v.as_bool()
+        {
+            return b;
         }
     }
 
-    if let Some(ended) = session.get("endedAt") {
-        if let Some(s) = ended.as_str() {
-            if !s.trim().is_empty() {
-                return false;
-            }
-        }
+    if let Some(ended) = session.get("endedAt")
+        && let Some(s) = ended.as_str()
+        && !s.trim().is_empty()
+    {
+        return false;
     }
 
     if let Some(status) = get_session_status(session) {
@@ -112,12 +111,12 @@ fn get_connect_url(session: &Value) -> Option<String> {
         "wsEndpoint",
     ];
     for key in &keys {
-        if let Some(v) = session.get(key) {
-            if let Some(s) = v.as_str() {
-                let trimmed = s.trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
-                }
+        if let Some(v) = session.get(key)
+            && let Some(s) = v.as_str()
+        {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
             }
         }
     }
@@ -127,12 +126,12 @@ fn get_connect_url(session: &Value) -> Option<String> {
 fn get_viewer_url(session: &Value, mode: ApiMode, session_id: &str) -> Option<String> {
     let keys = ["sessionViewerUrl", "viewerUrl", "liveViewUrl"];
     for key in &keys {
-        if let Some(v) = session.get(key) {
-            if let Some(s) = v.as_str() {
-                let trimmed = s.trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
-                }
+        if let Some(v) = session.get(key)
+            && let Some(s) = v.as_str()
+        {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
             }
         }
     }
@@ -157,26 +156,24 @@ pub fn to_session_summary(
     let mut connect_url = get_connect_url(session);
 
     // Fallback: build connect URL for cloud mode
-    if connect_url.is_none() && mode == ApiMode::Cloud {
-        if let Some(ref api_key) = auth.api_key {
-            connect_url = Some(format!(
-                "wss://connect.steel.dev?apiKey={api_key}&sessionId={session_id}"
-            ));
-        }
+    if connect_url.is_none()
+        && mode == ApiMode::Cloud
+        && let Some(ref api_key) = auth.api_key
+    {
+        connect_url = Some(format!(
+            "wss://connect.steel.dev?apiKey={api_key}&sessionId={session_id}"
+        ));
     }
 
     // Inject apiKey into connect URL for cloud mode
-    if let Some(ref url) = connect_url {
-        if mode == ApiMode::Cloud {
-            if let Some(ref api_key) = auth.api_key {
-                if !url.contains("apiKey=") {
-                    if let Ok(mut parsed) = url::Url::parse(url) {
-                        parsed.query_pairs_mut().append_pair("apiKey", api_key);
-                        connect_url = Some(parsed.to_string());
-                    }
-                }
-            }
-        }
+    if let Some(ref url) = connect_url
+        && mode == ApiMode::Cloud
+        && let Some(ref api_key) = auth.api_key
+        && !url.contains("apiKey=")
+        && let Ok(mut parsed) = url::Url::parse(url)
+    {
+        parsed.query_pairs_mut().append_pair("apiKey", api_key);
+        connect_url = Some(parsed.to_string());
     }
 
     Ok(SessionSummary {
@@ -229,10 +226,10 @@ fn resolve_target_session(
         }
     }
 
-    if state.active_api_mode == Some(mode) {
-        if let Some(ref id) = state.active_session_id {
-            return (Some(id.clone()), state.active_session_name.clone());
-        }
+    if state.active_api_mode == Some(mode)
+        && let Some(ref id) = state.active_session_id
+    {
+        return (Some(id.clone()), state.active_session_name.clone());
     }
 
     (None, None)
@@ -371,7 +368,7 @@ pub async fn stop_session(
         let live_ids: Vec<String> = sessions
             .iter()
             .filter(|s| is_session_live(s))
-            .filter_map(|s| get_session_id(s))
+            .filter_map(get_session_id)
             .collect();
 
         for id in &live_ids {

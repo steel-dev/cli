@@ -14,6 +14,7 @@ const LOCK_STALE: Duration = Duration::from_millis(15_000);
 /// Persistent session state. Matches TS `BrowserSessionState`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct SessionState {
     pub active_session_id: Option<String>,
     pub active_api_mode: Option<ApiMode>,
@@ -40,18 +41,6 @@ impl NamedSessions {
         match mode {
             ApiMode::Cloud => &mut self.cloud,
             ApiMode::Local => &mut self.local,
-        }
-    }
-}
-
-impl Default for SessionState {
-    fn default() -> Self {
-        Self {
-            active_session_id: None,
-            active_api_mode: None,
-            active_session_name: None,
-            named_sessions: NamedSessions::default(),
-            updated_at: None,
         }
     }
 }
@@ -196,15 +185,13 @@ fn acquire_lock(lock_path: &Path) -> Result<()> {
             Ok(_) => return Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 // Check if lock is stale
-                if let Ok(metadata) = std::fs::metadata(lock_path) {
-                    if let Ok(modified) = metadata.modified() {
-                        if let Ok(age) = SystemTime::now().duration_since(modified) {
-                            if age > LOCK_STALE {
-                                let _ = std::fs::remove_file(lock_path);
-                                continue;
-                            }
-                        }
-                    }
+                if let Ok(metadata) = std::fs::metadata(lock_path)
+                    && let Ok(modified) = metadata.modified()
+                    && let Ok(age) = SystemTime::now().duration_since(modified)
+                    && age > LOCK_STALE
+                {
+                    let _ = std::fs::remove_file(lock_path);
+                    continue;
                 }
 
                 if started.elapsed() >= LOCK_TIMEOUT {

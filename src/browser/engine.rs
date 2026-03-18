@@ -70,17 +70,17 @@ impl BrowserEngine {
 
         // Set scoped headers if provided
         let has_headers = headers.is_some_and(|h| !h.is_empty());
-        if let Some(h) = headers {
-            if !h.is_empty() {
-                let client = &*self.manager.client;
-                let session_id = self
-                    .manager
-                    .active_session_id()
-                    .map_err(|e| anyhow::anyhow!(e))?;
-                network::set_extra_headers(client, session_id, h)
-                    .await
-                    .map_err(|e| anyhow::anyhow!(e))?;
-            }
+        if let Some(h) = headers
+            && !h.is_empty()
+        {
+            let client = &*self.manager.client;
+            let session_id = self
+                .manager
+                .active_session_id()
+                .map_err(|e| anyhow::anyhow!(e))?;
+            network::set_extra_headers(client, session_id, h)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
         }
 
         let result = self

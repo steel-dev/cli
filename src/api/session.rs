@@ -48,10 +48,10 @@ fn extract_session_list(data: &Value) -> Vec<Value> {
 fn extract_single_session(data: &Value) -> Result<Value, ApiError> {
     if let Some(obj) = data.as_object() {
         // Nested { session: {...} }
-        if let Some(session) = obj.get("session") {
-            if session.is_object() {
-                return Ok(session.clone());
-            }
+        if let Some(session) = obj.get("session")
+            && session.is_object()
+        {
+            return Ok(session.clone());
         }
         return Ok(data.clone());
     }

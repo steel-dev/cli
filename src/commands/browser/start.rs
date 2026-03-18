@@ -91,15 +91,15 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let session = start_session(&client, &base_url, mode, &auth, &paths, session, &options).await?;
 
     // Write profile mapping back if a profile was specified
-    if let Some(ref profile_name) = args.profile {
-        if let Some(ref returned_profile_id) = session.profile_id {
-            profile_store::write_profile(
-                profile_name,
-                returned_profile_id,
-                stored_chrome_profile.as_deref(),
-                stored_browser.as_deref(),
-            )?;
-        }
+    if let Some(ref profile_name) = args.profile
+        && let Some(ref returned_profile_id) = session.profile_id
+    {
+        profile_store::write_profile(
+            profile_name,
+            returned_profile_id,
+            stored_chrome_profile.as_deref(),
+            stored_browser.as_deref(),
+        )?;
     }
 
     // Eagerly spawn daemon so subsequent commands are fast

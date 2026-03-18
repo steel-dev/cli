@@ -25,12 +25,11 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         println!("source: {}", auth.source);
     }
 
-    if let Some(ref cfg) = config {
-        if let Some(ref browser) = cfg.browser {
-            if let Some(ref url) = browser.api_url {
-                println!("browser.apiUrl: {url}");
-            }
-        }
+    if let Some(ref cfg) = config
+        && let Some(ref browser) = cfg.browser
+        && let Some(ref url) = browser.api_url
+    {
+        println!("browser.apiUrl: {url}");
     }
 
     Ok(())

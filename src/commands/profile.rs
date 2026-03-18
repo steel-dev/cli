@@ -229,7 +229,7 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
             .collect();
 
         let selection = dialoguer::Select::new()
-            .with_prompt(&format!(
+            .with_prompt(format!(
                 "Select {} profile to import",
                 browser_id.display_name()
             ))
