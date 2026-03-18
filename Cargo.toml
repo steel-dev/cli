@@ -45,6 +45,7 @@ aes-gcm = "0.10"
 getrandom = "0.3"
 
 tempfile = "3"
+jiff = "0.1"
 
 [dev-dependencies]
 wiremock = "0.6"

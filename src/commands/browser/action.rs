@@ -951,96 +951,13 @@ fn estimate_remaining_ms(created_at: &str, timeout_ms: u64) -> Option<u64> {
 }
 
 /// Parse an RFC3339 timestamp to epoch milliseconds.
-/// Handles "2026-03-17T12:00:00Z" and "2026-03-17T12:00:00.123Z" formats.
 fn parse_rfc3339_to_epoch_ms(s: &str) -> Option<u64> {
-    // Strip trailing 'Z' or timezone offset, parse date-time components
-    let s = s.trim();
-
-    // Use jiff or manual parsing. Since we have no chrono dep, parse manually.
-    // Expected format: YYYY-MM-DDTHH:MM:SS[.frac]Z or YYYY-MM-DDTHH:MM:SS[.frac]+HH:MM
-    let (datetime_part, tz_offset_secs) = if s.ends_with('Z') || s.ends_with('z') {
-        (&s[..s.len() - 1], 0i64)
-    } else if let Some(plus_pos) = s.rfind('+') {
-        if plus_pos > 10 {
-            let offset = parse_tz_offset(&s[plus_pos..])?;
-            (&s[..plus_pos], offset)
-        } else {
-            return None;
-        }
-    } else if let Some(minus_pos) = s.rfind('-') {
-        if minus_pos > 10 {
-            let offset = parse_tz_offset(&s[minus_pos..])?;
-            (&s[..minus_pos], offset)
-        } else {
-            return None;
-        }
-    } else {
-        return None;
-    };
-
-    let (date_part, time_part) = datetime_part
-        .split_once('T')
-        .or_else(|| datetime_part.split_once('t'))?;
-    let date_fields: Vec<&str> = date_part.split('-').collect();
-    if date_fields.len() != 3 {
+    let ts: jiff::Timestamp = s.trim().parse().ok()?;
+    let ms = ts.as_millisecond();
+    if ms < 0 {
         return None;
     }
-    let year: i64 = date_fields[0].parse().ok()?;
-    let month: u32 = date_fields[1].parse().ok()?;
-    let day: u32 = date_fields[2].parse().ok()?;
-
-    let (time_whole, frac_ms) = if let Some((whole, frac)) = time_part.split_once('.') {
-        let ms: u64 = match frac.len() {
-            1 => frac.parse::<u64>().ok()? * 100,
-            2 => frac.parse::<u64>().ok()? * 10,
-            3 => frac.parse::<u64>().ok()?,
-            n if n > 3 => frac[..3].parse().ok()?,
-            _ => 0,
-        };
-        (whole, ms)
-    } else {
-        (time_part, 0u64)
-    };
-
-    let time_fields: Vec<&str> = time_whole.split(':').collect();
-    if time_fields.len() != 3 {
-        return None;
-    }
-    let hour: u32 = time_fields[0].parse().ok()?;
-    let min: u32 = time_fields[1].parse().ok()?;
-    let sec: u32 = time_fields[2].parse().ok()?;
-
-    // Convert to epoch using a simplified calculation
-    let days = days_from_civil(year, month, day);
-    let epoch_secs =
-        days * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64 - tz_offset_secs;
-
-    if epoch_secs < 0 {
-        return None;
-    }
-
-    Some(epoch_secs as u64 * 1000 + frac_ms)
-}
-
-fn parse_tz_offset(s: &str) -> Option<i64> {
-    let sign: i64 = if s.starts_with('+') { 1 } else { -1 };
-    let rest = &s[1..];
-    let (h, m) = rest.split_once(':')?;
-    let hours: i64 = h.parse().ok()?;
-    let mins: i64 = m.parse().ok()?;
-    Some(sign * (hours * 3600 + mins * 60))
-}
-
-/// Days from civil date (year, month, day) to Unix epoch.
-/// Algorithm from Howard Hinnant's date library.
-fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
-    let y = if month <= 2 { year - 1 } else { year };
-    let m = if month <= 2 { month + 9 } else { month - 3 };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = (y - era * 400) as u32;
-    let doy = (153 * m + 2) / 5 + day - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146097 + doe as i64 - 719468
+    Some(ms as u64)
 }
 
 #[cfg(test)]
@@ -1240,16 +1157,4 @@ mod tests {
         assert!(remaining.is_none());
     }
 
-    // ── days_from_civil ───────────────────────────────────────────
-
-    #[test]
-    fn days_from_civil_epoch() {
-        assert_eq!(days_from_civil(1970, 1, 1), 0);
-    }
-
-    #[test]
-    fn days_from_civil_known_date() {
-        // 2025-01-01 = day 20089
-        assert_eq!(days_from_civil(2025, 1, 1), 20089);
-    }
 }
