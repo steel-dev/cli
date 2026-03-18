@@ -8,9 +8,7 @@
 use serde_json::json;
 use tempfile::TempDir;
 
-use steel_cli::browser::daemon::protocol::{
-    DaemonCommand, DaemonCreateParams, SessionInfo,
-};
+use steel_cli::browser::daemon::protocol::{DaemonCommand, DaemonCreateParams, SessionInfo};
 use steel_cli::browser::lifecycle::*;
 use steel_cli::config::auth::{Auth, AuthSource};
 use steel_cli::config::settings::ApiMode;

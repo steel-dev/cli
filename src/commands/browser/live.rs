@@ -30,9 +30,7 @@ pub async fn run(_args: Args, session: Option<&str>) -> anyhow::Result<()> {
             output::success(json!(url), &format!("{url}\n"));
         }
         None => {
-            anyhow::bail!(
-                "Session \"{session_name}\" has no live viewer URL."
-            );
+            anyhow::bail!("Session \"{session_name}\" has no live viewer URL.");
         }
     }
 

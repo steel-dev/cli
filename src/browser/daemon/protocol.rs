@@ -215,6 +215,73 @@ pub enum DaemonCommand {
     TabClose {
         index: Option<usize>,
     },
+    // ── Cookies ──
+    CookiesGet {
+        urls: Option<Vec<String>>,
+    },
+    CookiesSet {
+        name: String,
+        value: String,
+        domain: Option<String>,
+        path: Option<String>,
+        secure: bool,
+        http_only: bool,
+    },
+    CookiesClear,
+
+    // ── Storage ──
+    StorageGet {
+        storage_type: String,
+        key: Option<String>,
+    },
+    StorageSet {
+        storage_type: String,
+        key: String,
+        value: String,
+    },
+    StorageClear {
+        storage_type: String,
+    },
+
+    // ── Drag & drop ──
+    Drag {
+        source: String,
+        target: String,
+    },
+
+    // ── File upload ──
+    Upload {
+        selector: String,
+        files: Vec<String>,
+    },
+
+    // ── Visual ──
+    Highlight {
+        selector: String,
+    },
+
+    // ── Browser settings ──
+    SetGeolocation {
+        latitude: f64,
+        longitude: f64,
+        accuracy: Option<f64>,
+    },
+    SetViewport {
+        width: u32,
+        height: u32,
+        device_scale_factor: Option<f64>,
+        mobile: Option<bool>,
+    },
+    SetUserAgent {
+        user_agent: String,
+    },
+    SetHeaders {
+        headers: HashMap<String, String>,
+    },
+    SetOffline {
+        offline: bool,
+    },
+
     Close,
     Ping,
     Shutdown,

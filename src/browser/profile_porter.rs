@@ -341,10 +341,7 @@ fn get_profile_metadata(base: &Path, dir_name: &str) -> (String, Option<String>)
         // Prefer given_name (what Chrome shows), then full_name, then profile.name
         let name = get_str(account, "given_name")
             .or_else(|| get_str(account, "full_name"))
-            .or_else(|| {
-                get_str(prefs.get("profile"), "name")
-                    .filter(|n| n != dir_name)
-            })
+            .or_else(|| get_str(prefs.get("profile"), "name").filter(|n| n != dir_name))
             .unwrap_or_else(|| dir_name.to_string());
 
         return (name, email);
@@ -707,8 +704,7 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
     let mut skipped: u64 = 0;
     let tx = conn.unchecked_transaction()?;
     {
-        let mut update =
-            tx.prepare("UPDATE cookies SET encrypted_value = ? WHERE rowid = ?")?;
+        let mut update = tx.prepare("UPDATE cookies SET encrypted_value = ? WHERE rowid = ?")?;
 
         for (rowid, host_key, encrypted_value) in &rows {
             let Some(plaintext) = decrypt_cookie(
@@ -735,7 +731,11 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
 
     let buffer = std::fs::read(&tmp_path)?;
     // tmp (NamedTempFile) is dropped here, auto-deleting the file
-    Ok(ReencryptResult { buffer, converted, skipped })
+    Ok(ReencryptResult {
+        buffer,
+        converted,
+        skipped,
+    })
 }
 
 // ─── File collection ─────────────────────────────────────────────────────────

@@ -101,11 +101,10 @@ pub fn get_session_timeout(session: &Value) -> Option<u64> {
                 return Some(n);
             }
             // Handle string numbers
-            if let Some(s) = v.as_str() {
-                if let Ok(n) = s.trim().parse::<u64>() {
+            if let Some(s) = v.as_str()
+                && let Ok(n) = s.trim().parse::<u64>() {
                     return Some(n);
                 }
-            }
         }
     }
     None
@@ -120,13 +119,12 @@ pub fn get_session_created_at_ms(session: &Value) -> Option<u64> {
             && let Some(s) = v.as_str()
         {
             let trimmed = s.trim();
-            if !trimmed.is_empty() {
-                if let Ok(ts) = jiff::Timestamp::strptime("%Y-%m-%dT%H:%M:%S%.fZ", trimmed)
+            if !trimmed.is_empty()
+                && let Ok(ts) = jiff::Timestamp::strptime("%Y-%m-%dT%H:%M:%S%.fZ", trimmed)
                     .or_else(|_| trimmed.parse::<jiff::Timestamp>())
                 {
                     return Some(ts.as_millisecond() as u64);
                 }
-            }
         }
     }
     None
@@ -491,14 +489,26 @@ mod tests {
 
     #[test]
     fn session_timeout_from_response() {
-        assert_eq!(get_session_timeout(&json!({"timeout": 300000})), Some(300000));
-        assert_eq!(get_session_timeout(&json!({"sessionTimeout": 60000})), Some(60000));
-        assert_eq!(get_session_timeout(&json!({"timeoutMs": 120000})), Some(120000));
+        assert_eq!(
+            get_session_timeout(&json!({"timeout": 300000})),
+            Some(300000)
+        );
+        assert_eq!(
+            get_session_timeout(&json!({"sessionTimeout": 60000})),
+            Some(60000)
+        );
+        assert_eq!(
+            get_session_timeout(&json!({"timeoutMs": 120000})),
+            Some(120000)
+        );
     }
 
     #[test]
     fn session_timeout_string_number() {
-        assert_eq!(get_session_timeout(&json!({"timeout": "300000"})), Some(300000));
+        assert_eq!(
+            get_session_timeout(&json!({"timeout": "300000"})),
+            Some(300000)
+        );
     }
 
     #[test]

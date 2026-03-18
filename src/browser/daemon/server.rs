@@ -98,7 +98,9 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
                 // Already past expiry — will exit on the first loop iteration
                 Some(tokio::time::Instant::now())
             } else {
-                let remaining = expire_epoch.saturating_sub(buffer).saturating_sub(now_epoch);
+                let remaining = expire_epoch
+                    .saturating_sub(buffer)
+                    .saturating_sub(now_epoch);
                 Some(tokio::time::Instant::now() + Duration::from_millis(remaining))
             }
         }
@@ -110,7 +112,12 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
         Err(e) => {
             // Best-effort release
             let _ = api_client
-                .release_session(&params.base_url, params.mode, &session_info.session_id, &auth)
+                .release_session(
+                    &params.base_url,
+                    params.mode,
+                    &session_info.session_id,
+                    &auth,
+                )
                 .await;
             cleanup(&session_name);
             return Err(e);
@@ -123,7 +130,12 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
         Ok(l) => l,
         Err(e) => {
             let _ = api_client
-                .release_session(&params.base_url, params.mode, &session_info.session_id, &auth)
+                .release_session(
+                    &params.base_url,
+                    params.mode,
+                    &session_info.session_id,
+                    &auth,
+                )
                 .await;
             cleanup(&session_name);
             return Err(e.into());
@@ -143,12 +155,11 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
         }
 
         // Proactive expiry check: exit before the server kills the session
-        if let Some(deadline) = expires_at {
-            if tokio::time::Instant::now() >= deadline {
+        if let Some(deadline) = expires_at
+            && tokio::time::Instant::now() >= deadline {
                 eprintln!("[daemon] Session timeout reached, shutting down");
                 break;
             }
-        }
 
         match tokio::time::timeout(IDLE_TIMEOUT, listener.accept()).await {
             Err(_) => {
@@ -174,7 +185,12 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
 
     // Best-effort release the API session
     let _ = api_client
-        .release_session(&params.base_url, params.mode, &session_info.session_id, &auth)
+        .release_session(
+            &params.base_url,
+            params.mode,
+            &session_info.session_id,
+            &auth,
+        )
         .await;
 
     cleanup(&session_name);
@@ -537,6 +553,107 @@ async fn dispatch_inner(
             let result = engine.tab_close(index).await?;
             Ok(result)
         }
+        // ── Cookies ──
+        DaemonCommand::CookiesGet { urls } => {
+            let data = engine.cookies_get(urls.as_deref()).await?;
+            Ok(data)
+        }
+        DaemonCommand::CookiesSet {
+            name,
+            value,
+            domain,
+            path,
+            secure,
+            http_only,
+        } => {
+            engine
+                .cookies_set(
+                    &name,
+                    &value,
+                    domain.as_deref(),
+                    path.as_deref(),
+                    secure,
+                    http_only,
+                )
+                .await?;
+            Ok(Value::Null)
+        }
+        DaemonCommand::CookiesClear => {
+            engine.cookies_clear().await?;
+            Ok(Value::Null)
+        }
+
+        // ── Storage ──
+        DaemonCommand::StorageGet { storage_type, key } => {
+            let data = engine.storage_get(&storage_type, key.as_deref()).await?;
+            Ok(data)
+        }
+        DaemonCommand::StorageSet {
+            storage_type,
+            key,
+            value,
+        } => {
+            engine.storage_set(&storage_type, &key, &value).await?;
+            Ok(Value::Null)
+        }
+        DaemonCommand::StorageClear { storage_type } => {
+            engine.storage_clear(&storage_type).await?;
+            Ok(Value::Null)
+        }
+
+        // ── Drag & drop ──
+        DaemonCommand::Drag { source, target } => {
+            engine.drag(&source, &target).await?;
+            Ok(Value::Null)
+        }
+
+        // ── File upload ──
+        DaemonCommand::Upload { selector, files } => {
+            engine.upload_files(&selector, &files).await?;
+            Ok(Value::Null)
+        }
+
+        // ── Visual ──
+        DaemonCommand::Highlight { selector } => {
+            engine.highlight(&selector).await?;
+            Ok(Value::Null)
+        }
+
+        // ── Browser settings ──
+        DaemonCommand::SetGeolocation {
+            latitude,
+            longitude,
+            accuracy,
+        } => {
+            engine
+                .set_geolocation(latitude, longitude, accuracy)
+                .await?;
+            Ok(Value::Null)
+        }
+        DaemonCommand::SetViewport {
+            width,
+            height,
+            device_scale_factor,
+            mobile,
+        } => {
+            engine
+                .set_viewport(width, height, device_scale_factor, mobile)
+                .await?;
+            Ok(Value::Null)
+        }
+        DaemonCommand::SetUserAgent { user_agent } => {
+            engine.set_user_agent(&user_agent).await?;
+            Ok(Value::Null)
+        }
+        DaemonCommand::SetHeaders { headers } => {
+            engine.set_extra_headers(&headers).await?;
+            Ok(Value::Null)
+        }
+        DaemonCommand::SetOffline { offline } => {
+            engine.set_offline(offline).await?;
+            Ok(Value::Null)
+        }
+
         DaemonCommand::Close | DaemonCommand::Shutdown => {
             // Engine is closed by the main loop after handle_connection returns true.
             Ok(Value::Null)

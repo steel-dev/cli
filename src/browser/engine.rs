@@ -611,4 +611,312 @@ impl BrowserEngine {
     pub async fn is_alive(&self) -> bool {
         self.manager.is_connection_alive().await
     }
+
+    // ── Cookies ──────────────────────────────────────────────────────
+
+    /// Get all cookies, optionally filtered by URLs.
+    pub async fn cookies_get(&self, urls: Option<&[String]>) -> Result<serde_json::Value> {
+        let (client, session_id) = self.active_client_and_session()?;
+        let params = match urls {
+            Some(urls) if !urls.is_empty() => serde_json::json!({ "urls": urls }),
+            _ => serde_json::json!({}),
+        };
+        let result = client
+            .send_command("Network.getCookies", Some(params), Some(session_id))
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        Ok(result
+            .get("cookies")
+            .cloned()
+            .unwrap_or(serde_json::Value::Array(vec![])))
+    }
+
+    /// Set a cookie.
+    pub async fn cookies_set(
+        &self,
+        name: &str,
+        value: &str,
+        domain: Option<&str>,
+        path: Option<&str>,
+        secure: bool,
+        http_only: bool,
+    ) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        let mut params = serde_json::json!({ "name": name, "value": value });
+        if let Some(d) = domain {
+            params["domain"] = serde_json::json!(d);
+        } else {
+            let url = self.manager.get_url().await.unwrap_or_default();
+            params["url"] = serde_json::json!(url);
+        }
+        if let Some(p) = path {
+            params["path"] = serde_json::json!(p);
+        }
+        if secure {
+            params["secure"] = serde_json::json!(true);
+        }
+        if http_only {
+            params["httpOnly"] = serde_json::json!(true);
+        }
+        client
+            .send_command("Network.setCookie", Some(params), Some(session_id))
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        Ok(())
+    }
+
+    /// Clear all browser cookies.
+    pub async fn cookies_clear(&self) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        client
+            .send_command("Network.clearBrowserCookies", None, Some(session_id))
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        Ok(())
+    }
+
+    // ── Storage ──────────────────────────────────────────────────────
+
+    /// Get storage values (localStorage or sessionStorage).
+    pub async fn storage_get(
+        &self,
+        storage_type: &str,
+        key: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let st = if storage_type == "session" {
+            "sessionStorage"
+        } else {
+            "localStorage"
+        };
+        match key {
+            Some(k) => {
+                let k_json = serde_json::to_string(k).unwrap_or_default();
+                self.evaluate(&format!("{st}.getItem({k_json})")).await
+            }
+            None => {
+                let script = format!(
+                    r#"(() => {{ const s = {st}; const r = {{}}; for (let i = 0; i < s.length; i++) {{ const k = s.key(i); r[k] = s.getItem(k); }} return r; }})()"#
+                );
+                self.evaluate(&script).await
+            }
+        }
+    }
+
+    /// Set a storage value.
+    pub async fn storage_set(&self, storage_type: &str, key: &str, value: &str) -> Result<()> {
+        let st = if storage_type == "session" {
+            "sessionStorage"
+        } else {
+            "localStorage"
+        };
+        let k_json = serde_json::to_string(key).unwrap_or_default();
+        let v_json = serde_json::to_string(value).unwrap_or_default();
+        self.evaluate(&format!("{st}.setItem({k_json}, {v_json})"))
+            .await?;
+        Ok(())
+    }
+
+    /// Clear all values in a storage type.
+    pub async fn storage_clear(&self, storage_type: &str) -> Result<()> {
+        let st = if storage_type == "session" {
+            "sessionStorage"
+        } else {
+            "localStorage"
+        };
+        self.evaluate(&format!("{st}.clear()")).await?;
+        Ok(())
+    }
+
+    // ── Drag ─────────────────────────────────────────────────────────
+
+    /// Drag and drop from one element to another.
+    pub async fn drag(&self, source: &str, target: &str) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        let src_box = element::get_element_bounding_box(client, session_id, &self.ref_map, source)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        let tgt_box = element::get_element_bounding_box(client, session_id, &self.ref_map, target)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        let src_x =
+            src_box["x"].as_f64().unwrap_or(0.0) + src_box["width"].as_f64().unwrap_or(0.0) / 2.0;
+        let src_y =
+            src_box["y"].as_f64().unwrap_or(0.0) + src_box["height"].as_f64().unwrap_or(0.0) / 2.0;
+        let tgt_x =
+            tgt_box["x"].as_f64().unwrap_or(0.0) + tgt_box["width"].as_f64().unwrap_or(0.0) / 2.0;
+        let tgt_y =
+            tgt_box["y"].as_f64().unwrap_or(0.0) + tgt_box["height"].as_f64().unwrap_or(0.0) / 2.0;
+
+        // Mouse down on source
+        client
+            .send_command(
+                "Input.dispatchMouseEvent",
+                Some(serde_json::json!({
+                    "type": "mousePressed", "x": src_x, "y": src_y,
+                    "button": "left", "clickCount": 1
+                })),
+                Some(session_id),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        // Interpolate mouse moves
+        let steps = 10u32;
+        for i in 1..=steps {
+            let t = i as f64 / steps as f64;
+            let x = src_x + (tgt_x - src_x) * t;
+            let y = src_y + (tgt_y - src_y) * t;
+            client
+                .send_command(
+                    "Input.dispatchMouseEvent",
+                    Some(serde_json::json!({
+                        "type": "mouseMoved", "x": x, "y": y, "button": "left"
+                    })),
+                    Some(session_id),
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        }
+
+        // Mouse up on target
+        client
+            .send_command(
+                "Input.dispatchMouseEvent",
+                Some(serde_json::json!({
+                    "type": "mouseReleased", "x": tgt_x, "y": tgt_y,
+                    "button": "left", "clickCount": 1
+                })),
+                Some(session_id),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        Ok(())
+    }
+
+    // ── Upload ───────────────────────────────────────────────────────
+
+    /// Upload files to a file input element.
+    pub async fn upload_files(&self, selector: &str, files: &[String]) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        let object_id =
+            element::resolve_element_object_id(client, session_id, &self.ref_map, selector)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+        client
+            .send_command(
+                "DOM.setFileInputFiles",
+                Some(serde_json::json!({ "objectId": object_id, "files": files })),
+                Some(session_id),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        Ok(())
+    }
+
+    // ── Highlight ────────────────────────────────────────────────────
+
+    /// Visually highlight an element.
+    pub async fn highlight(&self, selector: &str) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        interaction::highlight(client, session_id, &self.ref_map, selector)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
+    // ── Browser settings ─────────────────────────────────────────────
+
+    /// Set browser geolocation.
+    pub async fn set_geolocation(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        accuracy: Option<f64>,
+    ) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        let params = serde_json::json!({
+            "latitude": latitude,
+            "longitude": longitude,
+            "accuracy": accuracy.unwrap_or(1.0),
+        });
+        client
+            .send_command(
+                "Emulation.setGeolocationOverride",
+                Some(params),
+                Some(session_id),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        Ok(())
+    }
+
+    /// Set browser viewport size.
+    pub async fn set_viewport(
+        &self,
+        width: u32,
+        height: u32,
+        device_scale_factor: Option<f64>,
+        mobile: Option<bool>,
+    ) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        let params = serde_json::json!({
+            "width": width,
+            "height": height,
+            "deviceScaleFactor": device_scale_factor.unwrap_or(1.0),
+            "mobile": mobile.unwrap_or(false),
+        });
+        client
+            .send_command(
+                "Emulation.setDeviceMetricsOverride",
+                Some(params),
+                Some(session_id),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        Ok(())
+    }
+
+    /// Set browser user agent string.
+    pub async fn set_user_agent(&self, user_agent: &str) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        client
+            .send_command(
+                "Emulation.setUserAgentOverride",
+                Some(serde_json::json!({ "userAgent": user_agent })),
+                Some(session_id),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        Ok(())
+    }
+
+    /// Set extra HTTP headers for all requests.
+    pub async fn set_extra_headers(&self, headers: &HashMap<String, String>) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        network::set_extra_headers(client, session_id, headers)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
+    /// Set offline mode.
+    pub async fn set_offline(&self, offline: bool) -> Result<()> {
+        let (client, session_id) = self.active_client_and_session()?;
+        let params = serde_json::json!({
+            "offline": offline,
+            "latency": 0,
+            "downloadThroughput": -1,
+            "uploadThroughput": -1,
+        });
+        client
+            .send_command(
+                "Network.emulateNetworkConditions",
+                Some(params),
+                Some(session_id),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        Ok(())
+    }
 }

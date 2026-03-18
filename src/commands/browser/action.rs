@@ -108,6 +108,39 @@ pub enum ActionCommand {
         command: TabCommand,
     },
 
+    // --- Cookies ---
+    /// Manage browser cookies
+    Cookies {
+        #[command(subcommand)]
+        command: Option<CookiesCommand>,
+    },
+
+    // --- Storage ---
+    /// Manage browser storage (localStorage/sessionStorage)
+    Storage {
+        #[command(subcommand)]
+        command: StorageTypeCommand,
+    },
+
+    // --- Drag & drop ---
+    /// Drag and drop from one element to another
+    Drag(DragArgs),
+
+    // --- File upload ---
+    /// Upload files to a file input element
+    Upload(UploadArgs),
+
+    // --- Visual ---
+    /// Visually highlight an element
+    Highlight(SelectorArg),
+
+    // --- Browser settings ---
+    /// Configure browser settings (viewport, geolocation, etc.)
+    Set {
+        #[command(subcommand)]
+        command: SetCommand,
+    },
+
     // --- Window ---
     /// Bring the browser window to the foreground
     #[command(name = "bringtofront")]
@@ -168,6 +201,62 @@ pub enum TabCommand {
     Switch(TabSwitchArgs),
     /// Close a tab (active tab if no index given)
     Close(TabCloseArgs),
+}
+
+// ── Cookies subcommands ──────────────────────────────────────────────
+
+#[derive(Subcommand)]
+pub enum CookiesCommand {
+    /// Set a cookie
+    Set(CookiesSetArgs),
+    /// Clear all cookies
+    Clear,
+}
+
+// ── Storage subcommands ─────────────────────────────────────────────
+
+#[derive(Subcommand)]
+pub enum StorageTypeCommand {
+    /// Manage localStorage
+    Local(StorageSubArgs),
+    /// Manage sessionStorage
+    Session(StorageSubArgs),
+}
+
+#[derive(Parser)]
+#[command(args_conflicts_with_subcommands = true)]
+pub struct StorageSubArgs {
+    /// Key to get (returns all if omitted)
+    pub key: Option<String>,
+
+    #[command(subcommand)]
+    pub command: Option<StorageActionCommand>,
+}
+
+#[derive(Subcommand)]
+pub enum StorageActionCommand {
+    /// Set a storage value
+    Set(StorageSetArgs),
+    /// Clear all values
+    Clear,
+}
+
+// ── Set subcommands ─────────────────────────────────────────────────
+
+#[derive(Subcommand)]
+pub enum SetCommand {
+    /// Set viewport size
+    Viewport(SetViewportArgs),
+    /// Set geolocation
+    #[command(aliases = ["geolocation"])]
+    Geo(SetGeoArgs),
+    /// Toggle offline mode
+    Offline(SetOfflineArgs),
+    /// Set extra HTTP headers (JSON string)
+    Headers(SetHeadersArgs),
+    /// Set browser user agent string
+    #[command(name = "useragent", aliases = ["ua"])]
+    UserAgent(SetUserAgentArgs),
 }
 
 // ── Arg structs ─────────────────────────────────────────────────────
@@ -363,6 +452,97 @@ pub struct TabSwitchArgs {
 pub struct TabCloseArgs {
     /// Tab index to close (closes active tab if omitted)
     pub index: Option<usize>,
+}
+
+// ── New command arg structs ──────────────────────────────────────────
+
+#[derive(Parser)]
+pub struct CookiesSetArgs {
+    /// Cookie name
+    pub name: String,
+    /// Cookie value
+    pub value: String,
+    /// Cookie domain
+    #[arg(long)]
+    pub domain: Option<String>,
+    /// Cookie path
+    #[arg(long)]
+    pub path: Option<String>,
+    /// Secure flag
+    #[arg(long)]
+    pub secure: bool,
+    /// HttpOnly flag
+    #[arg(long)]
+    pub http_only: bool,
+}
+
+#[derive(Parser)]
+pub struct StorageSetArgs {
+    /// Key to set
+    pub key: String,
+    /// Value to set
+    pub value: String,
+}
+
+#[derive(Parser)]
+pub struct DragArgs {
+    /// Source element selector or ref
+    pub source: String,
+    /// Target element selector or ref
+    pub target: String,
+}
+
+#[derive(Parser)]
+pub struct UploadArgs {
+    /// File input element selector or ref
+    pub selector: String,
+    /// File paths to upload
+    #[arg(num_args = 1..)]
+    pub files: Vec<String>,
+}
+
+#[derive(Parser)]
+pub struct SetViewportArgs {
+    /// Viewport width in pixels
+    pub width: u32,
+    /// Viewport height in pixels
+    pub height: u32,
+    /// Device scale factor
+    #[arg(long)]
+    pub scale: Option<f64>,
+    /// Emulate mobile device
+    #[arg(long)]
+    pub mobile: bool,
+}
+
+#[derive(Parser)]
+pub struct SetGeoArgs {
+    /// Latitude
+    pub latitude: f64,
+    /// Longitude
+    pub longitude: f64,
+    /// Accuracy in meters
+    #[arg(long)]
+    pub accuracy: Option<f64>,
+}
+
+#[derive(Parser)]
+pub struct SetOfflineArgs {
+    /// "on" to enable offline mode, "off" to disable
+    pub state: String,
+}
+
+#[derive(Parser)]
+pub struct SetHeadersArgs {
+    /// JSON string of headers (e.g. '{"X-Key":"value"}')
+    pub json: String,
+}
+
+#[derive(Parser)]
+pub struct SetUserAgentArgs {
+    /// User agent string
+    #[arg(trailing_var_arg = true, num_args = 1..)]
+    pub user_agent: Vec<String>,
 }
 
 // ── Conversion helpers (pure functions, tested below) ───────────────
@@ -617,7 +797,11 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
             }
         }
         ActionCommand::Eval(args) => {
-            let data = client.send(DaemonCommand::Eval { script: args.script }).await?;
+            let data = client
+                .send(DaemonCommand::Eval {
+                    script: args.script,
+                })
+                .await?;
             output::success_data(data);
         }
         ActionCommand::Find(args) => {
@@ -793,6 +977,146 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
             }
         },
 
+        // --- Cookies ---
+        ActionCommand::Cookies { command } => match command {
+            None => {
+                let data = client
+                    .send(DaemonCommand::CookiesGet { urls: None })
+                    .await?;
+                output::success_data(data);
+            }
+            Some(CookiesCommand::Set(args)) => {
+                client
+                    .send(DaemonCommand::CookiesSet {
+                        name: args.name,
+                        value: args.value,
+                        domain: args.domain,
+                        path: args.path,
+                        secure: args.secure,
+                        http_only: args.http_only,
+                    })
+                    .await?;
+                output::success_silent();
+            }
+            Some(CookiesCommand::Clear) => {
+                client.send(DaemonCommand::CookiesClear).await?;
+                output::success_silent();
+            }
+        },
+
+        // --- Storage ---
+        ActionCommand::Storage { command } => {
+            let (storage_type, sub) = match command {
+                StorageTypeCommand::Local(sub) => ("local", sub),
+                StorageTypeCommand::Session(sub) => ("session", sub),
+            };
+            match sub.command {
+                None => {
+                    // `storage local` or `storage local <key>`
+                    let data = client
+                        .send(DaemonCommand::StorageGet {
+                            storage_type: storage_type.to_string(),
+                            key: sub.key,
+                        })
+                        .await?;
+                    output::success_data(data);
+                }
+                Some(StorageActionCommand::Set(args)) => {
+                    client
+                        .send(DaemonCommand::StorageSet {
+                            storage_type: storage_type.to_string(),
+                            key: args.key,
+                            value: args.value,
+                        })
+                        .await?;
+                    output::success_silent();
+                }
+                Some(StorageActionCommand::Clear) => {
+                    client
+                        .send(DaemonCommand::StorageClear {
+                            storage_type: storage_type.to_string(),
+                        })
+                        .await?;
+                    output::success_silent();
+                }
+            }
+        }
+
+        // --- Drag & drop ---
+        ActionCommand::Drag(args) => {
+            client
+                .send(DaemonCommand::Drag {
+                    source: args.source,
+                    target: args.target,
+                })
+                .await?;
+            output::success_silent();
+        }
+
+        // --- Upload ---
+        ActionCommand::Upload(args) => {
+            client
+                .send(DaemonCommand::Upload {
+                    selector: args.selector,
+                    files: args.files,
+                })
+                .await?;
+            output::success_silent();
+        }
+
+        // --- Highlight ---
+        ActionCommand::Highlight(args) => {
+            client
+                .send(DaemonCommand::Highlight {
+                    selector: args.selector,
+                })
+                .await?;
+            output::success_silent();
+        }
+
+        // --- Browser settings ---
+        ActionCommand::Set { command } => match command {
+            SetCommand::Viewport(args) => {
+                client
+                    .send(DaemonCommand::SetViewport {
+                        width: args.width,
+                        height: args.height,
+                        device_scale_factor: args.scale,
+                        mobile: if args.mobile { Some(true) } else { None },
+                    })
+                    .await?;
+                output::success_silent();
+            }
+            SetCommand::Geo(args) => {
+                client
+                    .send(DaemonCommand::SetGeolocation {
+                        latitude: args.latitude,
+                        longitude: args.longitude,
+                        accuracy: args.accuracy,
+                    })
+                    .await?;
+                output::success_silent();
+            }
+            SetCommand::Offline(args) => {
+                let offline = matches!(args.state.as_str(), "on" | "true" | "1");
+                client.send(DaemonCommand::SetOffline { offline }).await?;
+                output::success_silent();
+            }
+            SetCommand::Headers(args) => {
+                let headers: HashMap<String, String> = serde_json::from_str(&args.json)
+                    .map_err(|e| anyhow::anyhow!("Invalid JSON for headers: {e}"))?;
+                client.send(DaemonCommand::SetHeaders { headers }).await?;
+                output::success_silent();
+            }
+            SetCommand::UserAgent(args) => {
+                let user_agent = args.user_agent.join(" ");
+                client
+                    .send(DaemonCommand::SetUserAgent { user_agent })
+                    .await?;
+                output::success_silent();
+            }
+        },
+
         // --- Window ---
         ActionCommand::BringToFront => {
             client.send(DaemonCommand::BringToFront).await?;
@@ -831,11 +1155,10 @@ async fn check_session_health(
     _original_err: &anyhow::Error,
 ) -> Option<anyhow::Error> {
     let name = session_name.unwrap_or("default");
-    if let Ok(mut client) = DaemonClient::connect(name).await {
-        if client.send(DaemonCommand::Ping).await.is_ok() {
+    if let Ok(mut client) = DaemonClient::connect(name).await
+        && client.send(DaemonCommand::Ping).await.is_ok() {
             return None; // Daemon is fine, original error stands
         }
-    }
     Some(anyhow::anyhow!(
         "Session \"{name}\" is no longer reachable. Run `steel browser start` to create a new one."
     ))
@@ -985,5 +1308,4 @@ mod tests {
         let v = optional_vec(vec!["color".to_string()]);
         assert_eq!(v.unwrap(), vec!["color"]);
     }
-
 }

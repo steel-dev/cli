@@ -56,6 +56,25 @@ const COVERED: &[&str] = &[
     "tab_new",
     "tab_switch",
     "tab_close",
+    // Cookies & storage
+    "cookies_get",
+    "cookies_set",
+    "cookies_clear",
+    "storage_get",
+    "storage_set",
+    "storage_clear",
+    // Drag & upload
+    "drag",
+    "upload",
+    // Visual
+    "highlight",
+    // Browser settings
+    "viewport",
+    "geolocation",
+    "useragent",
+    "user_agent",
+    "headers",
+    "offline",
 ];
 
 /// Actions in agent-browser that we intentionally skip (not yet wrapped).
@@ -64,9 +83,7 @@ const SKIPPED: &[&str] = &[
     "setcontent",
     // Interactions not yet wrapped
     "dispatch",
-    "highlight",
     "tap",
-    "drag",
     "swipe",
     "multiselect",
     // Locators
@@ -78,16 +95,7 @@ const SKIPPED: &[&str] = &[
     "getbytitle",
     "getbytestid",
     "nth",
-    // Cookies / storage
-    "cookies_get",
-    "cookies_set",
-    "cookies_clear",
-    "storage_get",
-    "storage_set",
-    "storage_clear",
     // Network
-    "headers",
-    "offline",
     "console",
     "errors",
     "route",
@@ -111,14 +119,10 @@ const SKIPPED: &[&str] = &[
     // Tabs
     "window_new",
     // Browser configuration
-    "viewport",
-    "useragent",
-    "user_agent",
     "set_media",
     "emulatemedia",
     "timezone",
     "locale",
-    "geolocation",
     "permissions",
     "download",
     // Diff
@@ -137,9 +141,8 @@ const SKIPPED: &[&str] = &[
     "mousemove",
     "mousedown",
     "mouseup",
-    // Dialog / file / scripts
+    // Dialog / scripts
     "dialog",
-    "upload",
     "addscript",
     "addinitscript",
     "addstyle",

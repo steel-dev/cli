@@ -204,7 +204,12 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         let browser_id = if let Some(ref b) = args.browser {
             parse_browser(b)?
         } else {
-            let browsers: Vec<_> = choices.iter().map(|c| c.browser).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+            let browsers: Vec<_> = choices
+                .iter()
+                .map(|c| c.browser)
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
             if browsers.len() == 1 {
                 browsers[0]
             } else {
