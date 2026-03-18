@@ -73,15 +73,14 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
 
     let persist_profile = args.profile.is_some() && args.update_profile;
 
-    // Check if daemon already running → verify health then reattach
-    if let Ok(mut client) = DaemonClient::connect(&session_name).await {
-        if client.send(DaemonCommand::Ping).await.is_ok() {
-            let info = get_session_info(&mut client).await?;
-            display_session_info(&info);
-            return Ok(());
-        }
-        // Daemon socket connected but not responding — clean up and start fresh
-        drop(client);
+    // If a daemon is already running for this session name, stop it first.
+    // `start` always creates a fresh session — use `steel browser sessions`
+    // to inspect existing ones.
+    if DaemonClient::connect(&session_name).await.is_ok() {
+        eprintln!("Replacing existing session \"{session_name}\"...");
+        process::stop_daemon(&session_name).await?;
+    } else {
+        // No live daemon, but stale files may remain
         process::cleanup_stale(&session_name);
     }
 
