@@ -14,8 +14,8 @@ pub struct DaemonClient {
 }
 
 impl DaemonClient {
-    pub async fn connect(session_id: &str) -> Result<Self> {
-        let sock = process::socket_path(session_id);
+    pub async fn connect(session_name: &str) -> Result<Self> {
+        let sock = process::socket_path(session_name);
         let stream = UnixStream::connect(&sock).await.map_err(|_| {
             anyhow::anyhow!("Cannot connect to browser daemon. Is a session running?")
         })?;

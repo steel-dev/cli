@@ -2,18 +2,13 @@
 //! that holds the BrowserEngine (CDP connection + RefMap) alive between calls.
 
 use std::collections::HashMap;
-use std::time::Duration;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::api::client::SteelClient;
 use crate::browser::daemon::client::DaemonClient;
-use crate::browser::daemon::process;
 use crate::browser::daemon::protocol::DaemonCommand;
-use crate::browser::lifecycle::to_session_summary;
-use crate::config::session_state::{SessionStatePaths, read_state};
-use crate::util::{api, output};
+use crate::util::output;
 
 // ── Shared arg types ────────────────────────────────────────────────
 
@@ -816,148 +811,29 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
     Ok(())
 }
 
-/// Ensure a daemon is running for the target session and return a connected client.
-/// If no daemon exists, resolves the CDP URL via the API and spawns one.
-///
-/// When `session_name` is Some, resolves the named session from state.
-/// Otherwise falls back to the active session.
 async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
-    let paths = SessionStatePaths::default_paths();
-    let state = read_state(&paths.state_path);
-
-    let session_id = if let Some(name) = session_name {
-        state
-            .resolve_candidate(api::mode(), Some(name))
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "No session found for \"{name}\". Start one with `steel browser start --session {name}`."
-                )
-            })?
-    } else {
-        state.active_session_id.as_deref().ok_or_else(|| {
-            anyhow::anyhow!("No active browser session. Run `steel browser start` first.")
-        })?
-    };
-
-    // Fast path: daemon already running
-    if let Ok(client) = DaemonClient::connect(session_id).await {
-        return Ok(client);
-    }
-
-    // Slow path: resolve CDP URL and spawn daemon
-    let (mode, base_url, auth_info) = api::resolve_with_auth();
-
-    let api_client = SteelClient::new()?;
-    let session = api_client
-        .get_session(&base_url, mode, session_id, &auth_info)
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    let summary = to_session_summary(&session, mode, None, &auth_info)?;
-    let cdp_url = summary
-        .connect_url
-        .ok_or_else(|| anyhow::anyhow!("Session {} has no CDP connect URL.", session_id))?;
-
-    process::spawn_daemon(session_id, &cdp_url)?;
-    process::wait_for_daemon(session_id, Duration::from_secs(10)).await?;
-
-    DaemonClient::connect(session_id).await
+    let name = session_name.unwrap_or("default");
+    DaemonClient::connect(name).await.map_err(|_| {
+        anyhow::anyhow!(
+            "No running session \"{name}\". Start one with: steel browser start --session {name}"
+        )
+    })
 }
 
-/// On action failure, check whether the remote session is still alive.
-/// If the session is dead/expired, clear stale state and return a user-friendly error.
-/// If it's alive but close to expiry, warn on stderr.
-/// Returns None if the session is fine (original error should be used).
+/// On action failure, check if daemon is still reachable. If not, suggest restarting.
 async fn check_session_health(
     session_name: Option<&str>,
     _original_err: &anyhow::Error,
 ) -> Option<anyhow::Error> {
-    let paths = SessionStatePaths::default_paths();
-    let state = read_state(&paths.state_path);
-    let mode = api::mode();
-
-    let session_id = if let Some(name) = session_name {
-        state.resolve_candidate(mode, Some(name))?
-    } else {
-        state.active_session_id.as_deref()?
-    };
-
-    let (_, base_url, auth) = api::resolve_with_auth();
-    let client = SteelClient::new().ok()?;
-    let session = match client.get_session(&base_url, mode, session_id, &auth).await {
-        Ok(s) => s,
-        Err(e) if e.is_not_found() => {
-            // Session doesn't exist anymore — clean up state
-            let _ = crate::config::session_state::with_lock(&paths, true, |state| {
-                state.clear_active(mode, session_id);
-            });
-            let _ = process::kill_daemon(session_id);
-            return Some(anyhow::anyhow!(
-                "Session expired or not found. Run `steel browser start` to create a new one."
-            ));
+    let name = session_name.unwrap_or("default");
+    if let Ok(mut client) = DaemonClient::connect(name).await {
+        if client.send(DaemonCommand::Ping).await.is_ok() {
+            return None; // Daemon is fine, original error stands
         }
-        Err(_) => return None, // API unreachable, don't mask the original error
-    };
-
-    use crate::browser::lifecycle::is_session_live;
-    if !is_session_live(&session) {
-        // Session exists but is dead — clean up state
-        let _ = crate::config::session_state::with_lock(&paths, true, |state| {
-            state.clear_active(mode, session_id);
-        });
-        let _ = process::kill_daemon(session_id);
-        let status = session
-            .get("status")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
-        return Some(anyhow::anyhow!(
-            "Session is no longer active (status: {status}). Run `steel browser start` to create a new one."
-        ));
     }
-
-    // Session is alive — check if close to expiry and warn
-    if let Some(timeout) = session.get("timeout").and_then(|v| v.as_u64())
-        && let Some(created) = session.get("createdAt").and_then(|v| v.as_str())
-        && let Some(remaining_ms) = estimate_remaining_ms(created, timeout)
-        && remaining_ms < 5 * 60 * 1000
-    {
-        let remaining_secs = remaining_ms / 1000;
-        let mins = remaining_secs / 60;
-        let secs = remaining_secs % 60;
-        eprintln!(
-            "Warning: Session expires in {mins}m{secs}s. \
-                         Run `steel browser start` to create a new one."
-        );
-    }
-
-    None
-}
-
-/// Estimate remaining session time from a createdAt timestamp (RFC3339) and timeout (ms).
-/// Returns None if parsing fails or the session has already expired.
-fn estimate_remaining_ms(created_at: &str, timeout_ms: u64) -> Option<u64> {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let created = parse_rfc3339_to_epoch_ms(created_at)?;
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()?
-        .as_millis() as u64;
-    let expires_at = created.checked_add(timeout_ms)?;
-    if now >= expires_at {
-        return None; // Already expired
-    }
-    Some(expires_at - now)
-}
-
-/// Parse an RFC3339 timestamp to epoch milliseconds.
-fn parse_rfc3339_to_epoch_ms(s: &str) -> Option<u64> {
-    let ts: jiff::Timestamp = s.trim().parse().ok()?;
-    let ms = ts.as_millisecond();
-    if ms < 0 {
-        return None;
-    }
-    Some(ms as u64)
+    Some(anyhow::anyhow!(
+        "Session \"{name}\" is no longer reachable. Run `steel browser start` to create a new one."
+    ))
 }
 
 #[cfg(test)]
@@ -1103,58 +979,6 @@ mod tests {
     fn optional_vec_non_empty_is_some() {
         let v = optional_vec(vec!["color".to_string()]);
         assert_eq!(v.unwrap(), vec!["color"]);
-    }
-
-    // ── parse_rfc3339_to_epoch_ms ─────────────────────────────────
-
-    #[test]
-    fn rfc3339_utc_basic() {
-        // 2025-01-01T00:00:00Z = 1735689600000 ms
-        let ms = parse_rfc3339_to_epoch_ms("2025-01-01T00:00:00Z").unwrap();
-        assert_eq!(ms, 1735689600000);
-    }
-
-    #[test]
-    fn rfc3339_with_fractional_seconds() {
-        let ms = parse_rfc3339_to_epoch_ms("2025-01-01T00:00:00.500Z").unwrap();
-        assert_eq!(ms, 1735689600500);
-    }
-
-    #[test]
-    fn rfc3339_with_positive_offset() {
-        // 2025-01-01T09:00:00+09:00 = 2025-01-01T00:00:00Z
-        let ms = parse_rfc3339_to_epoch_ms("2025-01-01T09:00:00+09:00").unwrap();
-        assert_eq!(ms, 1735689600000);
-    }
-
-    #[test]
-    fn rfc3339_with_negative_offset() {
-        // 2024-12-31T19:00:00-05:00 = 2025-01-01T00:00:00Z
-        let ms = parse_rfc3339_to_epoch_ms("2024-12-31T19:00:00-05:00").unwrap();
-        assert_eq!(ms, 1735689600000);
-    }
-
-    #[test]
-    fn rfc3339_invalid_returns_none() {
-        assert!(parse_rfc3339_to_epoch_ms("not a date").is_none());
-        assert!(parse_rfc3339_to_epoch_ms("").is_none());
-    }
-
-    // ── estimate_remaining_ms ─────────────────────────────────────
-
-    #[test]
-    fn estimate_remaining_far_future() {
-        // Created in far future with 10 min timeout → should have remaining time
-        let remaining = estimate_remaining_ms("2099-01-01T00:00:00Z", 600_000);
-        assert!(remaining.is_some());
-        assert!(remaining.unwrap() > 0);
-    }
-
-    #[test]
-    fn estimate_remaining_already_expired() {
-        // Created in the past with 1ms timeout → expired
-        let remaining = estimate_remaining_ms("2020-01-01T00:00:00Z", 1);
-        assert!(remaining.is_none());
     }
 
 }

@@ -1,13 +1,10 @@
-//! Browser session lifecycle orchestration.
-//! Combines API client + session state to implement high-level browser operations.
-//! Ported from: cli/source/utils/browser/lifecycle.ts + session-policy.ts
+//! Browser session lifecycle utilities.
+//! Provides helpers for parsing API responses, CAPTCHA operations, and URL handling.
 
 use serde_json::Value;
 
-use crate::api::client::{ApiError, SteelClient};
-use crate::api::session::CreateSessionOptions;
+use crate::api::client::SteelClient;
 use crate::config::auth::Auth;
-use crate::config::session_state::{SessionState, SessionStatePaths, read_state, with_lock};
 use crate::config::settings::ApiMode;
 
 /// Summary of a browser session, matching TS `BrowserSessionSummary`.
@@ -21,13 +18,6 @@ pub struct SessionSummary {
     pub connect_url: Option<String>,
     pub viewer_url: Option<String>,
     pub profile_id: Option<String>,
-}
-
-/// Result of stopping browser sessions.
-pub struct StopResult {
-    pub mode: ApiMode,
-    pub all: bool,
-    pub stopped_session_ids: Vec<String>,
 }
 
 /// Result of solving a CAPTCHA.
@@ -101,7 +91,7 @@ fn get_session_status(session: &Value) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
-fn get_connect_url(session: &Value) -> Option<String> {
+pub fn get_connect_url(session: &Value) -> Option<String> {
     let keys = [
         "websocketUrl",
         "wsUrl",
@@ -123,7 +113,7 @@ fn get_connect_url(session: &Value) -> Option<String> {
     None
 }
 
-fn get_viewer_url(session: &Value, mode: ApiMode, session_id: &str) -> Option<String> {
+pub fn get_viewer_url(session: &Value, mode: ApiMode, session_id: &str) -> Option<String> {
     let keys = ["sessionViewerUrl", "viewerUrl", "liveViewUrl"];
     for key in &keys {
         if let Some(v) = session.get(key)
@@ -191,317 +181,19 @@ pub fn to_session_summary(
     })
 }
 
-/// Try to get a live session, returning None if not found or not live.
-async fn try_get_live_session(
-    client: &SteelClient,
-    base_url: &str,
-    mode: ApiMode,
-    session_id: &str,
-    auth: &Auth,
-) -> Result<Option<Value>, ApiError> {
-    match client.get_session(base_url, mode, session_id, auth).await {
-        Ok(session) => {
-            if is_session_live(&session) {
-                Ok(Some(session))
-            } else {
-                Ok(None)
-            }
-        }
-        Err(e) if e.is_not_found() => Ok(None),
-        Err(e) => Err(e),
-    }
-}
-
-/// Resolve target session from state (for stop/live/captcha commands).
-fn resolve_target_session(
-    state: &SessionState,
-    mode: ApiMode,
-    session_name: Option<&str>,
-) -> (Option<String>, Option<String>) {
-    if let Some(name) = session_name {
-        let name = name.trim();
-        if !name.is_empty() {
-            let session_id = state.named_sessions.get(mode).get(name).cloned();
-            return (session_id, Some(name.to_string()));
-        }
-    }
-
-    if state.active_api_mode == Some(mode)
-        && let Some(ref id) = state.active_session_id
-    {
-        return (Some(id.clone()), state.active_session_name.clone());
-    }
-
-    (None, None)
-}
-
-/// Resolve session ID for captcha commands (supports explicit --session-id).
-fn resolve_captcha_session_id(
-    state: &SessionState,
-    mode: ApiMode,
-    session_id: Option<&str>,
-    session_name: Option<&str>,
-) -> Option<String> {
-    if let Some(id) = session_id {
-        let trimmed = id.trim();
-        if !trimmed.is_empty() {
-            return Some(trimmed.to_string());
-        }
-    }
-
-    let (id, _) = resolve_target_session(state, mode, session_name);
-    id
-}
-
-/// Start a browser session. Matches TS `startBrowserSession()`.
-pub async fn start_session(
-    client: &SteelClient,
-    base_url: &str,
-    mode: ApiMode,
-    auth: &Auth,
-    paths: &SessionStatePaths,
-    session_name: Option<&str>,
-    options: &CreateSessionOptions,
-) -> anyhow::Result<SessionSummary> {
-    let session_name = session_name.map(|s| s.trim()).filter(|s| !s.is_empty());
-
-    loop {
-        // Check for existing candidate
-        let candidate_id = with_lock(paths, false, |state| {
-            state
-                .resolve_candidate(mode, session_name)
-                .map(|s| s.to_string())
-        })?;
-
-        if let Some(ref candidate_id) = candidate_id {
-            // Try to attach to existing session
-            let existing = try_get_live_session(client, base_url, mode, candidate_id, auth)
-                .await
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-            if let Some(ref session) = existing {
-                // Claim the session under lock
-                let claimed = with_lock(paths, true, |state| {
-                    let latest = state
-                        .resolve_candidate(mode, session_name)
-                        .map(|s| s.to_string());
-                    if latest.as_deref() != Some(candidate_id) {
-                        return false;
-                    }
-                    state.set_active(mode, candidate_id, session_name);
-                    true
-                })?;
-
-                if claimed {
-                    return to_session_summary(session, mode, session_name, auth);
-                }
-                continue;
-            }
-
-            // Dead session — clear and retry
-            with_lock(paths, true, |state| {
-                let latest = state
-                    .resolve_candidate(mode, session_name)
-                    .map(|s| s.to_string());
-                if latest.as_deref() == Some(candidate_id) {
-                    state.clear_active(mode, candidate_id);
-                }
-            })?;
-            continue;
-        }
-
-        // No candidate — create new session
-        let created = client
-            .create_session(base_url, mode, options, auth)
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-        let created_id = get_session_id(&created)
-            .ok_or_else(|| anyhow::anyhow!("API did not return a session id."))?;
-
-        // Claim the created session under lock
-        let claimed = with_lock(paths, true, |state| {
-            let latest = state
-                .resolve_candidate(mode, session_name)
-                .map(|s| s.to_string());
-            if latest.is_some() {
-                return false;
-            }
-
-            if let Some(name) = session_name {
-                state
-                    .named_sessions
-                    .get_mut(mode)
-                    .insert(name.to_string(), created_id.clone());
-            }
-            state.set_active(mode, &created_id, session_name);
-            true
-        })?;
-
-        if claimed {
-            return to_session_summary(&created, mode, session_name, auth);
-        }
-
-        // Race: another session appeared — release ours and retry
-        let _ = client
-            .release_session(base_url, mode, &created_id, auth)
-            .await;
-    }
-}
-
-/// Stop browser sessions. Matches TS `stopBrowserSession()`.
-pub async fn stop_session(
-    client: &SteelClient,
-    base_url: &str,
-    mode: ApiMode,
-    auth: &Auth,
-    paths: &SessionStatePaths,
-    session_name: Option<&str>,
-    all: bool,
-) -> anyhow::Result<StopResult> {
-    if all {
-        let sessions = client
-            .list_sessions(base_url, mode, auth)
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-        let live_ids: Vec<String> = sessions
-            .iter()
-            .filter(|s| is_session_live(s))
-            .filter_map(get_session_id)
-            .collect();
-
-        for id in &live_ids {
-            let _ = client.release_session(base_url, mode, id, auth).await;
-        }
-
-        with_lock(paths, true, |state| {
-            for id in &live_ids {
-                state.clear_active(mode, id);
-            }
-        })?;
-
-        return Ok(StopResult {
-            mode,
-            all: true,
-            stopped_session_ids: live_ids,
-        });
-    }
-
-    let target_id = with_lock(paths, false, |state| {
-        let (id, _) = resolve_target_session(state, mode, session_name);
-        id
-    })?;
-
-    let Some(target_id) = target_id else {
-        return Ok(StopResult {
-            mode,
-            all: false,
-            stopped_session_ids: vec![],
-        });
-    };
-
-    client
-        .release_session(base_url, mode, &target_id, auth)
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    with_lock(paths, true, |state| {
-        state.clear_active(mode, &target_id);
-    })?;
-
-    Ok(StopResult {
-        mode,
-        all: false,
-        stopped_session_ids: vec![target_id],
-    })
-}
-
-/// List browser sessions with names resolved from state.
-pub async fn list_sessions(
-    client: &SteelClient,
-    base_url: &str,
-    mode: ApiMode,
-    auth: &Auth,
-    paths: &SessionStatePaths,
-) -> anyhow::Result<Vec<SessionSummary>> {
-    let sessions = client
-        .list_sessions(base_url, mode, auth)
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    let state = read_state(&paths.state_path);
-
-    let mut summaries = Vec::new();
-    for session in &sessions {
-        let id = get_session_id(session);
-        let name = id
-            .as_deref()
-            .and_then(|id| state.resolve_name(mode, id))
-            .map(|s| s.to_string());
-        let summary = to_session_summary(session, mode, name.as_deref(), auth)?;
-        summaries.push(summary);
-    }
-
-    Ok(summaries)
-}
-
-/// Get the live URL for the active session.
-pub async fn get_live_url(
-    client: &SteelClient,
-    base_url: &str,
-    mode: ApiMode,
-    auth: &Auth,
-    paths: &SessionStatePaths,
-    session_name: Option<&str>,
-) -> anyhow::Result<Option<String>> {
-    let target_id = with_lock(paths, false, |state| {
-        let (id, _) = resolve_target_session(state, mode, session_name);
-        id
-    })?;
-
-    let Some(target_id) = target_id else {
-        return Ok(None);
-    };
-
-    let session = try_get_live_session(client, base_url, mode, &target_id, auth)
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    let Some(session) = session else {
-        return Ok(None);
-    };
-
-    let summary = to_session_summary(&session, mode, None, auth)?;
-    Ok(summary.viewer_url)
-}
-
 /// Solve a CAPTCHA for a browser session.
 pub async fn solve_captcha(
     client: &SteelClient,
     base_url: &str,
     mode: ApiMode,
     auth: &Auth,
-    paths: &SessionStatePaths,
-    explicit_session_id: Option<&str>,
-    session_name: Option<&str>,
+    session_id: &str,
     page_id: Option<&str>,
     url: Option<&str>,
     task_id: Option<&str>,
 ) -> anyhow::Result<CaptchaSolveResult> {
-    let session_id = with_lock(paths, false, |state| {
-        resolve_captcha_session_id(state, mode, explicit_session_id, session_name)
-    })?;
-
-    let session_id = session_id.ok_or_else(|| {
-        anyhow::anyhow!(
-            "No target browser session found for CAPTCHA solving. \
-             Pass `--session-id`, pass `--session <name>`, or start a session first."
-        )
-    })?;
-
     let raw = client
-        .solve_captcha(base_url, mode, &session_id, page_id, url, task_id, auth)
+        .solve_captcha(base_url, mode, session_id, page_id, url, task_id, auth)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -516,7 +208,7 @@ pub async fn solve_captcha(
 
     Ok(CaptchaSolveResult {
         mode,
-        session_id,
+        session_id: session_id.to_string(),
         success,
         message,
         raw,
@@ -529,9 +221,7 @@ pub async fn captcha_status(
     base_url: &str,
     mode: ApiMode,
     auth: &Auth,
-    paths: &SessionStatePaths,
-    explicit_session_id: Option<&str>,
-    session_name: Option<&str>,
+    session_id: &str,
     page_id: Option<&str>,
     wait: bool,
     timeout_ms: Option<u64>,
@@ -540,22 +230,11 @@ pub async fn captcha_status(
     let timeout = timeout_ms.unwrap_or(60_000);
     let interval = interval_ms.unwrap_or(1_000);
 
-    let session_id = with_lock(paths, false, |state| {
-        resolve_captcha_session_id(state, mode, explicit_session_id, session_name)
-    })?;
-
-    let session_id = session_id.ok_or_else(|| {
-        anyhow::anyhow!(
-            "No target browser session found for CAPTCHA status. \
-             Pass `--session-id`, pass `--session <name>`, or start a session first."
-        )
-    })?;
-
     let start = std::time::Instant::now();
 
     loop {
         let pages = client
-            .captcha_status(base_url, mode, &session_id, page_id, auth)
+            .captcha_status(base_url, mode, session_id, page_id, auth)
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -564,7 +243,7 @@ pub async fn captcha_status(
         if !wait || is_terminal_captcha_status(&status) {
             return Ok(CaptchaStatusResult {
                 mode,
-                session_id,
+                session_id: session_id.to_string(),
                 status,
                 types,
                 raw: serde_json::json!({"pages": pages}),

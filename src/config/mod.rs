@@ -1,5 +1,4 @@
 pub mod auth;
-pub mod session_state;
 pub mod settings;
 
 use std::path::{Path, PathBuf};

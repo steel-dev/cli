@@ -3,38 +3,63 @@ use std::time::Duration;
 
 use anyhow::{Result, bail};
 
-pub fn socket_path(session_id: &str) -> PathBuf {
-    crate::config::config_dir().join(format!("daemon-{session_id}.sock"))
+use super::protocol::DaemonCreateParams;
+
+/// Scan the config directory for `daemon-*.sock` files and return the session names.
+pub fn list_daemon_names() -> Vec<String> {
+    let dir = crate::config::config_dir();
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return vec![];
+    };
+    let mut names = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if let Some(rest) = name.strip_prefix("daemon-") {
+            if let Some(session_name) = rest.strip_suffix(".sock") {
+                if !session_name.is_empty() {
+                    names.push(session_name.to_string());
+                }
+            }
+        }
+    }
+    names
 }
 
-pub fn pid_path(session_id: &str) -> PathBuf {
-    crate::config::config_dir().join(format!("daemon-{session_id}.pid"))
+pub fn socket_path(session_name: &str) -> PathBuf {
+    crate::config::config_dir().join(format!("daemon-{session_name}.sock"))
 }
 
-fn log_path(session_id: &str) -> PathBuf {
-    crate::config::config_dir().join(format!("daemon-{session_id}.log"))
+pub fn pid_path(session_name: &str) -> PathBuf {
+    crate::config::config_dir().join(format!("daemon-{session_name}.pid"))
 }
 
-pub fn cleanup_stale(session_id: &str) {
-    let _ = std::fs::remove_file(socket_path(session_id));
-    let _ = std::fs::remove_file(pid_path(session_id));
+fn log_path(session_name: &str) -> PathBuf {
+    crate::config::config_dir().join(format!("daemon-{session_name}.log"))
 }
 
-/// Spawn a daemon process for the given session. The CDP URL is passed via
+pub fn cleanup_stale(session_name: &str) {
+    let _ = std::fs::remove_file(socket_path(session_name));
+    let _ = std::fs::remove_file(pid_path(session_name));
+}
+
+/// Spawn a daemon process for the given session. The create params are passed via
 /// environment variable to avoid leaking API keys in the process list.
-pub fn spawn_daemon(session_id: &str, cdp_url: &str) -> Result<()> {
+pub fn spawn_daemon(session_name: &str, params: &DaemonCreateParams) -> Result<()> {
     let exe = std::env::current_exe()?;
 
-    cleanup_stale(session_id);
+    cleanup_stale(session_name);
 
     let config_dir = crate::config::config_dir();
     std::fs::create_dir_all(&config_dir)?;
 
-    let log = std::fs::File::create(log_path(session_id))?;
+    let log = std::fs::File::create(log_path(session_name))?;
+
+    let params_json = serde_json::to_string(params)?;
 
     std::process::Command::new(exe)
-        .args(["__daemon", "--session-id", session_id])
-        .env("STEEL_DAEMON_CDP_URL", cdp_url)
+        .args(["__daemon", "--session-name", session_name])
+        .env("STEEL_DAEMON_PARAMS", params_json)
         .stdin(std::process::Stdio::null())
         .stdout(log.try_clone()?)
         .stderr(log)
@@ -44,8 +69,8 @@ pub fn spawn_daemon(session_id: &str, cdp_url: &str) -> Result<()> {
 }
 
 /// Wait until the daemon socket is connectable.
-pub async fn wait_for_daemon(session_id: &str, timeout: Duration) -> Result<()> {
-    let sock = socket_path(session_id);
+pub async fn wait_for_daemon(session_name: &str, timeout: Duration) -> Result<()> {
+    let sock = socket_path(session_name);
     let start = std::time::Instant::now();
 
     while start.elapsed() < timeout {
@@ -62,23 +87,23 @@ pub async fn wait_for_daemon(session_id: &str, timeout: Duration) -> Result<()> 
 }
 
 /// Send a shutdown command to a running daemon and clean up files.
-pub async fn stop_daemon(session_id: &str) -> Result<()> {
+pub async fn stop_daemon(session_name: &str) -> Result<()> {
     use super::client::DaemonClient;
     use super::protocol::DaemonCommand;
 
-    if let Ok(mut client) = DaemonClient::connect(session_id).await {
+    if let Ok(mut client) = DaemonClient::connect(session_name).await {
         let _ = client.send(DaemonCommand::Shutdown).await;
     }
 
     tokio::time::sleep(Duration::from_millis(200)).await;
-    cleanup_stale(session_id);
+    cleanup_stale(session_name);
 
     Ok(())
 }
 
 /// Kill a daemon process by reading its PID file, then clean up.
-pub fn kill_daemon(session_id: &str) -> Result<()> {
-    let pid_file = pid_path(session_id);
+pub fn kill_daemon(session_name: &str) -> Result<()> {
+    let pid_file = pid_path(session_name);
     if let Ok(contents) = std::fs::read_to_string(&pid_file)
         && let Ok(pid) = contents.trim().parse::<u32>()
     {
@@ -89,6 +114,6 @@ pub fn kill_daemon(session_id: &str) -> Result<()> {
             .stderr(std::process::Stdio::null())
             .status();
     }
-    cleanup_stale(session_id);
+    cleanup_stale(session_name);
     Ok(())
 }

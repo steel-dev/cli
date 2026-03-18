@@ -5,7 +5,10 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 
+use crate::api::client::SteelClient;
 use crate::browser::engine::BrowserEngine;
+use crate::browser::lifecycle::to_session_summary;
+use crate::config::auth::{Auth, AuthSource};
 
 use super::process;
 use super::protocol::*;
@@ -13,20 +16,70 @@ use super::protocol::*;
 const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 
-pub async fn run(session_id: String, cdp_url: String) -> Result<()> {
-    let pid_path = process::pid_path(&session_id);
+pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()> {
+    let pid_path = process::pid_path(&session_name);
     std::fs::create_dir_all(pid_path.parent().unwrap())?;
     std::fs::write(&pid_path, std::process::id().to_string())?;
 
-    let mut engine = match BrowserEngine::connect(&cdp_url).await {
-        Ok(e) => e,
+    // Build API client + auth from params
+    let api_client = SteelClient::new()?;
+    let auth = Auth {
+        api_key: params.api_key.clone(),
+        source: AuthSource::Env,
+    };
+    let options = params.to_create_options();
+
+    // Create the cloud session
+    let session = match api_client
+        .create_session(&params.base_url, params.mode, &options, &auth)
+        .await
+    {
+        Ok(s) => s,
         Err(e) => {
-            cleanup(&session_id);
+            cleanup(&session_name);
+            return Err(anyhow::anyhow!("{e}"));
+        }
+    };
+
+    let summary = match to_session_summary(&session, params.mode, Some(&session_name), &auth) {
+        Ok(s) => s,
+        Err(e) => {
+            cleanup(&session_name);
             return Err(e);
         }
     };
 
-    let socket_path = process::socket_path(&session_id);
+    let cdp_url = match summary.connect_url {
+        Some(ref url) => url.clone(),
+        None => {
+            cleanup(&session_name);
+            return Err(anyhow::anyhow!("Session has no CDP connect URL"));
+        }
+    };
+
+    let session_info = SessionInfo {
+        session_id: summary.id.clone(),
+        session_name: session_name.clone(),
+        mode: params.mode,
+        status: summary.status,
+        connect_url: Some(cdp_url.clone()),
+        viewer_url: summary.viewer_url,
+        profile_id: summary.profile_id,
+    };
+
+    let mut engine = match BrowserEngine::connect(&cdp_url).await {
+        Ok(e) => e,
+        Err(e) => {
+            // Best-effort release
+            let _ = api_client
+                .release_session(&params.base_url, params.mode, &session_info.session_id, &auth)
+                .await;
+            cleanup(&session_name);
+            return Err(e);
+        }
+    };
+
+    let socket_path = process::socket_path(&session_name);
     let _ = std::fs::remove_file(&socket_path);
     let listener = UnixListener::bind(&socket_path)?;
 
@@ -45,7 +98,7 @@ pub async fn run(session_id: String, cdp_url: String) -> Result<()> {
             Err(_) => break,
             Ok(Err(_)) => continue,
             Ok(Ok((stream, _))) => {
-                let result = handle_connection(&mut engine, stream).await;
+                let result = handle_connection(&mut engine, &session_info, stream).await;
                 match result {
                     ConnectionResult::Continue => {}
                     ConnectionResult::Shutdown => break,
@@ -56,7 +109,13 @@ pub async fn run(session_id: String, cdp_url: String) -> Result<()> {
     }
 
     engine.close().await.ok();
-    cleanup(&session_id);
+
+    // Best-effort release the API session
+    let _ = api_client
+        .release_session(&params.base_url, params.mode, &session_info.session_id, &auth)
+        .await;
+
+    cleanup(&session_name);
     Ok(())
 }
 
@@ -68,6 +127,7 @@ enum ConnectionResult {
 
 async fn handle_connection(
     engine: &mut BrowserEngine,
+    session_info: &SessionInfo,
     stream: tokio::net::UnixStream,
 ) -> ConnectionResult {
     let (read_half, mut write_half) = tokio::io::split(stream);
@@ -98,7 +158,7 @@ async fn handle_connection(
                     request.command,
                     DaemonCommand::Shutdown | DaemonCommand::Close
                 );
-                let result = dispatch(engine, request.command).await;
+                let result = dispatch(engine, session_info, request.command).await;
 
                 // Check if CDP connection died during dispatch
                 let cdp_dead =
@@ -123,8 +183,12 @@ async fn handle_connection(
     }
 }
 
-async fn dispatch(engine: &mut BrowserEngine, cmd: DaemonCommand) -> DaemonResult {
-    match dispatch_inner(engine, cmd).await {
+async fn dispatch(
+    engine: &mut BrowserEngine,
+    session_info: &SessionInfo,
+    cmd: DaemonCommand,
+) -> DaemonResult {
+    match dispatch_inner(engine, session_info, cmd).await {
         Ok(data) => DaemonResult::Ok { data },
         Err(e) => DaemonResult::Error {
             message: e.to_string(),
@@ -171,7 +235,11 @@ fn build_screenshot_options(
     }
 }
 
-async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Result<Value> {
+async fn dispatch_inner(
+    engine: &mut BrowserEngine,
+    session_info: &SessionInfo,
+    cmd: DaemonCommand,
+) -> Result<Value> {
     match cmd {
         DaemonCommand::Navigate {
             url,
@@ -412,12 +480,16 @@ async fn dispatch_inner(engine: &mut BrowserEngine, cmd: DaemonCommand) -> Resul
             Ok(Value::Null)
         }
         DaemonCommand::Ping => Ok(json!("pong")),
+        DaemonCommand::GetSessionInfo => {
+            let info_json = serde_json::to_value(session_info)?;
+            Ok(info_json)
+        }
     }
 }
 
-fn cleanup(session_id: &str) {
-    let _ = std::fs::remove_file(process::socket_path(session_id));
-    let _ = std::fs::remove_file(process::pid_path(session_id));
+fn cleanup(session_name: &str) {
+    let _ = std::fs::remove_file(process::socket_path(session_name));
+    let _ = std::fs::remove_file(process::pid_path(session_name));
 }
 
 #[cfg(test)]
