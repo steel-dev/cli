@@ -182,6 +182,14 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         anyhow::bail!("{err}");
     }
 
+    // Check for existing profile
+    if let Some(existing) = profile_store::read_profile(&args.name)? {
+        eprintln!(
+            "Profile \"{}\" already exists (id: {}). Overwriting.",
+            args.name, existing.profile_id
+        );
+    }
+
     let (api_key, api_base) = resolve_api()?;
 
     // Discover profiles
@@ -281,10 +289,17 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
     println!();
     println!("  {}", args.name);
     println!("  id: {profile_id}");
-    println!(
-        "  cookies: {} re-encrypted · {:.1} MB",
-        result.cookies_reencrypted, size_mb
-    );
+    if result.cookies_skipped > 0 {
+        println!(
+            "  cookies: {} re-encrypted, {} skipped · {:.1} MB",
+            result.cookies_reencrypted, result.cookies_skipped, size_mb
+        );
+    } else {
+        println!(
+            "  cookies: {} re-encrypted · {:.1} MB",
+            result.cookies_reencrypted, size_mb
+        );
+    }
     println!();
     println!("  steel browser start --profile {}", args.name);
 
@@ -387,10 +402,17 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
 
     println!();
     println!("  Synced {}", args.name);
-    println!(
-        "  {} cookies re-encrypted · {:.1} MB",
-        result.cookies_reencrypted, size_mb
-    );
+    if result.cookies_skipped > 0 {
+        println!(
+            "  {} cookies re-encrypted, {} skipped · {:.1} MB",
+            result.cookies_reencrypted, result.cookies_skipped, size_mb
+        );
+    } else {
+        println!(
+            "  {} cookies re-encrypted · {:.1} MB",
+            result.cookies_reencrypted, size_mb
+        );
+    }
 
     Ok(())
 }

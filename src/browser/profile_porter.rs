@@ -663,7 +663,13 @@ fn encrypt_cookie(value: &str, key: &[u8; 16], host_key: &str, meta_version: i64
 
 // ─── Cookie re-encryption ────────────────────────────────────────────────────
 
-fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<(Vec<u8>, u64)> {
+struct ReencryptResult {
+    buffer: Vec<u8>,
+    converted: u64,
+    skipped: u64,
+}
+
+fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<ReencryptResult> {
     let peanuts_key = derive_target_key();
 
     let tmp = tempfile::NamedTempFile::new().context("Failed to create temp file for cookies")?;
@@ -698,6 +704,7 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
         .collect::<std::result::Result<_, _>>()?;
 
     let mut converted: u64 = 0;
+    let mut skipped: u64 = 0;
     let tx = conn.unchecked_transaction()?;
     {
         let mut update =
@@ -711,6 +718,7 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
                 meta_version,
                 provider.source_algorithm,
             ) else {
+                skipped += 1;
                 continue;
             };
 
@@ -727,7 +735,7 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
 
     let buffer = std::fs::read(&tmp_path)?;
     // tmp (NamedTempFile) is dropped here, auto-deleting the file
-    Ok((buffer, converted))
+    Ok(ReencryptResult { buffer, converted, skipped })
 }
 
 // ─── File collection ─────────────────────────────────────────────────────────
@@ -774,6 +782,7 @@ fn collect_files_recursive(dir_path: &Path, base_dir: &Path, files: &mut HashMap
 pub struct PackageResult {
     pub zip_buffer: Vec<u8>,
     pub cookies_reencrypted: u64,
+    pub cookies_skipped: u64,
 }
 
 /// Package a browser profile for upload to Steel.
@@ -807,6 +816,7 @@ pub fn package_profile(
 
     let mut zip_files: Vec<(String, Vec<u8>)> = Vec::new();
     let mut cookies_reencrypted: u64 = 0;
+    let mut cookies_skipped: u64 = 0;
 
     let entries = if full { FULL_ENTRIES } else { DEFAULT_ENTRIES };
 
@@ -821,9 +831,10 @@ pub fn package_profile(
         if meta.is_file() {
             if *entry_name == "Cookies" {
                 on_progress("Re-encrypting Cookies...");
-                let (buffer, converted) = reencrypt_cookies_db(&full_path, &provider)?;
-                zip_files.push((format!("Default/{entry_name}"), buffer));
-                cookies_reencrypted = converted;
+                let result = reencrypt_cookies_db(&full_path, &provider)?;
+                zip_files.push((format!("Default/{entry_name}"), result.buffer));
+                cookies_reencrypted = result.converted;
+                cookies_skipped = result.skipped;
             } else {
                 let data = std::fs::read(&full_path)?;
                 zip_files.push((format!("Default/{entry_name}"), data));
@@ -863,6 +874,7 @@ pub fn package_profile(
     Ok(PackageResult {
         zip_buffer: cursor.into_inner(),
         cookies_reencrypted,
+        cookies_skipped,
     })
 }
 
