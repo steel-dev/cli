@@ -141,36 +141,39 @@ fn resolve_api() -> anyhow::Result<(String, String)> {
     Ok((api_key, base_url))
 }
 
-fn resolve_browser(browser_arg: Option<&str>) -> anyhow::Result<profile_porter::BrowserId> {
-    if let Some(name) = browser_arg {
-        return profile_porter::BrowserId::from_str(name).ok_or_else(|| {
-            anyhow::anyhow!(
-                "Unknown browser: \"{name}\". Supported: chrome, edge, brave, arc, opera, vivaldi"
-            )
-        });
-    }
+fn parse_browser(name: &str) -> anyhow::Result<profile_porter::BrowserId> {
+    profile_porter::BrowserId::from_str(name).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Unknown browser: \"{name}\". Supported: chrome, edge, brave, arc, opera, vivaldi"
+        )
+    })
+}
 
-    // Detect installed browsers
-    let installed = profile_porter::detect_installed_browsers();
-    if installed.is_empty() {
-        anyhow::bail!("No supported browsers found.");
-    }
-    if installed.len() == 1 {
-        return Ok(installed[0]);
-    }
+struct BrowserProfileChoice {
+    browser: profile_porter::BrowserId,
+    profile: profile_porter::BrowserProfile,
+}
 
-    // Interactive selection
-    let items: Vec<String> = installed
-        .iter()
-        .map(|b| b.display_name().to_string())
-        .collect();
-    let selection = dialoguer::Select::new()
-        .with_prompt("Select browser")
-        .items(&items)
-        .default(0)
-        .interact()?;
+fn discover_all_profiles(
+    browser_filter: Option<&str>,
+) -> anyhow::Result<Vec<BrowserProfileChoice>> {
+    let browsers = if let Some(name) = browser_filter {
+        vec![parse_browser(name)?]
+    } else {
+        let installed = profile_porter::detect_installed_browsers();
+        if installed.is_empty() {
+            anyhow::bail!("No supported browsers found.");
+        }
+        installed
+    };
 
-    Ok(installed[selection])
+    let mut choices = Vec::new();
+    for browser in browsers {
+        for profile in profile_porter::find_browser_profiles(browser) {
+            choices.push(BrowserProfileChoice { browser, profile });
+        }
+    }
+    Ok(choices)
 }
 
 async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
@@ -181,64 +184,72 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
 
     let (api_key, api_base) = resolve_api()?;
 
-    // Resolve browser
-    let browser_id = resolve_browser(args.browser.as_deref())?;
-
-    // Find profiles for selected browser
-    let profiles = profile_porter::find_browser_profiles(browser_id);
-    if profiles.is_empty() {
-        anyhow::bail!("No {} profiles found.", browser_id.display_name());
+    // Discover profiles
+    let choices = discover_all_profiles(args.browser.as_deref())?;
+    if choices.is_empty() {
+        anyhow::bail!("No browser profiles found.");
     }
 
     // Select profile
     let selected = if let Some(ref from) = args.from {
-        profiles
-            .iter()
-            .find(|p| p.dir_name == *from)
+        // --from requires --browser (or exactly one installed browser)
+        let browser_id = if let Some(ref b) = args.browser {
+            parse_browser(b)?
+        } else {
+            let browsers: Vec<_> = choices.iter().map(|c| c.browser).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+            if browsers.len() == 1 {
+                browsers[0]
+            } else {
+                anyhow::bail!("Multiple browsers found. Use --browser to specify which one.");
+            }
+        };
+        choices
+            .into_iter()
+            .find(|c| c.browser == browser_id && c.profile.dir_name == *from)
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "{} profile \"{}\" not found. Available: {}",
+                    "{} profile \"{}\" not found.",
                     browser_id.display_name(),
                     from,
-                    profiles
-                        .iter()
-                        .map(|p| p.dir_name.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
                 )
             })?
-            .clone()
     } else {
         // Interactive selection
-        if profile_porter::is_browser_running(browser_id) {
+        let running: std::collections::BTreeSet<_> = choices
+            .iter()
+            .map(|c| c.browser)
+            .filter(|b| profile_porter::is_browser_running(*b))
+            .collect();
+        for b in &running {
             eprintln!(
                 "Warning: {} is currently running. Some data may be locked.",
-                browser_id.display_name()
+                b.display_name()
             );
         }
 
-        let items: Vec<String> = profiles
+        let items: Vec<String> = choices
             .iter()
-            .map(|p| {
-                if p.display_name != p.dir_name {
-                    format!("{} ({})", p.display_name, p.dir_name)
-                } else {
-                    p.dir_name.clone()
+            .map(|c| {
+                let name = &c.profile.display_name;
+                let browser = c.browser.display_name();
+                match &c.profile.email {
+                    Some(email) => format!("{name} ({email}) · {browser}"),
+                    None => format!("{name} · {browser}"),
                 }
             })
             .collect();
 
         let selection = dialoguer::Select::new()
-            .with_prompt(format!(
-                "Select {} profile to import",
-                browser_id.display_name()
-            ))
+            .with_prompt("Select profile")
             .items(&items)
             .default(0)
             .interact()?;
 
-        profiles[selection].clone()
+        choices.into_iter().nth(selection).unwrap()
     };
+
+    let browser_id = selected.browser;
+    let selected = selected.profile;
 
     // Package
     println!(
@@ -299,11 +310,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
 
     // Resolve browser: CLI flag → stored → default to chrome
     let browser_id = if let Some(ref b) = args.browser {
-        profile_porter::BrowserId::from_str(b).ok_or_else(|| {
-            anyhow::anyhow!(
-                "Unknown browser: \"{b}\". Supported: chrome, edge, brave, arc, opera, vivaldi"
-            )
-        })?
+        parse_browser(b)?
     } else if let Some(ref stored_browser) = stored.browser {
         profile_porter::BrowserId::from_str(stored_browser)
             .unwrap_or(profile_porter::BrowserId::Chrome)

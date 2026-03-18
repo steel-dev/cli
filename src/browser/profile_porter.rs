@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 
 // ─── Browser descriptors ────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BrowserId {
     Chrome,
     Edge,
@@ -268,6 +268,7 @@ const SKIP_EXTS: &[&str] = &[".log", ".pma"];
 pub struct BrowserProfile {
     pub dir_name: String,
     pub display_name: String,
+    pub email: Option<String>,
     pub browser: BrowserId,
 }
 
@@ -294,10 +295,11 @@ pub fn find_browser_profiles(browser: BrowserId) -> Vec<BrowserProfile> {
             continue;
         }
         let dir_name = entry.file_name().to_string_lossy().to_string();
-        let display_name = get_profile_display_name(&base, &dir_name);
+        let (display_name, email) = get_profile_metadata(&base, &dir_name);
         profiles.push(BrowserProfile {
             dir_name,
             display_name,
+            email,
             browser,
         });
     }
@@ -313,32 +315,41 @@ pub fn detect_installed_browsers() -> Vec<BrowserId> {
         .collect()
 }
 
-fn get_profile_display_name(base: &Path, dir_name: &str) -> String {
+fn get_profile_metadata(base: &Path, dir_name: &str) -> (String, Option<String>) {
     let prefs_path = base.join(dir_name).join("Preferences");
     if let Ok(contents) = std::fs::read_to_string(&prefs_path)
         && let Ok(prefs) = serde_json::from_str::<serde_json::Value>(&contents)
     {
-        if let Some(name) = prefs
-            .get("profile")
-            .and_then(|p| p.get("name"))
-            .and_then(|n| n.as_str())
-            && !name.is_empty()
-            && name != dir_name
-        {
-            return name.to_string();
-        }
-        if let Some(full_name) = prefs
+        let account = prefs
             .get("account_info")
             .and_then(|a| a.as_array())
-            .and_then(|a| a.first())
-            .and_then(|a| a.get("full_name"))
-            .and_then(|n| n.as_str())
-            && !full_name.is_empty()
-        {
-            return full_name.to_string();
-        }
+            .and_then(|a| a.first());
+
+        let email = account
+            .and_then(|a| a.get("email"))
+            .and_then(|e| e.as_str())
+            .filter(|e| !e.is_empty())
+            .map(|e| e.to_string());
+
+        let get_str = |obj: Option<&serde_json::Value>, key: &str| {
+            obj.and_then(|o| o.get(key))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+        };
+
+        // Prefer given_name (what Chrome shows), then full_name, then profile.name
+        let name = get_str(account, "given_name")
+            .or_else(|| get_str(account, "full_name"))
+            .or_else(|| {
+                get_str(prefs.get("profile"), "name")
+                    .filter(|n| n != dir_name)
+            })
+            .unwrap_or_else(|| dir_name.to_string());
+
+        return (name, email);
     }
-    dir_name.to_string()
+    (dir_name.to_string(), None)
 }
 
 pub fn is_browser_running(browser: BrowserId) -> bool {
