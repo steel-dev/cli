@@ -302,8 +302,7 @@ pub struct ScreenshotArgs {
 #[derive(Parser)]
 pub struct EvalArgs {
     /// JavaScript expression to evaluate
-    #[arg(trailing_var_arg = true, num_args = 1..)]
-    pub script: Vec<String>,
+    pub script: String,
 }
 
 #[derive(Parser)]
@@ -618,8 +617,7 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
             }
         }
         ActionCommand::Eval(args) => {
-            let script = args.script.join(" ");
-            let data = client.send(DaemonCommand::Eval { script }).await?;
+            let data = client.send(DaemonCommand::Eval { script: args.script }).await?;
             output::success_data(data);
         }
         ActionCommand::Find(args) => {
