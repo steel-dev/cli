@@ -428,9 +428,11 @@ fn get_macos_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         .context("Failed to run `security` command")?;
 
     if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!(
-            "Failed to retrieve {} password from Keychain. You may need to grant access.",
-            browser.display_name()
+            "Failed to retrieve {} password from Keychain: {}",
+            browser.display_name(),
+            stderr.trim()
         );
     }
 
@@ -522,7 +524,8 @@ fn get_windows_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         .context("Failed to run PowerShell for DPAPI decryption")?;
 
     if !output.status.success() {
-        anyhow::bail!("PowerShell DPAPI decryption failed");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("PowerShell DPAPI decryption failed: {}", stderr.trim());
     }
 
     let result_b64 = String::from_utf8(output.stdout)?.trim().to_string();
@@ -620,9 +623,10 @@ fn strip_domain_hash(plaintext: &[u8], host_key: &str, meta_version: i64) -> Opt
     if meta_version >= 24 && plaintext.len() >= 32 {
         use sha2::{Digest, Sha256};
         let expected_hash = Sha256::digest(host_key.as_bytes());
-        if expected_hash.as_slice() == &plaintext[..32] {
-            return Some(String::from_utf8_lossy(&plaintext[32..]).to_string());
+        if expected_hash.as_slice() != &plaintext[..32] {
+            return None; // hash mismatch — decryption failure
         }
+        return Some(String::from_utf8_lossy(&plaintext[32..]).to_string());
     }
     Some(String::from_utf8_lossy(plaintext).to_string())
 }
@@ -662,79 +666,68 @@ fn encrypt_cookie(value: &str, key: &[u8; 16], host_key: &str, meta_version: i64
 fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<(Vec<u8>, u64)> {
     let peanuts_key = derive_target_key();
 
-    let tmp_path = std::env::temp_dir().join(format!(
-        "steel-cookies-{}-{}.db",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-    ));
-
+    let tmp = tempfile::NamedTempFile::new().context("Failed to create temp file for cookies")?;
+    let tmp_path = tmp.path().to_path_buf();
     std::fs::copy(original_path, &tmp_path)?;
 
-    let result = (|| -> Result<(Vec<u8>, u64)> {
-        let conn = rusqlite::Connection::open(&tmp_path)?;
+    let conn = rusqlite::Connection::open(&tmp_path)?;
 
-        let meta_version: i64 = conn
-            .query_row("SELECT value FROM meta WHERE key='version'", [], |row| {
-                row.get(0)
-            })
-            .unwrap_or(0);
+    let meta_version: i64 = conn
+        .query_row("SELECT value FROM meta WHERE key='version'", [], |row| {
+            row.get(0)
+        })
+        .unwrap_or(0);
 
-        let mut stmt = conn.prepare(
-            "SELECT rowid, host_key, encrypted_value FROM cookies WHERE length(encrypted_value) > 3",
-        )?;
+    let mut stmt = conn.prepare(
+        "SELECT rowid, host_key, encrypted_value FROM cookies WHERE length(encrypted_value) > 3",
+    )?;
 
-        let rows: Vec<(i64, String, Vec<u8>)> = stmt
-            .query_map([], |row| {
-                let rowid: i64 = row.get(0)?;
-                let host_key: String = row.get(1)?;
-                // Some browsers (e.g. Brave) may store encrypted_value as TEXT
-                // instead of BLOB, so handle both types.
-                let encrypted_value: Vec<u8> = match row.get_ref(2)? {
-                    rusqlite::types::ValueRef::Blob(b) => b.to_vec(),
-                    rusqlite::types::ValueRef::Text(t) => t.to_vec(),
-                    _ => return Ok((rowid, host_key, Vec::new())),
-                };
-                Ok((rowid, host_key, encrypted_value))
-            })?
-            .collect::<std::result::Result<_, _>>()?;
+    let rows: Vec<(i64, String, Vec<u8>)> = stmt
+        .query_map([], |row| {
+            let rowid: i64 = row.get(0)?;
+            let host_key: String = row.get(1)?;
+            // Some browsers (e.g. Brave) may store encrypted_value as TEXT
+            // instead of BLOB, so handle both types.
+            let encrypted_value: Vec<u8> = match row.get_ref(2)? {
+                rusqlite::types::ValueRef::Blob(b) => b.to_vec(),
+                rusqlite::types::ValueRef::Text(t) => t.to_vec(),
+                _ => return Ok((rowid, host_key, Vec::new())),
+            };
+            Ok((rowid, host_key, encrypted_value))
+        })?
+        .collect::<std::result::Result<_, _>>()?;
 
-        let mut converted: u64 = 0;
-        let tx = conn.unchecked_transaction()?;
-        {
-            let mut update =
-                tx.prepare("UPDATE cookies SET encrypted_value = ? WHERE rowid = ?")?;
+    let mut converted: u64 = 0;
+    let tx = conn.unchecked_transaction()?;
+    {
+        let mut update =
+            tx.prepare("UPDATE cookies SET encrypted_value = ? WHERE rowid = ?")?;
 
-            for (rowid, host_key, encrypted_value) in &rows {
-                let Some(plaintext) = decrypt_cookie(
-                    encrypted_value,
-                    &provider.source_key[..provider.source_key_len],
-                    host_key,
-                    meta_version,
-                    provider.source_algorithm,
-                ) else {
-                    continue;
-                };
+        for (rowid, host_key, encrypted_value) in &rows {
+            let Some(plaintext) = decrypt_cookie(
+                encrypted_value,
+                &provider.source_key[..provider.source_key_len],
+                host_key,
+                meta_version,
+                provider.source_algorithm,
+            ) else {
+                continue;
+            };
 
-                // Always re-encrypt with AES-128-CBC (peanuts key) for Steel
-                let reencrypted = encrypt_cookie(&plaintext, &peanuts_key, host_key, meta_version);
-                update.execute(rusqlite::params![reencrypted, rowid])?;
-                converted += 1;
-            }
+            // Always re-encrypt with AES-128-CBC (peanuts key) for Steel
+            let reencrypted = encrypt_cookie(&plaintext, &peanuts_key, host_key, meta_version);
+            update.execute(rusqlite::params![reencrypted, rowid])?;
+            converted += 1;
         }
-        tx.commit()?;
+    }
+    tx.commit()?;
 
-        drop(stmt);
-        conn.close().map_err(|(_, e)| e)?;
+    drop(stmt);
+    conn.close().map_err(|(_, e)| e)?;
 
-        let buffer = std::fs::read(&tmp_path)?;
-        Ok((buffer, converted))
-    })();
-
-    let _ = std::fs::remove_file(&tmp_path);
-    result
+    let buffer = std::fs::read(&tmp_path)?;
+    // tmp (NamedTempFile) is dropped here, auto-deleting the file
+    Ok((buffer, converted))
 }
 
 // ─── File collection ─────────────────────────────────────────────────────────

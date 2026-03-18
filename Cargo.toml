@@ -44,8 +44,9 @@ browser-engine = { git = "https://github.com/steel-dev/agent-browser", branch = 
 aes-gcm = "0.10"
 getrandom = "0.3"
 
-[dev-dependencies]
 tempfile = "3"
+
+[dev-dependencies]
 wiremock = "0.6"
 
 [profile.release]

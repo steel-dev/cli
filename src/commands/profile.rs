@@ -322,7 +322,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
     let profile_source = args
         .from
         .as_deref()
-        .or(stored.chrome_profile.as_deref())
+        .or(stored.browser_profile.as_deref())
         .ok_or_else(|| {
             anyhow::anyhow!("No source browser profile stored. Use --from to specify one.")
         })?
@@ -373,7 +373,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
 
     // Update stored metadata if source changed
     let source_changed =
-        args.from.is_some() && args.from.as_deref() != stored.chrome_profile.as_deref();
+        args.from.is_some() && args.from.as_deref() != stored.browser_profile.as_deref();
     let browser_changed =
         args.browser.is_some() && args.browser.as_deref() != stored.browser.as_deref();
     if source_changed || browser_changed {

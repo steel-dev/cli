@@ -60,7 +60,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
 
     // Resolve profile
     let mut resolved_profile_id = None;
-    let mut stored_chrome_profile = None;
+    let mut stored_browser_profile = None;
     let mut stored_browser = None;
     if let Some(ref profile_name) = args.profile {
         if let Some(err) = profile_store::validate_profile_name(profile_name) {
@@ -68,7 +68,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         }
         if let Some(data) = profile_store::read_profile(profile_name)? {
             resolved_profile_id = Some(data.profile_id);
-            stored_chrome_profile = data.chrome_profile;
+            stored_browser_profile = data.browser_profile;
             stored_browser = data.browser;
         }
     }
@@ -97,7 +97,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         profile_store::write_profile(
             profile_name,
             returned_profile_id,
-            stored_chrome_profile.as_deref(),
+            stored_browser_profile.as_deref(),
             stored_browser.as_deref(),
         )?;
     }

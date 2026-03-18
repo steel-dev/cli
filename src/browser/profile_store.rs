@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub struct ProfileData {
     pub profile_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub chrome_profile: Option<String>,
+    pub browser_profile: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub browser: Option<String>,
 }
@@ -47,10 +47,10 @@ pub fn read_profile(name: &str) -> Result<Option<ProfileData>> {
 pub fn write_profile(
     name: &str,
     profile_id: &str,
-    chrome_profile: Option<&str>,
+    browser_profile: Option<&str>,
     browser: Option<&str>,
 ) -> Result<()> {
-    write_profile_in(name, profile_id, chrome_profile, browser, &profiles_dir())
+    write_profile_in(name, profile_id, browser_profile, browser, &profiles_dir())
 }
 
 pub fn list_profiles() -> Result<Vec<ProfileEntry>> {
@@ -76,7 +76,7 @@ fn read_profile_in(name: &str, dir: &Path) -> Result<Option<ProfileData>> {
 fn write_profile_in(
     name: &str,
     profile_id: &str,
-    chrome_profile: Option<&str>,
+    browser_profile: Option<&str>,
     browser: Option<&str>,
     dir: &Path,
 ) -> Result<()> {
@@ -84,7 +84,7 @@ fn write_profile_in(
 
     let data = ProfileData {
         profile_id: profile_id.to_string(),
-        chrome_profile: chrome_profile.map(|s| s.to_string()),
+        browser_profile: browser_profile.map(|s| s.to_string()),
         browser: browser.map(|s| s.to_string()),
     };
 
@@ -207,7 +207,7 @@ mod tests {
 
         let data = read_profile_in("test-prof", &dir).unwrap().unwrap();
         assert_eq!(data.profile_id, "prof_123");
-        assert_eq!(data.chrome_profile.as_deref(), Some("Default"));
+        assert_eq!(data.browser_profile.as_deref(), Some("Default"));
 
         let entries = list_profiles_in(&dir).unwrap();
         assert_eq!(entries.len(), 1);
@@ -239,13 +239,13 @@ mod tests {
     }
 
     #[test]
-    fn write_without_chrome_profile() {
+    fn write_without_browser_profile() {
         let (_tmp, dir) = tmp_profiles_dir();
 
         write_profile_in("minimal", "prof_456", None, None, &dir).unwrap();
         let data = read_profile_in("minimal", &dir).unwrap().unwrap();
         assert_eq!(data.profile_id, "prof_456");
-        assert!(data.chrome_profile.is_none());
+        assert!(data.browser_profile.is_none());
 
         // Verify chromeProfile is omitted from JSON
         let json = std::fs::read_to_string(dir.join("minimal.json")).unwrap();
