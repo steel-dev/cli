@@ -5,6 +5,27 @@ use anyhow::{Result, bail};
 
 use super::protocol::DaemonCreateParams;
 
+/// Validate a session name. Returns `Some(error_message)` if invalid.
+/// Same rules as profile names: alphanumeric, hyphens, underscores, starts with alnum.
+pub fn validate_session_name(name: &str) -> Option<String> {
+    if name.is_empty() {
+        return Some("Session name cannot be empty.".to_string());
+    }
+    let first = name.chars().next().unwrap();
+    if !first.is_ascii_alphanumeric() {
+        return Some("Session name must start with a letter or number.".to_string());
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Some(
+            "Session name can only contain letters, numbers, hyphens, and underscores.".to_string(),
+        );
+    }
+    None
+}
+
 /// Scan the config directory for `daemon-*.sock` files and return the session names.
 pub fn list_daemon_names() -> Vec<String> {
     let dir = crate::config::config_dir();
@@ -145,4 +166,42 @@ pub fn kill_daemon(session_name: &str) -> Result<()> {
     }
     cleanup_stale(session_name);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_session_names() {
+        assert!(validate_session_name("default").is_none());
+        assert!(validate_session_name("my-session").is_none());
+        assert!(validate_session_name("my_session").is_none());
+        assert!(validate_session_name("a").is_none());
+        assert!(validate_session_name("1abc").is_none());
+    }
+
+    #[test]
+    fn empty_session_name() {
+        assert!(validate_session_name("").is_some());
+    }
+
+    #[test]
+    fn invalid_start_char() {
+        assert!(validate_session_name("-foo").is_some());
+        assert!(validate_session_name("_foo").is_some());
+        assert!(validate_session_name(".foo").is_some());
+    }
+
+    #[test]
+    fn path_traversal_rejected() {
+        assert!(validate_session_name("../../../tmp/evil").is_some());
+        assert!(validate_session_name("foo/bar").is_some());
+        assert!(validate_session_name("foo.bar").is_some());
+    }
+
+    #[test]
+    fn spaces_rejected() {
+        assert!(validate_session_name("foo bar").is_some());
+    }
 }
