@@ -2495,6 +2495,7 @@ dependencies = [
  "hmac",
  "indicatif",
  "jiff",
+ "libc",
  "open",
  "pbkdf2",
  "reqwest",

@@ -73,14 +73,8 @@ pub fn is_daemon_alive(session_name: &str) -> bool {
     let Ok(pid) = contents.trim().parse::<i32>() else {
         return false;
     };
-    // kill -0 checks process existence without sending a signal
-    std::process::Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    // kill(pid, 0) checks process existence without sending a signal
+    unsafe { libc::kill(pid, 0) == 0 }
 }
 
 /// If a daemon's socket file exists but its process is dead, clean up stale files.
@@ -155,14 +149,9 @@ pub async fn stop_daemon(session_name: &str) -> Result<()> {
 pub fn kill_daemon(session_name: &str) -> Result<()> {
     let pid_file = pid_path(session_name);
     if let Ok(contents) = std::fs::read_to_string(&pid_file)
-        && let Ok(pid) = contents.trim().parse::<u32>()
+        && let Ok(pid) = contents.trim().parse::<i32>()
     {
-        // Best-effort kill via command
-        let _ = std::process::Command::new("kill")
-            .arg(pid.to_string())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+        unsafe { libc::kill(pid, libc::SIGTERM) };
     }
     cleanup_stale(session_name);
     Ok(())
