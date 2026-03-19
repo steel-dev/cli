@@ -241,12 +241,11 @@ impl BrowserDescriptor {
 
 const IV: [u8; 16] = [0x20; 16]; // 16 space bytes
 
-const DEFAULT_ENTRIES: &[&str] = &["Cookies", "Local Storage", "Preferences"];
+const DEFAULT_ENTRIES: &[&str] = &["Cookies", "Local Storage"];
 
 const FULL_ENTRIES: &[&str] = &[
     "Cookies",
     "Local Storage",
-    "Preferences",
     "IndexedDB",
     "Bookmarks",
     "Favicons",
@@ -259,6 +258,12 @@ const SKIP_NAMES: &[&str] = &[
     "SingletonLock",
     "SingletonCookie",
     "SingletonSocket",
+    "Current Session",
+    "Current Tabs",
+    "Last Session",
+    "Last Tabs",
+    "Preferences",
+    "Secure Preferences",
 ];
 const SKIP_EXTS: &[&str] = &[".log", ".pma"];
 
@@ -777,6 +782,19 @@ fn collect_files_recursive(dir_path: &Path, base_dir: &Path, files: &mut HashMap
     }
 }
 
+// ─── Minimal Preferences ─────────────────────────────────────────────────────
+
+/// Generate a minimal Preferences file for cross-environment portability.
+fn minimal_preferences() -> Vec<u8> {
+    let prefs = serde_json::json!({
+        "profile": {
+            "exit_type": "Normal",
+            "exited_cleanly": true
+        }
+    });
+    serde_json::to_vec_pretty(&prefs).expect("static JSON serialization")
+}
+
 // ─── Package ─────────────────────────────────────────────────────────────────
 
 pub struct PackageResult {
@@ -847,6 +865,8 @@ pub fn package_profile(
             }
         }
     }
+
+    zip_files.push(("Default/Preferences".into(), minimal_preferences()));
 
     let total_bytes: usize = zip_files.iter().map(|(_, d)| d.len()).sum();
     let total_mb = total_bytes as f64 / 1024.0 / 1024.0;
@@ -1071,5 +1091,49 @@ mod tests {
             let desc = id.descriptor();
             assert_eq!(desc.id, *id);
         }
+    }
+
+    #[test]
+    fn minimal_preferences_has_clean_exit() {
+        let data = minimal_preferences();
+        let prefs: serde_json::Value = serde_json::from_slice(&data).unwrap();
+
+        assert_eq!(prefs["profile"]["exit_type"], "Normal");
+        assert_eq!(prefs["profile"]["exited_cleanly"], true);
+
+        // Should only contain profile key — no extensions, themes, etc.
+        let obj = prefs.as_object().unwrap();
+        assert_eq!(obj.len(), 1);
+        assert!(obj.contains_key("profile"));
+    }
+
+    #[test]
+    fn collect_files_skips_preferences() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path();
+
+        std::fs::write(dir.join("good.txt"), "data").unwrap();
+        std::fs::write(dir.join("Preferences"), "{}").unwrap();
+        std::fs::write(dir.join("Secure Preferences"), "{}").unwrap();
+
+        let files = collect_files(dir, dir);
+        assert_eq!(files.len(), 1);
+        assert!(files.contains_key("good.txt"));
+    }
+
+    #[test]
+    fn collect_files_skips_session_files() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path();
+
+        std::fs::write(dir.join("good.txt"), "data").unwrap();
+        std::fs::write(dir.join("Current Session"), "s").unwrap();
+        std::fs::write(dir.join("Current Tabs"), "t").unwrap();
+        std::fs::write(dir.join("Last Session"), "s").unwrap();
+        std::fs::write(dir.join("Last Tabs"), "t").unwrap();
+
+        let files = collect_files(dir, dir);
+        assert_eq!(files.len(), 1);
+        assert!(files.contains_key("good.txt"));
     }
 }
