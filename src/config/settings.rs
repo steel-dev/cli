@@ -142,9 +142,21 @@ pub fn read_config() -> Result<Config> {
 pub fn write_config_to(path: &Path, config: &Config) -> Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+        }
     }
     let contents = serde_json::to_string_pretty(config)?;
-    std::fs::write(path, contents)?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, &contents)?;
+    std::fs::rename(&tmp, path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
     Ok(())
 }
 
