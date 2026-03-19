@@ -9,6 +9,7 @@ use anyhow::Result;
 
 use browser_engine::native::browser::{BrowserManager, WaitUntil};
 use browser_engine::native::cdp::client::CdpClient;
+use browser_engine::native::diff;
 use browser_engine::native::element::{self, RefMap};
 use browser_engine::native::interaction;
 use browser_engine::native::network;
@@ -898,6 +899,66 @@ impl BrowserEngine {
         network::set_extra_headers(client, session_id, headers)
             .await
             .map_err(|e| anyhow::anyhow!(e))
+    }
+
+    // ── Diff ─────────────────────────────────────────────────────────
+
+    /// Diff current snapshot against a baseline string or file path.
+    pub async fn diff_snapshot(
+        &mut self,
+        baseline: Option<&str>,
+        options: SnapshotOptions,
+    ) -> Result<serde_json::Value> {
+        let current = self.snapshot(options).await?;
+        let baseline_text = match baseline {
+            Some(b) if std::path::Path::new(b).exists() => std::fs::read_to_string(b)
+                .map_err(|e| anyhow::anyhow!("Failed to read baseline: {e}"))?,
+            Some(b) => b.to_string(),
+            None => String::new(),
+        };
+        let result = diff::diff_snapshots(&baseline_text, &current);
+        Ok(serde_json::json!({
+            "diff": result.diff,
+            "additions": result.additions,
+            "removals": result.removals,
+            "unchanged": result.unchanged,
+            "changed": result.changed,
+        }))
+    }
+
+    /// Diff current screenshot against a baseline image file.
+    pub async fn diff_screenshot(
+        &mut self,
+        baseline_path: &str,
+        threshold: f64,
+        options: ScreenshotOptions,
+        output_path: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let result = self.take_screenshot(options).await?;
+
+        let current_bytes =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &result.base64)
+                .map_err(|e| anyhow::anyhow!("Failed to decode screenshot: {e}"))?;
+
+        let baseline_bytes = std::fs::read(baseline_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read baseline: {e}"))?;
+
+        let diff_result = diff::diff_screenshot(&baseline_bytes, &current_bytes, threshold)
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        if let (Some(out), Some(diff_data)) = (output_path, &diff_result.diff_image) {
+            std::fs::write(out, diff_data)
+                .map_err(|e| anyhow::anyhow!("Failed to write diff image: {e}"))?;
+        }
+
+        Ok(serde_json::json!({
+            "match": diff_result.matched,
+            "mismatchPercentage": diff_result.mismatch_percentage,
+            "totalPixels": diff_result.total_pixels,
+            "differentPixels": diff_result.different_pixels,
+            "diffPath": output_path,
+            "dimensionMismatch": diff_result.dimension_mismatch,
+        }))
     }
 
     /// Set offline mode.

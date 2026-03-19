@@ -146,6 +146,13 @@ pub enum ActionCommand {
     #[command(name = "bringtofront")]
     BringToFront,
 
+    // --- Diff ---
+    /// Compare snapshots or screenshots
+    Diff {
+        #[command(subcommand)]
+        command: DiffCommand,
+    },
+
     // --- Session ---
     /// Close the browser session
     #[command(aliases = ["quit", "exit"])]
@@ -257,6 +264,51 @@ pub enum SetCommand {
     /// Set browser user agent string
     #[command(name = "useragent", aliases = ["ua"])]
     UserAgent(SetUserAgentArgs),
+}
+
+// ── Diff subcommands ────────────────────────────────────────────────
+
+#[derive(Subcommand)]
+pub enum DiffCommand {
+    /// Compare current snapshot against a baseline
+    Snapshot(DiffSnapshotArgs),
+    /// Compare current screenshot against a baseline image
+    Screenshot(DiffScreenshotArgs),
+}
+
+#[derive(Parser)]
+pub struct DiffSnapshotArgs {
+    /// Baseline snapshot text or file path
+    #[arg(short, long)]
+    pub baseline: Option<String>,
+    /// Restrict snapshot to a subtree
+    #[arg(short, long)]
+    pub selector: Option<String>,
+    /// Use compact output format
+    #[arg(short, long)]
+    pub compact: bool,
+    /// Maximum nesting depth
+    #[arg(short = 'd', long, alias = "depth")]
+    pub max_depth: Option<usize>,
+}
+
+#[derive(Parser)]
+pub struct DiffScreenshotArgs {
+    /// Baseline image file path (required)
+    #[arg(short, long)]
+    pub baseline: String,
+    /// Color difference threshold (0.0–1.0)
+    #[arg(short, long)]
+    pub threshold: Option<f64>,
+    /// Save diff image to this path
+    #[arg(short, long)]
+    pub output: Option<String>,
+    /// Restrict screenshot to an element
+    #[arg(short, long)]
+    pub selector: Option<String>,
+    /// Capture the full scrollable page
+    #[arg(long, alias = "full")]
+    pub full_page: bool,
 }
 
 // ── Arg structs ─────────────────────────────────────────────────────
@@ -1122,6 +1174,63 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
             let data = client.send(DaemonCommand::BringToFront).await?;
             output::success(data, "");
         }
+
+        // --- Diff ---
+        ActionCommand::Diff { command } => match command {
+            DiffCommand::Snapshot(args) => {
+                let data = client
+                    .send(DaemonCommand::DiffSnapshot {
+                        baseline: args.baseline,
+                        selector: args.selector,
+                        compact: args.compact,
+                        max_depth: args.max_depth,
+                    })
+                    .await?;
+                if output::is_json() {
+                    output::success_data(data);
+                } else {
+                    let diff_text = data["diff"].as_str().unwrap_or("");
+                    if diff_text.is_empty() {
+                        println!("No changes.");
+                    } else {
+                        print!("{diff_text}");
+                    }
+                }
+            }
+            DiffCommand::Screenshot(args) => {
+                let output_path = args
+                    .output
+                    .as_ref()
+                    .map(|p| resolve_output_path(p))
+                    .transpose()?;
+                let data = client
+                    .send(DaemonCommand::DiffScreenshot {
+                        baseline: resolve_output_path(&args.baseline)?,
+                        threshold: args.threshold,
+                        selector: args.selector,
+                        full_page: args.full_page,
+                        output: output_path,
+                    })
+                    .await?;
+                if output::is_json() {
+                    output::success_data(data);
+                } else {
+                    let matched = data["match"].as_bool().unwrap_or(false);
+                    let pct = data["mismatchPercentage"]
+                        .as_f64()
+                        .map(|p| format!("{p:.2}%"))
+                        .unwrap_or_default();
+                    if matched {
+                        println!("Screenshots match.");
+                    } else {
+                        println!("Mismatch: {pct}");
+                        if let Some(p) = data["diffPath"].as_str() {
+                            println!("Diff image: {p}");
+                        }
+                    }
+                }
+            }
+        },
 
         // --- Session ---
         ActionCommand::Close => {

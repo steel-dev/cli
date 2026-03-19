@@ -662,6 +662,35 @@ async fn dispatch_inner(
             Ok(json!({"offline": offline}))
         }
 
+        // ── Diff ──
+        DaemonCommand::DiffSnapshot {
+            baseline,
+            selector,
+            compact,
+            max_depth,
+        } => {
+            let options = build_snapshot_options(false, selector, compact, max_depth, false);
+            engine.diff_snapshot(baseline.as_deref(), options).await
+        }
+        DaemonCommand::DiffScreenshot {
+            baseline,
+            threshold,
+            selector,
+            full_page,
+            output,
+        } => {
+            let options =
+                build_screenshot_options(full_page, selector, None, None, false, None, None);
+            engine
+                .diff_screenshot(
+                    &baseline,
+                    threshold.unwrap_or(0.1),
+                    options,
+                    output.as_deref(),
+                )
+                .await
+        }
+
         DaemonCommand::Close | DaemonCommand::Shutdown => Ok(json!({"closed": true})),
         DaemonCommand::Ping => Ok(json!("pong")),
         DaemonCommand::GetSessionInfo => {

@@ -282,6 +282,21 @@ pub enum DaemonCommand {
         offline: bool,
     },
 
+    // ── Diff ──
+    DiffSnapshot {
+        baseline: Option<String>,
+        selector: Option<String>,
+        compact: bool,
+        max_depth: Option<usize>,
+    },
+    DiffScreenshot {
+        baseline: String,
+        threshold: Option<f64>,
+        selector: Option<String>,
+        full_page: bool,
+        output: Option<String>,
+    },
+
     Close,
     Ping,
     Shutdown,
