@@ -640,6 +640,370 @@ fn optional_vec(v: Vec<String>) -> Option<Vec<String>> {
     if v.is_empty() { None } else { Some(v) }
 }
 
+// ── Output strategy ─────────────────────────────────────────────────
+
+enum OutputStrategy {
+    /// `output::success(data, "")` — silent in text mode, JSON envelope in JSON mode
+    Echo,
+    /// `output::success_text(data)` — bare string in text mode
+    Text,
+    /// `output::success_data(data)` — pretty-printed JSON in text mode
+    Data,
+    /// `output::success_field(data, field)` — extract one field for text mode
+    Field(&'static str),
+    /// Custom handler for responses needing bespoke formatting
+    Custom(Box<dyn FnOnce(serde_json::Value)>),
+}
+
+impl OutputStrategy {
+    fn display(self, data: serde_json::Value) {
+        match self {
+            Self::Echo => output::success(data, ""),
+            Self::Text => output::success_text(data),
+            Self::Data => output::success_data(data),
+            Self::Field(f) => output::success_field(data, f),
+            Self::Custom(handler) => handler(data),
+        }
+    }
+}
+
+// ── Custom display handlers ─────────────────────────────────────────
+
+fn display_find(data: serde_json::Value) {
+    if output::is_json() {
+        output::success_data(data);
+    } else if let Some(elements) = data["elements"].as_array() {
+        for el in elements {
+            let idx = el["index"].as_u64().unwrap_or(0);
+            let tag = el["tagName"].as_str().unwrap_or("");
+            let text = el["text"].as_str().unwrap_or("");
+            let visible = el["visible"].as_bool().unwrap_or(false);
+            let vis = if visible { "" } else { " (hidden)" };
+            println!("[{idx}] <{tag}>{vis} {text}");
+        }
+    }
+}
+
+fn display_tab_list(data: serde_json::Value) {
+    if output::is_json() {
+        output::success_data(data);
+    } else if let Some(tabs) = data["tabs"].as_array() {
+        for tab in tabs {
+            let idx = tab["index"].as_u64().unwrap_or(0);
+            let title = tab["title"].as_str().unwrap_or("");
+            let url = tab["url"].as_str().unwrap_or("");
+            let active = tab["active"].as_bool().unwrap_or(false);
+            let marker = if active { " *" } else { "" };
+            println!("[{idx}]{marker} {title} — {url}");
+        }
+    }
+}
+
+fn display_diff_snapshot(data: serde_json::Value) {
+    if output::is_json() {
+        output::success_data(data);
+    } else {
+        let diff_text = data["diff"].as_str().unwrap_or("");
+        if diff_text.is_empty() {
+            println!("No changes.");
+        } else {
+            print!("{diff_text}");
+        }
+    }
+}
+
+fn display_diff_screenshot(data: serde_json::Value) {
+    if output::is_json() {
+        output::success_data(data);
+    } else {
+        let matched = data["match"].as_bool().unwrap_or(false);
+        let pct = data["mismatchPercentage"]
+            .as_f64()
+            .map(|p| format!("{p:.2}%"))
+            .unwrap_or_default();
+        if matched {
+            println!("Screenshots match.");
+        } else {
+            println!("Mismatch: {pct}");
+            if let Some(p) = data["diffPath"].as_str() {
+                println!("Diff image: {p}");
+            }
+        }
+    }
+}
+
+// ── ActionCommand → (DaemonCommand, OutputStrategy) ─────────────────
+
+impl ActionCommand {
+    fn into_wire(self) -> Result<(DaemonCommand, OutputStrategy)> {
+        use DaemonCommand as D;
+        use OutputStrategy as O;
+
+        Ok(match self {
+            // ── Navigation ──────────────────────────────────────────
+            Self::Navigate(a) => (
+                D::Navigate {
+                    url: a.url,
+                    wait_until: a.wait_until,
+                    headers: parse_header_args(&a.headers),
+                },
+                O::Echo,
+            ),
+            Self::Back => (D::Back, O::Echo),
+            Self::Forward => (D::Forward, O::Echo),
+            Self::Reload => (D::Reload, O::Echo),
+
+            // ── Interactions ────────────────────────────────────────
+            Self::Click(a) => (
+                D::Click {
+                    selector: a.selector,
+                    button: a.button,
+                    click_count: a.count,
+                    new_tab: a.new_tab,
+                },
+                O::Echo,
+            ),
+            Self::DblClick(a) => (D::DblClick { selector: a.selector }, O::Echo),
+            Self::Fill(a) => (
+                D::Fill { selector: a.selector, value: a.value.join(" ") },
+                O::Echo,
+            ),
+            Self::Type(a) => (
+                D::TypeText {
+                    selector: a.selector,
+                    text: a.text.join(" "),
+                    clear: a.clear,
+                    delay_ms: a.delay,
+                },
+                O::Echo,
+            ),
+            Self::Press(a) => (D::Press { key: a.key }, O::Echo),
+            Self::Hover(a) => (D::Hover { selector: a.selector }, O::Echo),
+            Self::Focus(a) => (D::Focus { selector: a.selector }, O::Echo),
+            Self::Check(a) => (D::Check { selector: a.selector }, O::Echo),
+            Self::Uncheck(a) => (D::Uncheck { selector: a.selector }, O::Echo),
+            Self::Select(a) => (
+                D::Select { selector: a.selector, values: a.values },
+                O::Echo,
+            ),
+            Self::Clear(a) => (D::Clear { selector: a.selector }, O::Echo),
+            Self::SelectAll(a) => (D::SelectAll { selector: a.selector }, O::Echo),
+            Self::Scroll(a) => {
+                let (dx, dy) = scroll_deltas(a.direction.as_deref(), a.amount);
+                (D::Scroll { selector: a.selector, delta_x: dx, delta_y: dy }, O::Echo)
+            }
+            Self::ScrollIntoView(a) => (D::ScrollIntoView { selector: a.selector }, O::Echo),
+            Self::SetValue(a) => (
+                D::SetValue { selector: a.selector, value: a.value.join(" ") },
+                O::Echo,
+            ),
+
+            // ── Observation ─────────────────────────────────────────
+            Self::Snapshot(a) => (
+                D::Snapshot {
+                    interactive_only: a.interactive,
+                    selector: a.selector,
+                    compact: a.compact,
+                    max_depth: a.max_depth,
+                    cursor: a.cursor,
+                },
+                O::Text,
+            ),
+            Self::Screenshot(a) => {
+                let output_fallback = a.output.clone();
+                let abs_path = resolve_output_path(&a.output)?;
+                (
+                    D::Screenshot {
+                        full_page: a.full_page,
+                        selector: a.selector,
+                        format: a.format,
+                        quality: a.quality,
+                        annotate: a.annotate,
+                        path: Some(abs_path),
+                        screenshot_dir: None,
+                    },
+                    O::Custom(Box::new(move |data| {
+                        if output::is_json() {
+                            output::success_data(data);
+                        } else {
+                            let saved_path = data["path"].as_str().unwrap_or(&output_fallback);
+                            println!("{saved_path}");
+                        }
+                    })),
+                )
+            }
+            Self::Eval(a) => (D::Eval { script: a.script }, O::Data),
+            Self::Find(a) => (
+                D::Find { selector: a.selector },
+                O::Custom(Box::new(display_find)),
+            ),
+            Self::Content => (D::Content, O::Text),
+
+            // ── Get info ────────────────────────────────────────────
+            Self::Get { command } => match command {
+                GetCommand::Text(a) => (D::GetText { selector: a.selector }, O::Field("text")),
+                GetCommand::Html(a) => (D::InnerHtml { selector: a.selector }, O::Field("html")),
+                GetCommand::Value(a) => (D::InputValue { selector: a.selector }, O::Field("value")),
+                GetCommand::Attr(a) => (
+                    D::GetAttribute { selector: a.selector, attribute: a.attribute },
+                    O::Field("value"),
+                ),
+                GetCommand::Url => (D::Url, O::Text),
+                GetCommand::Title => (D::Title, O::Text),
+                GetCommand::Count(a) => (D::Count { selector: a.selector }, O::Field("count")),
+                GetCommand::Box(a) => (D::BoundingBox { selector: a.selector }, O::Data),
+                GetCommand::Styles(a) => (
+                    D::Styles { selector: a.selector, properties: optional_vec(a.property) },
+                    O::Data,
+                ),
+            },
+
+            // ── Check state ─────────────────────────────────────────
+            Self::Is { command } => match command {
+                IsCommand::Visible(a) => (D::IsVisible { selector: a.selector }, O::Field("visible")),
+                IsCommand::Enabled(a) => (D::IsEnabled { selector: a.selector }, O::Field("enabled")),
+                IsCommand::Checked(a) => (D::IsChecked { selector: a.selector }, O::Field("checked")),
+            },
+
+            // ── Wait ────────────────────────────────────────────────
+            Self::Wait(a) => (
+                D::Wait {
+                    timeout: Some(a.timeout),
+                    text: a.text,
+                    selector: a.selector,
+                    state: a.state,
+                    url: a.url,
+                    function: a.function,
+                    load_state: a.load_state,
+                },
+                O::Field("waited"),
+            ),
+
+            // ── Tabs ────────────────────────────────────────────────
+            Self::Tab { command } => match command {
+                TabCommand::List => (D::TabList, O::Custom(Box::new(display_tab_list))),
+                TabCommand::New(a) => (D::TabNew { url: a.url }, O::Field("url")),
+                TabCommand::Switch(a) => (D::TabSwitch { index: a.index }, O::Field("url")),
+                TabCommand::Close(a) => (D::TabClose { index: a.index }, O::Echo),
+            },
+
+            // ── Cookies ─────────────────────────────────────────────
+            Self::Cookies { command } => match command {
+                None => (D::CookiesGet { urls: None }, O::Data),
+                Some(CookiesCommand::Set(a)) => (
+                    D::CookiesSet {
+                        name: a.name,
+                        value: a.value,
+                        domain: a.domain,
+                        path: a.path,
+                        secure: a.secure,
+                        http_only: a.http_only,
+                    },
+                    O::Echo,
+                ),
+                Some(CookiesCommand::Clear) => (D::CookiesClear, O::Echo),
+            },
+
+            // ── Storage ─────────────────────────────────────────────
+            Self::Storage { command } => {
+                let (st, sub) = match command {
+                    StorageTypeCommand::Local(sub) => ("local", sub),
+                    StorageTypeCommand::Session(sub) => ("session", sub),
+                };
+                match sub.command {
+                    None => (
+                        D::StorageGet { storage_type: st.to_string(), key: sub.key },
+                        O::Data,
+                    ),
+                    Some(StorageActionCommand::Set(a)) => (
+                        D::StorageSet { storage_type: st.to_string(), key: a.key, value: a.value },
+                        O::Echo,
+                    ),
+                    Some(StorageActionCommand::Clear) => (
+                        D::StorageClear { storage_type: st.to_string() },
+                        O::Echo,
+                    ),
+                }
+            }
+
+            // ── Drag & drop ─────────────────────────────────────────
+            Self::Drag(a) => (D::Drag { source: a.source, target: a.target }, O::Echo),
+
+            // ── File upload ─────────────────────────────────────────
+            Self::Upload(a) => (D::Upload { selector: a.selector, files: a.files }, O::Echo),
+
+            // ── Visual ──────────────────────────────────────────────
+            Self::Highlight(a) => (D::Highlight { selector: a.selector }, O::Echo),
+
+            // ── Browser settings ────────────────────────────────────
+            Self::Set { command } => match command {
+                SetCommand::Viewport(a) => (
+                    D::SetViewport {
+                        width: a.width,
+                        height: a.height,
+                        device_scale_factor: a.scale,
+                        mobile: if a.mobile { Some(true) } else { None },
+                    },
+                    O::Echo,
+                ),
+                SetCommand::Geo(a) => (
+                    D::SetGeolocation {
+                        latitude: a.latitude,
+                        longitude: a.longitude,
+                        accuracy: a.accuracy,
+                    },
+                    O::Echo,
+                ),
+                SetCommand::Offline(a) => {
+                    let offline = matches!(a.state.as_str(), "on" | "true" | "1");
+                    (D::SetOffline { offline }, O::Echo)
+                }
+                SetCommand::Headers(a) => {
+                    let headers: HashMap<String, String> = serde_json::from_str(&a.json)
+                        .map_err(|e| anyhow::anyhow!("Invalid JSON for headers: {e}"))?;
+                    (D::SetHeaders { headers }, O::Echo)
+                }
+                SetCommand::UserAgent(a) => (
+                    D::SetUserAgent { user_agent: a.user_agent.join(" ") },
+                    O::Echo,
+                ),
+            },
+
+            // ── Window ──────────────────────────────────────────────
+            Self::BringToFront => (D::BringToFront, O::Echo),
+
+            // ── Diff ────────────────────────────────────────────────
+            Self::Diff { command } => match command {
+                DiffCommand::Snapshot(a) => (
+                    D::DiffSnapshot {
+                        baseline: a.baseline,
+                        selector: a.selector,
+                        compact: a.compact,
+                        max_depth: a.max_depth,
+                    },
+                    O::Custom(Box::new(display_diff_snapshot)),
+                ),
+                DiffCommand::Screenshot(a) => {
+                    let output_path = a.output.as_ref().map(|p| resolve_output_path(p)).transpose()?;
+                    (
+                        D::DiffScreenshot {
+                            baseline: resolve_output_path(&a.baseline)?,
+                            threshold: a.threshold,
+                            selector: a.selector,
+                            full_page: a.full_page,
+                            output: output_path,
+                        },
+                        O::Custom(Box::new(display_diff_screenshot)),
+                    )
+                }
+            },
+
+            // ── Session ─────────────────────────────────────────────
+            Self::Close => (D::Close, O::Echo),
+        })
+    }
+}
+
 // ── Command dispatch ────────────────────────────────────────────────
 
 pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
@@ -657,588 +1021,9 @@ pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
 }
 
 async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Result<()> {
-    match action {
-        // --- Navigation ---
-        ActionCommand::Navigate(args) => {
-            let data = client
-                .send(DaemonCommand::Navigate {
-                    url: args.url,
-                    wait_until: args.wait_until,
-                    headers: parse_header_args(&args.headers),
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Back => {
-            let data = client.send(DaemonCommand::Back).await?;
-            output::success(data, "");
-        }
-        ActionCommand::Forward => {
-            let data = client.send(DaemonCommand::Forward).await?;
-            output::success(data, "");
-        }
-        ActionCommand::Reload => {
-            let data = client.send(DaemonCommand::Reload).await?;
-            output::success(data, "");
-        }
-
-        // --- Interactions ---
-        ActionCommand::Click(args) => {
-            let data = client
-                .send(DaemonCommand::Click {
-                    selector: args.selector,
-                    button: args.button,
-                    click_count: args.count,
-                    new_tab: args.new_tab,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::DblClick(args) => {
-            let data = client
-                .send(DaemonCommand::DblClick {
-                    selector: args.selector,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Fill(args) => {
-            let value = args.value.join(" ");
-            let data = client
-                .send(DaemonCommand::Fill {
-                    selector: args.selector,
-                    value,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Type(args) => {
-            let text = args.text.join(" ");
-            let data = client
-                .send(DaemonCommand::TypeText {
-                    selector: args.selector,
-                    text,
-                    clear: args.clear,
-                    delay_ms: args.delay,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Press(args) => {
-            let data = client.send(DaemonCommand::Press { key: args.key }).await?;
-            output::success(data, "");
-        }
-        ActionCommand::Hover(args) => {
-            let data = client
-                .send(DaemonCommand::Hover {
-                    selector: args.selector,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Focus(args) => {
-            let data = client
-                .send(DaemonCommand::Focus {
-                    selector: args.selector,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Check(args) => {
-            let data = client
-                .send(DaemonCommand::Check {
-                    selector: args.selector,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Uncheck(args) => {
-            let data = client
-                .send(DaemonCommand::Uncheck {
-                    selector: args.selector,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Select(args) => {
-            let data = client
-                .send(DaemonCommand::Select {
-                    selector: args.selector,
-                    values: args.values,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Clear(args) => {
-            let data = client
-                .send(DaemonCommand::Clear {
-                    selector: args.selector,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::SelectAll(args) => {
-            let data = client
-                .send(DaemonCommand::SelectAll {
-                    selector: args.selector,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::Scroll(args) => {
-            let (dx, dy) = scroll_deltas(args.direction.as_deref(), args.amount);
-            let data = client
-                .send(DaemonCommand::Scroll {
-                    selector: args.selector,
-                    delta_x: dx,
-                    delta_y: dy,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::ScrollIntoView(args) => {
-            let data = client
-                .send(DaemonCommand::ScrollIntoView {
-                    selector: args.selector,
-                })
-                .await?;
-            output::success(data, "");
-        }
-        ActionCommand::SetValue(args) => {
-            let value = args.value.join(" ");
-            let data = client
-                .send(DaemonCommand::SetValue {
-                    selector: args.selector,
-                    value,
-                })
-                .await?;
-            output::success(data, "");
-        }
-
-        // --- Observation ---
-        ActionCommand::Snapshot(args) => {
-            let data = client
-                .send(DaemonCommand::Snapshot {
-                    interactive_only: args.interactive,
-                    selector: args.selector,
-                    compact: args.compact,
-                    max_depth: args.max_depth,
-                    cursor: args.cursor,
-                })
-                .await?;
-            output::success_text(data);
-        }
-        ActionCommand::Screenshot(args) => {
-            let abs_path = resolve_output_path(&args.output)?;
-            let data = client
-                .send(DaemonCommand::Screenshot {
-                    full_page: args.full_page,
-                    selector: args.selector,
-                    format: args.format,
-                    quality: args.quality,
-                    annotate: args.annotate,
-                    path: Some(abs_path),
-                    screenshot_dir: None,
-                })
-                .await?;
-            if output::is_json() {
-                output::success_data(data);
-            } else {
-                let saved_path = data["path"].as_str().unwrap_or(&args.output);
-                println!("{saved_path}");
-            }
-        }
-        ActionCommand::Eval(args) => {
-            let data = client
-                .send(DaemonCommand::Eval {
-                    script: args.script,
-                })
-                .await?;
-            output::success_data(data);
-        }
-        ActionCommand::Find(args) => {
-            let data = client
-                .send(DaemonCommand::Find {
-                    selector: args.selector,
-                })
-                .await?;
-            if output::is_json() {
-                output::success_data(data);
-            } else if let Some(elements) = data["elements"].as_array() {
-                for el in elements {
-                    let idx = el["index"].as_u64().unwrap_or(0);
-                    let tag = el["tagName"].as_str().unwrap_or("");
-                    let text = el["text"].as_str().unwrap_or("");
-                    let visible = el["visible"].as_bool().unwrap_or(false);
-                    let vis = if visible { "" } else { " (hidden)" };
-                    println!("[{idx}] <{tag}>{vis} {text}");
-                }
-            }
-        }
-        ActionCommand::Content => {
-            let data = client.send(DaemonCommand::Content).await?;
-            output::success_text(data);
-        }
-
-        // --- Get info ---
-        ActionCommand::Get { command } => match command {
-            GetCommand::Text(args) => {
-                let data = client
-                    .send(DaemonCommand::GetText {
-                        selector: args.selector,
-                    })
-                    .await?;
-                output::success_field(data, "text");
-            }
-            GetCommand::Html(args) => {
-                let data = client
-                    .send(DaemonCommand::InnerHtml {
-                        selector: args.selector,
-                    })
-                    .await?;
-                output::success_field(data, "html");
-            }
-            GetCommand::Value(args) => {
-                let data = client
-                    .send(DaemonCommand::InputValue {
-                        selector: args.selector,
-                    })
-                    .await?;
-                output::success_field(data, "value");
-            }
-            GetCommand::Attr(args) => {
-                let data = client
-                    .send(DaemonCommand::GetAttribute {
-                        selector: args.selector,
-                        attribute: args.attribute,
-                    })
-                    .await?;
-                output::success_field(data, "value");
-            }
-            GetCommand::Url => {
-                let data = client.send(DaemonCommand::Url).await?;
-                output::success_text(data);
-            }
-            GetCommand::Title => {
-                let data = client.send(DaemonCommand::Title).await?;
-                output::success_text(data);
-            }
-            GetCommand::Count(args) => {
-                let data = client
-                    .send(DaemonCommand::Count {
-                        selector: args.selector,
-                    })
-                    .await?;
-                output::success_field(data, "count");
-            }
-            GetCommand::Box(args) => {
-                let data = client
-                    .send(DaemonCommand::BoundingBox {
-                        selector: args.selector,
-                    })
-                    .await?;
-                output::success_data(data);
-            }
-            GetCommand::Styles(args) => {
-                let data = client
-                    .send(DaemonCommand::Styles {
-                        selector: args.selector,
-                        properties: optional_vec(args.property),
-                    })
-                    .await?;
-                output::success_data(data);
-            }
-        },
-
-        // --- Check state ---
-        ActionCommand::Is { command } => match command {
-            IsCommand::Visible(args) => {
-                let data = client
-                    .send(DaemonCommand::IsVisible {
-                        selector: args.selector,
-                    })
-                    .await?;
-                output::success_field(data, "visible");
-            }
-            IsCommand::Enabled(args) => {
-                let data = client
-                    .send(DaemonCommand::IsEnabled {
-                        selector: args.selector,
-                    })
-                    .await?;
-                output::success_field(data, "enabled");
-            }
-            IsCommand::Checked(args) => {
-                let data = client
-                    .send(DaemonCommand::IsChecked {
-                        selector: args.selector,
-                    })
-                    .await?;
-                output::success_field(data, "checked");
-            }
-        },
-
-        // --- Wait ---
-        ActionCommand::Wait(args) => {
-            let data = client
-                .send(DaemonCommand::Wait {
-                    timeout: Some(args.timeout),
-                    text: args.text,
-                    selector: args.selector,
-                    state: args.state,
-                    url: args.url,
-                    function: args.function,
-                    load_state: args.load_state,
-                })
-                .await?;
-            output::success_field(data, "waited");
-        }
-
-        // --- Tabs ---
-        ActionCommand::Tab { command } => match command {
-            TabCommand::List => {
-                let data = client.send(DaemonCommand::TabList).await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else if let Some(tabs) = data["tabs"].as_array() {
-                    for tab in tabs {
-                        let idx = tab["index"].as_u64().unwrap_or(0);
-                        let title = tab["title"].as_str().unwrap_or("");
-                        let url = tab["url"].as_str().unwrap_or("");
-                        let active = tab["active"].as_bool().unwrap_or(false);
-                        let marker = if active { " *" } else { "" };
-                        println!("[{idx}]{marker} {title} — {url}");
-                    }
-                }
-            }
-            TabCommand::New(args) => {
-                let data = client.send(DaemonCommand::TabNew { url: args.url }).await?;
-                output::success_field(data, "url");
-            }
-            TabCommand::Switch(args) => {
-                let data = client
-                    .send(DaemonCommand::TabSwitch { index: args.index })
-                    .await?;
-                output::success_field(data, "url");
-            }
-            TabCommand::Close(args) => {
-                let data = client
-                    .send(DaemonCommand::TabClose { index: args.index })
-                    .await?;
-                output::success(data, "");
-            }
-        },
-
-        // --- Cookies ---
-        ActionCommand::Cookies { command } => match command {
-            None => {
-                let data = client
-                    .send(DaemonCommand::CookiesGet { urls: None })
-                    .await?;
-                output::success_data(data);
-            }
-            Some(CookiesCommand::Set(args)) => {
-                let data = client
-                    .send(DaemonCommand::CookiesSet {
-                        name: args.name,
-                        value: args.value,
-                        domain: args.domain,
-                        path: args.path,
-                        secure: args.secure,
-                        http_only: args.http_only,
-                    })
-                    .await?;
-                output::success(data, "");
-            }
-            Some(CookiesCommand::Clear) => {
-                let data = client.send(DaemonCommand::CookiesClear).await?;
-                output::success(data, "");
-            }
-        },
-
-        // --- Storage ---
-        ActionCommand::Storage { command } => {
-            let (storage_type, sub) = match command {
-                StorageTypeCommand::Local(sub) => ("local", sub),
-                StorageTypeCommand::Session(sub) => ("session", sub),
-            };
-            match sub.command {
-                None => {
-                    // `storage local` or `storage local <key>`
-                    let data = client
-                        .send(DaemonCommand::StorageGet {
-                            storage_type: storage_type.to_string(),
-                            key: sub.key,
-                        })
-                        .await?;
-                    output::success_data(data);
-                }
-                Some(StorageActionCommand::Set(args)) => {
-                    let data = client
-                        .send(DaemonCommand::StorageSet {
-                            storage_type: storage_type.to_string(),
-                            key: args.key,
-                            value: args.value,
-                        })
-                        .await?;
-                    output::success(data, "");
-                }
-                Some(StorageActionCommand::Clear) => {
-                    let data = client
-                        .send(DaemonCommand::StorageClear {
-                            storage_type: storage_type.to_string(),
-                        })
-                        .await?;
-                    output::success(data, "");
-                }
-            }
-        }
-
-        // --- Drag & drop ---
-        ActionCommand::Drag(args) => {
-            let data = client
-                .send(DaemonCommand::Drag {
-                    source: args.source,
-                    target: args.target,
-                })
-                .await?;
-            output::success(data, "");
-        }
-
-        // --- Upload ---
-        ActionCommand::Upload(args) => {
-            let data = client
-                .send(DaemonCommand::Upload {
-                    selector: args.selector,
-                    files: args.files,
-                })
-                .await?;
-            output::success(data, "");
-        }
-
-        // --- Highlight ---
-        ActionCommand::Highlight(args) => {
-            let data = client
-                .send(DaemonCommand::Highlight {
-                    selector: args.selector,
-                })
-                .await?;
-            output::success(data, "");
-        }
-
-        // --- Browser settings ---
-        ActionCommand::Set { command } => match command {
-            SetCommand::Viewport(args) => {
-                let data = client
-                    .send(DaemonCommand::SetViewport {
-                        width: args.width,
-                        height: args.height,
-                        device_scale_factor: args.scale,
-                        mobile: if args.mobile { Some(true) } else { None },
-                    })
-                    .await?;
-                output::success(data, "");
-            }
-            SetCommand::Geo(args) => {
-                let data = client
-                    .send(DaemonCommand::SetGeolocation {
-                        latitude: args.latitude,
-                        longitude: args.longitude,
-                        accuracy: args.accuracy,
-                    })
-                    .await?;
-                output::success(data, "");
-            }
-            SetCommand::Offline(args) => {
-                let offline = matches!(args.state.as_str(), "on" | "true" | "1");
-                let data = client.send(DaemonCommand::SetOffline { offline }).await?;
-                output::success(data, "");
-            }
-            SetCommand::Headers(args) => {
-                let headers: HashMap<String, String> = serde_json::from_str(&args.json)
-                    .map_err(|e| anyhow::anyhow!("Invalid JSON for headers: {e}"))?;
-                let data = client.send(DaemonCommand::SetHeaders { headers }).await?;
-                output::success(data, "");
-            }
-            SetCommand::UserAgent(args) => {
-                let user_agent = args.user_agent.join(" ");
-                let data = client
-                    .send(DaemonCommand::SetUserAgent { user_agent })
-                    .await?;
-                output::success(data, "");
-            }
-        },
-
-        // --- Window ---
-        ActionCommand::BringToFront => {
-            let data = client.send(DaemonCommand::BringToFront).await?;
-            output::success(data, "");
-        }
-
-        // --- Diff ---
-        ActionCommand::Diff { command } => match command {
-            DiffCommand::Snapshot(args) => {
-                let data = client
-                    .send(DaemonCommand::DiffSnapshot {
-                        baseline: args.baseline,
-                        selector: args.selector,
-                        compact: args.compact,
-                        max_depth: args.max_depth,
-                    })
-                    .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else {
-                    let diff_text = data["diff"].as_str().unwrap_or("");
-                    if diff_text.is_empty() {
-                        println!("No changes.");
-                    } else {
-                        print!("{diff_text}");
-                    }
-                }
-            }
-            DiffCommand::Screenshot(args) => {
-                let output_path = args
-                    .output
-                    .as_ref()
-                    .map(|p| resolve_output_path(p))
-                    .transpose()?;
-                let data = client
-                    .send(DaemonCommand::DiffScreenshot {
-                        baseline: resolve_output_path(&args.baseline)?,
-                        threshold: args.threshold,
-                        selector: args.selector,
-                        full_page: args.full_page,
-                        output: output_path,
-                    })
-                    .await?;
-                if output::is_json() {
-                    output::success_data(data);
-                } else {
-                    let matched = data["match"].as_bool().unwrap_or(false);
-                    let pct = data["mismatchPercentage"]
-                        .as_f64()
-                        .map(|p| format!("{p:.2}%"))
-                        .unwrap_or_default();
-                    if matched {
-                        println!("Screenshots match.");
-                    } else {
-                        println!("Mismatch: {pct}");
-                        if let Some(p) = data["diffPath"].as_str() {
-                            println!("Diff image: {p}");
-                        }
-                    }
-                }
-            }
-        },
-
-        // --- Session ---
-        ActionCommand::Close => {
-            let data = client.send(DaemonCommand::Close).await?;
-            output::success(data, "");
-        }
-    }
-
+    let (cmd, strategy) = action.into_wire()?;
+    let data = client.send(cmd).await?;
+    strategy.display(data);
     Ok(())
 }
 
