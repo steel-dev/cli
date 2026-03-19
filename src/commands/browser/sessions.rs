@@ -20,9 +20,10 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         match DaemonClient::connect(name).await {
             Ok(mut client) => {
                 if let Ok(data) = client.send(DaemonCommand::GetSessionInfo).await
-                    && let Ok(info) = serde_json::from_value::<SessionInfo>(data) {
-                        sessions.push(info);
-                    }
+                    && let Ok(info) = serde_json::from_value::<SessionInfo>(data)
+                {
+                    sessions.push(info);
+                }
             }
             Err(_) => {
                 // Socket exists but connection failed — clean up

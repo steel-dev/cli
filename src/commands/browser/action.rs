@@ -608,31 +608,31 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
     match action {
         // --- Navigation ---
         ActionCommand::Navigate(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Navigate {
                     url: args.url,
                     wait_until: args.wait_until,
                     headers: parse_header_args(&args.headers),
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Back => {
-            client.send(DaemonCommand::Back).await?;
-            output::success_silent();
+            let data = client.send(DaemonCommand::Back).await?;
+            output::success(data, "");
         }
         ActionCommand::Forward => {
-            client.send(DaemonCommand::Forward).await?;
-            output::success_silent();
+            let data = client.send(DaemonCommand::Forward).await?;
+            output::success(data, "");
         }
         ActionCommand::Reload => {
-            client.send(DaemonCommand::Reload).await?;
-            output::success_silent();
+            let data = client.send(DaemonCommand::Reload).await?;
+            output::success(data, "");
         }
 
         // --- Interactions ---
         ActionCommand::Click(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Click {
                     selector: args.selector,
                     button: args.button,
@@ -640,29 +640,29 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
                     new_tab: args.new_tab,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::DblClick(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::DblClick {
                     selector: args.selector,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Fill(args) => {
             let value = args.value.join(" ");
-            client
+            let data = client
                 .send(DaemonCommand::Fill {
                     selector: args.selector,
                     value,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Type(args) => {
             let text = args.text.join(" ");
-            client
+            let data = client
                 .send(DaemonCommand::TypeText {
                     selector: args.selector,
                     text,
@@ -670,97 +670,97 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
                     delay_ms: args.delay,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Press(args) => {
-            client.send(DaemonCommand::Press { key: args.key }).await?;
-            output::success_silent();
+            let data = client.send(DaemonCommand::Press { key: args.key }).await?;
+            output::success(data, "");
         }
         ActionCommand::Hover(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Hover {
                     selector: args.selector,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Focus(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Focus {
                     selector: args.selector,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Check(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Check {
                     selector: args.selector,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Uncheck(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Uncheck {
                     selector: args.selector,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Select(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Select {
                     selector: args.selector,
                     values: args.values,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Clear(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Clear {
                     selector: args.selector,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::SelectAll(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::SelectAll {
                     selector: args.selector,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::Scroll(args) => {
             let (dx, dy) = scroll_deltas(args.direction.as_deref(), args.amount);
-            client
+            let data = client
                 .send(DaemonCommand::Scroll {
                     selector: args.selector,
                     delta_x: dx,
                     delta_y: dy,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::ScrollIntoView(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::ScrollIntoView {
                     selector: args.selector,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
         ActionCommand::SetValue(args) => {
             let value = args.value.join(" ");
-            client
+            let data = client
                 .send(DaemonCommand::SetValue {
                     selector: args.selector,
                     value,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
 
         // --- Observation ---
@@ -970,10 +970,10 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
                 output::success_field(data, "url");
             }
             TabCommand::Close(args) => {
-                client
+                let data = client
                     .send(DaemonCommand::TabClose { index: args.index })
                     .await?;
-                output::success_silent();
+                output::success(data, "");
             }
         },
 
@@ -986,7 +986,7 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
                 output::success_data(data);
             }
             Some(CookiesCommand::Set(args)) => {
-                client
+                let data = client
                     .send(DaemonCommand::CookiesSet {
                         name: args.name,
                         value: args.value,
@@ -996,11 +996,11 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
                         http_only: args.http_only,
                     })
                     .await?;
-                output::success_silent();
+                output::success(data, "");
             }
             Some(CookiesCommand::Clear) => {
-                client.send(DaemonCommand::CookiesClear).await?;
-                output::success_silent();
+                let data = client.send(DaemonCommand::CookiesClear).await?;
+                output::success(data, "");
             }
         },
 
@@ -1022,62 +1022,62 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
                     output::success_data(data);
                 }
                 Some(StorageActionCommand::Set(args)) => {
-                    client
+                    let data = client
                         .send(DaemonCommand::StorageSet {
                             storage_type: storage_type.to_string(),
                             key: args.key,
                             value: args.value,
                         })
                         .await?;
-                    output::success_silent();
+                    output::success(data, "");
                 }
                 Some(StorageActionCommand::Clear) => {
-                    client
+                    let data = client
                         .send(DaemonCommand::StorageClear {
                             storage_type: storage_type.to_string(),
                         })
                         .await?;
-                    output::success_silent();
+                    output::success(data, "");
                 }
             }
         }
 
         // --- Drag & drop ---
         ActionCommand::Drag(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Drag {
                     source: args.source,
                     target: args.target,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
 
         // --- Upload ---
         ActionCommand::Upload(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Upload {
                     selector: args.selector,
                     files: args.files,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
 
         // --- Highlight ---
         ActionCommand::Highlight(args) => {
-            client
+            let data = client
                 .send(DaemonCommand::Highlight {
                     selector: args.selector,
                 })
                 .await?;
-            output::success_silent();
+            output::success(data, "");
         }
 
         // --- Browser settings ---
         ActionCommand::Set { command } => match command {
             SetCommand::Viewport(args) => {
-                client
+                let data = client
                     .send(DaemonCommand::SetViewport {
                         width: args.width,
                         height: args.height,
@@ -1085,48 +1085,48 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
                         mobile: if args.mobile { Some(true) } else { None },
                     })
                     .await?;
-                output::success_silent();
+                output::success(data, "");
             }
             SetCommand::Geo(args) => {
-                client
+                let data = client
                     .send(DaemonCommand::SetGeolocation {
                         latitude: args.latitude,
                         longitude: args.longitude,
                         accuracy: args.accuracy,
                     })
                     .await?;
-                output::success_silent();
+                output::success(data, "");
             }
             SetCommand::Offline(args) => {
                 let offline = matches!(args.state.as_str(), "on" | "true" | "1");
-                client.send(DaemonCommand::SetOffline { offline }).await?;
-                output::success_silent();
+                let data = client.send(DaemonCommand::SetOffline { offline }).await?;
+                output::success(data, "");
             }
             SetCommand::Headers(args) => {
                 let headers: HashMap<String, String> = serde_json::from_str(&args.json)
                     .map_err(|e| anyhow::anyhow!("Invalid JSON for headers: {e}"))?;
-                client.send(DaemonCommand::SetHeaders { headers }).await?;
-                output::success_silent();
+                let data = client.send(DaemonCommand::SetHeaders { headers }).await?;
+                output::success(data, "");
             }
             SetCommand::UserAgent(args) => {
                 let user_agent = args.user_agent.join(" ");
-                client
+                let data = client
                     .send(DaemonCommand::SetUserAgent { user_agent })
                     .await?;
-                output::success_silent();
+                output::success(data, "");
             }
         },
 
         // --- Window ---
         ActionCommand::BringToFront => {
-            client.send(DaemonCommand::BringToFront).await?;
-            output::success_silent();
+            let data = client.send(DaemonCommand::BringToFront).await?;
+            output::success(data, "");
         }
 
         // --- Session ---
         ActionCommand::Close => {
-            client.send(DaemonCommand::Close).await?;
-            output::success_silent();
+            let data = client.send(DaemonCommand::Close).await?;
+            output::success(data, "");
         }
     }
 
@@ -1156,9 +1156,10 @@ async fn check_session_health(
 ) -> Option<anyhow::Error> {
     let name = session_name.unwrap_or("default");
     if let Ok(mut client) = DaemonClient::connect(name).await
-        && client.send(DaemonCommand::Ping).await.is_ok() {
-            return None; // Daemon is fine, original error stands
-        }
+        && client.send(DaemonCommand::Ping).await.is_ok()
+    {
+        return None; // Daemon is fine, original error stands
+    }
     Some(anyhow::anyhow!(
         "Session \"{name}\" is no longer reachable. Run `steel browser start` to create a new one."
     ))

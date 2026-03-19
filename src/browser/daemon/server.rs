@@ -156,10 +156,11 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
 
         // Proactive expiry check: exit before the server kills the session
         if let Some(deadline) = expires_at
-            && tokio::time::Instant::now() >= deadline {
-                eprintln!("[daemon] Session timeout reached, shutting down");
-                break;
-            }
+            && tokio::time::Instant::now() >= deadline
+        {
+            eprintln!("[daemon] Session timeout reached, shutting down");
+            break;
+        }
 
         match tokio::time::timeout(IDLE_TIMEOUT, listener.accept()).await {
             Err(_) => {
@@ -324,10 +325,10 @@ async fn dispatch_inner(
             wait_until,
             headers,
         } => {
-            engine
+            let result = engine
                 .navigate(&url, wait_until.as_deref(), headers.as_ref())
                 .await?;
-            Ok(Value::Null)
+            Ok(result)
         }
         DaemonCommand::Click {
             selector,
@@ -338,11 +339,15 @@ async fn dispatch_inner(
             engine
                 .click(&selector, button.as_deref(), click_count, new_tab)
                 .await?;
-            Ok(Value::Null)
+            if new_tab {
+                Ok(json!({"clicked": selector, "newTab": true}))
+            } else {
+                Ok(json!({"clicked": selector}))
+            }
         }
         DaemonCommand::Fill { selector, value } => {
             engine.fill(&selector, &value).await?;
-            Ok(Value::Null)
+            Ok(json!({"filled": selector}))
         }
         DaemonCommand::TypeText {
             selector,
@@ -351,7 +356,7 @@ async fn dispatch_inner(
             delay_ms,
         } => {
             engine.type_text(&selector, &text, clear, delay_ms).await?;
-            Ok(Value::Null)
+            Ok(json!({"typed": text}))
         }
         DaemonCommand::Snapshot {
             interactive_only,
@@ -388,11 +393,11 @@ async fn dispatch_inner(
         }
         DaemonCommand::Press { key } => {
             engine.press(&key).await?;
-            Ok(Value::Null)
+            Ok(json!({"pressed": key}))
         }
         DaemonCommand::Hover { selector } => {
             engine.hover(&selector).await?;
-            Ok(Value::Null)
+            Ok(json!({"hovered": selector}))
         }
         DaemonCommand::Scroll {
             selector,
@@ -400,19 +405,19 @@ async fn dispatch_inner(
             delta_y,
         } => {
             engine.scroll(selector.as_deref(), delta_x, delta_y).await?;
-            Ok(Value::Null)
+            Ok(json!({"scrolled": true}))
         }
         DaemonCommand::Select { selector, values } => {
             engine.select(&selector, &values).await?;
-            Ok(Value::Null)
+            Ok(json!({"selected": values}))
         }
         DaemonCommand::Check { selector } => {
             engine.check(&selector).await?;
-            Ok(Value::Null)
+            Ok(json!({"checked": selector}))
         }
         DaemonCommand::Uncheck { selector } => {
             engine.uncheck(&selector).await?;
-            Ok(Value::Null)
+            Ok(json!({"unchecked": selector}))
         }
         DaemonCommand::Eval { script } => {
             let val = engine.evaluate(&script).await?;
@@ -473,35 +478,35 @@ async fn dispatch_inner(
         }
         DaemonCommand::Back => {
             engine.evaluate("history.back()").await?;
-            Ok(Value::Null)
+            Ok(json!({"url": engine.url().await.unwrap_or_default()}))
         }
         DaemonCommand::Forward => {
             engine.evaluate("history.forward()").await?;
-            Ok(Value::Null)
+            Ok(json!({"url": engine.url().await.unwrap_or_default()}))
         }
         DaemonCommand::Reload => {
             engine.evaluate("location.reload()").await?;
-            Ok(Value::Null)
+            Ok(json!({"url": engine.url().await.unwrap_or_default()}))
         }
         DaemonCommand::Focus { selector } => {
             engine.focus(&selector).await?;
-            Ok(Value::Null)
+            Ok(json!({"focused": selector}))
         }
         DaemonCommand::Clear { selector } => {
             engine.clear(&selector).await?;
-            Ok(Value::Null)
+            Ok(json!({"cleared": selector}))
         }
         DaemonCommand::SelectAll { selector } => {
             engine.select_all(&selector).await?;
-            Ok(Value::Null)
+            Ok(json!({"selected": selector}))
         }
         DaemonCommand::ScrollIntoView { selector } => {
             engine.scroll_into_view(&selector).await?;
-            Ok(Value::Null)
+            Ok(json!({"scrolled": selector}))
         }
         DaemonCommand::DblClick { selector } => {
             engine.dblclick(&selector).await?;
-            Ok(Value::Null)
+            Ok(json!({"clicked": selector}))
         }
         DaemonCommand::InnerText { selector } => {
             let text = engine.inner_text(&selector).await?;
@@ -517,7 +522,7 @@ async fn dispatch_inner(
         }
         DaemonCommand::SetValue { selector, value } => {
             engine.set_value(&selector, &value).await?;
-            Ok(Value::Null)
+            Ok(json!({"set": selector, "value": value}))
         }
         DaemonCommand::Count { selector } => {
             let count = engine.count(&selector).await?;
@@ -535,7 +540,7 @@ async fn dispatch_inner(
         DaemonCommand::Find { selector } => engine.find(&selector).await,
         DaemonCommand::BringToFront => {
             engine.bring_to_front().await?;
-            Ok(Value::Null)
+            Ok(json!({"broughtToFront": true}))
         }
         DaemonCommand::TabList => {
             let data = engine.tab_list();
@@ -576,11 +581,11 @@ async fn dispatch_inner(
                     http_only,
                 )
                 .await?;
-            Ok(Value::Null)
+            Ok(json!({"set": true}))
         }
         DaemonCommand::CookiesClear => {
             engine.cookies_clear().await?;
-            Ok(Value::Null)
+            Ok(json!({"cleared": true}))
         }
 
         // ── Storage ──
@@ -594,29 +599,30 @@ async fn dispatch_inner(
             value,
         } => {
             engine.storage_set(&storage_type, &key, &value).await?;
-            Ok(Value::Null)
+            Ok(json!({"set": true}))
         }
         DaemonCommand::StorageClear { storage_type } => {
             engine.storage_clear(&storage_type).await?;
-            Ok(Value::Null)
+            Ok(json!({"cleared": true}))
         }
 
         // ── Drag & drop ──
         DaemonCommand::Drag { source, target } => {
             engine.drag(&source, &target).await?;
-            Ok(Value::Null)
+            Ok(json!({"dragged": true, "source": source, "target": target}))
         }
 
         // ── File upload ──
         DaemonCommand::Upload { selector, files } => {
+            let count = files.len();
             engine.upload_files(&selector, &files).await?;
-            Ok(Value::Null)
+            Ok(json!({"uploaded": count, "selector": selector}))
         }
 
         // ── Visual ──
         DaemonCommand::Highlight { selector } => {
             engine.highlight(&selector).await?;
-            Ok(Value::Null)
+            Ok(json!({"highlighted": selector}))
         }
 
         // ── Browser settings ──
@@ -628,7 +634,7 @@ async fn dispatch_inner(
             engine
                 .set_geolocation(latitude, longitude, accuracy)
                 .await?;
-            Ok(Value::Null)
+            Ok(json!({"latitude": latitude, "longitude": longitude}))
         }
         DaemonCommand::SetViewport {
             width,
@@ -639,25 +645,24 @@ async fn dispatch_inner(
             engine
                 .set_viewport(width, height, device_scale_factor, mobile)
                 .await?;
-            Ok(Value::Null)
+            Ok(
+                json!({"width": width, "height": height, "deviceScaleFactor": device_scale_factor.unwrap_or(1.0), "mobile": mobile.unwrap_or(false)}),
+            )
         }
         DaemonCommand::SetUserAgent { user_agent } => {
             engine.set_user_agent(&user_agent).await?;
-            Ok(Value::Null)
+            Ok(json!({"userAgent": user_agent}))
         }
         DaemonCommand::SetHeaders { headers } => {
             engine.set_extra_headers(&headers).await?;
-            Ok(Value::Null)
+            Ok(json!({"set": true}))
         }
         DaemonCommand::SetOffline { offline } => {
             engine.set_offline(offline).await?;
-            Ok(Value::Null)
+            Ok(json!({"offline": offline}))
         }
 
-        DaemonCommand::Close | DaemonCommand::Shutdown => {
-            // Engine is closed by the main loop after handle_connection returns true.
-            Ok(Value::Null)
-        }
+        DaemonCommand::Close | DaemonCommand::Shutdown => Ok(json!({"closed": true})),
         DaemonCommand::Ping => Ok(json!("pong")),
         DaemonCommand::GetSessionInfo => {
             let info_json = serde_json::to_value(session_info)?;

@@ -102,9 +102,10 @@ pub fn get_session_timeout(session: &Value) -> Option<u64> {
             }
             // Handle string numbers
             if let Some(s) = v.as_str()
-                && let Ok(n) = s.trim().parse::<u64>() {
-                    return Some(n);
-                }
+                && let Ok(n) = s.trim().parse::<u64>()
+            {
+                return Some(n);
+            }
         }
     }
     None
@@ -122,9 +123,9 @@ pub fn get_session_created_at_ms(session: &Value) -> Option<u64> {
             if !trimmed.is_empty()
                 && let Ok(ts) = jiff::Timestamp::strptime("%Y-%m-%dT%H:%M:%S%.fZ", trimmed)
                     .or_else(|_| trimmed.parse::<jiff::Timestamp>())
-                {
-                    return Some(ts.as_millisecond() as u64);
-                }
+            {
+                return Some(ts.as_millisecond() as u64);
+            }
         }
     }
     None
