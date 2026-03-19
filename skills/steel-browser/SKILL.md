@@ -119,9 +119,48 @@ steel browser click <selector-or-ref>
 steel browser fill <selector-or-ref> "text"
 steel browser press Enter
 steel browser select <selector-or-ref> "value"
+steel browser drag @e1 @e2
+steel browser upload @e1 file.pdf
+steel browser highlight @e1
+steel browser scroll down 500                    # positional: direction amount
+steel browser scroll up
+steel browser scrollintoview @e1
 steel browser wait --load-state networkidle
 steel browser wait --selector <selector> --state visible
 steel browser wait --text "Success"
+```
+
+**Form filling strategy:** For simple text inputs, use `fill`. For complex forms
+(React controlled inputs, date pickers, HTML5 widgets, cascading selects),
+prefer `eval` with direct DOM manipulation:
+
+```bash
+steel browser eval "document.querySelector('#date').value = '2026-03-19'"
+steel browser eval "document.querySelector('#email').value = 'user@test.com'; document.querySelector('#email').dispatchEvent(new Event('input', {bubbles:true}))"
+```
+
+### Cookies and storage
+
+```bash
+steel browser cookies                            # list all cookies
+steel browser cookies set <name> <value>         # set a cookie
+steel browser cookies set <name> <value> --domain .example.com
+steel browser cookies clear                      # clear all cookies
+steel browser storage local                      # get all localStorage
+steel browser storage local <key>                # get specific key
+steel browser storage local set <key> <value>    # set value
+steel browser storage local clear                # clear all
+steel browser storage session                    # sessionStorage (same subcommands)
+```
+
+### Browser settings
+
+```bash
+steel browser set viewport 1920 1080             # set viewport size
+steel browser set geo 37.7749 -122.4194          # set geolocation
+steel browser set offline on                     # toggle offline mode (on/off)
+steel browser set headers '{"X-Key":"value"}'    # set extra HTTP headers
+steel browser set useragent "Custom UA string"   # set user agent
 ```
 
 ### CAPTCHA and anti-bot
@@ -146,6 +185,14 @@ steel scrape <url>
 steel scrape <url> --format markdown,html --use-proxy
 steel screenshot <url>
 steel pdf <url>
+```
+
+`steel screenshot` and `steel pdf` are stateless API tools (no browser session).
+To save the output file, use `--json` and download the URL:
+
+```bash
+steel screenshot https://example.com --json | jq -r '.url' | xargs curl -sL -o screenshot.png
+steel pdf https://example.com --json | jq -r '.url' | xargs curl -sL -o page.pdf
 ```
 
 ## Mode and session rules
@@ -203,6 +250,24 @@ Then apply targeted fixes:
 
 If issue persists, use the full playbook:
 [references/troubleshooting.md](references/troubleshooting.md).
+
+## Commands that do NOT exist
+
+The following commands do **not** exist. Do not attempt them. Use `eval` workarounds instead.
+
+| Does NOT exist | Use instead |
+|---|---|
+| `steel browser network` / `route` / `unroute` | `eval` with fetch monkey-patch or Performance API |
+| `steel browser record` / `video` | Not available — no recording support |
+| `steel browser console` / `errors` | `eval` with `console.log` interceptor |
+| `steel browser frame` | `eval` with `document.querySelector('iframe').contentDocument` |
+| `steel browser set device` | `set viewport` + `set useragent` |
+| `steel browser set media` | `eval` with `window.matchMedia` override |
+| `steel browser set credentials` | Use `steel credentials` commands + `--credentials` flag on start |
+| `steel browser geolocation` | `steel browser set geo <lat> <lon>` |
+| `steel browser mouse` | `eval` with `Input.dispatchMouseEvent` via CDP or MouseEvent dispatch |
+| `steel browser tabs` | `steel browser tab list` (singular `tab`, not `tabs`) |
+| `steel browser execute` / `run` | `steel browser eval` |
 
 ## Guardrails
 

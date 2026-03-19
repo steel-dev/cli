@@ -127,6 +127,60 @@ steel browser screenshot --annotate
 steel browser screenshot --format jpeg --quality 80
 ```
 
+## Drag and drop
+
+```bash
+steel browser drag @e1 @e2
+```
+
+## File upload
+
+```bash
+steel browser upload @e1 file.pdf
+steel browser upload @e1 file1.pdf file2.txt
+```
+
+## Highlight
+
+```bash
+steel browser highlight @e1
+```
+
+Visually highlights the element in the browser viewport.
+
+## Cookies and storage
+
+```bash
+steel browser cookies                            # list all cookies
+steel browser cookies set <name> <value>
+steel browser cookies set <name> <value> --domain .example.com --path / --secure --http-only
+steel browser cookies clear
+
+steel browser storage local                      # get all localStorage
+steel browser storage local <key>                # get specific key
+steel browser storage local set <key> <value>    # set value
+steel browser storage local clear                # clear all
+steel browser storage session                    # sessionStorage (same subcommands)
+steel browser storage session <key>
+steel browser storage session set <key> <value>
+steel browser storage session clear
+```
+
+## Browser settings
+
+```bash
+steel browser set viewport 1920 1080
+steel browser set viewport 375 812 --mobile --scale 3
+steel browser set geo 37.7749 -122.4194
+steel browser set geo 37.7749 -122.4194 --accuracy 100
+steel browser set offline on
+steel browser set offline off
+steel browser set headers '{"X-Custom":"value","Authorization":"Bearer tok"}'
+steel browser set useragent "Mozilla/5.0 Custom Agent"
+```
+
+`set geo` accepts alias `set geolocation`. `set useragent` accepts alias `set ua`.
+
 ## Page content
 
 ```bash
