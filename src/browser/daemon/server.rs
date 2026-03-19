@@ -142,42 +142,51 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
         }
     };
 
-    let mut last_health_check = tokio::time::Instant::now();
+    let mut health_interval = tokio::time::interval(HEALTH_CHECK_INTERVAL);
+    health_interval.tick().await; // discard immediate first tick
+
+    let idle_sleep = tokio::time::sleep(IDLE_TIMEOUT);
+    tokio::pin!(idle_sleep);
+
+    let expiry_sleep = async {
+        match expires_at {
+            Some(deadline) => tokio::time::sleep_until(deadline).await,
+            None => std::future::pending().await,
+        }
+    };
+    tokio::pin!(expiry_sleep);
 
     loop {
-        // Periodic health check: exit if CDP connection is dead
-        if last_health_check.elapsed() >= HEALTH_CHECK_INTERVAL {
-            if !engine.is_alive().await {
-                eprintln!("[daemon] CDP connection lost, shutting down");
-                break;
+        tokio::select! {
+            result = listener.accept() => {
+                idle_sleep.as_mut().reset(tokio::time::Instant::now() + IDLE_TIMEOUT);
+                match result {
+                    Ok((stream, _)) => {
+                        match handle_connection(&mut engine, &session_info, stream).await {
+                            ConnectionResult::Continue => {}
+                            ConnectionResult::Shutdown => break,
+                            ConnectionResult::Disconnected => {
+                                eprintln!("[daemon] CDP disconnected during command, shutting down");
+                                break;
+                            }
+                        }
+                    }
+                    Err(_) => continue,
+                }
             }
-            last_health_check = tokio::time::Instant::now();
-        }
-
-        // Proactive expiry check: exit before the server kills the session
-        if let Some(deadline) = expires_at
-            && tokio::time::Instant::now() >= deadline
-        {
-            eprintln!("[daemon] Session timeout reached, shutting down");
-            break;
-        }
-
-        match tokio::time::timeout(IDLE_TIMEOUT, listener.accept()).await {
-            Err(_) => {
+            _ = health_interval.tick() => {
+                if !engine.is_alive().await {
+                    eprintln!("[daemon] CDP connection lost, shutting down");
+                    break;
+                }
+            }
+            _ = &mut idle_sleep => {
                 eprintln!("[daemon] Idle timeout ({IDLE_TIMEOUT:?}), shutting down");
                 break;
             }
-            Ok(Err(_)) => continue,
-            Ok(Ok((stream, _))) => {
-                let result = handle_connection(&mut engine, &session_info, stream).await;
-                match result {
-                    ConnectionResult::Continue => {}
-                    ConnectionResult::Shutdown => break,
-                    ConnectionResult::Disconnected => {
-                        eprintln!("[daemon] CDP disconnected during command, shutting down");
-                        break;
-                    }
-                }
+            _ = &mut expiry_sleep => {
+                eprintln!("[daemon] Session timeout reached, shutting down");
+                break;
             }
         }
     }
