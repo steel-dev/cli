@@ -1,4 +1,24 @@
 #!/bin/sh
+: <<'DOCSTRING'
+Steel CLI — browser automation for AI agents
+https://github.com/steel-dev/cli
+
+This script installs the Steel CLI binary. After installation, agents should
+install the steel-browser skill to unlock full browser automation capabilities.
+
+REQUIRES: curl
+INSTALLS TO: ~/.steel/bin
+
+After install, PATH is NOT updated in the current process.
+Fix: export PATH="$HOME/.steel/bin:$PATH"
+
+POST-INSTALL:
+  steel login            # authenticate
+  steel browser start    # start automation session
+
+SKILL SETUP (recommended for agents):
+  npx skills add https://github.com/steel-dev/cli --skill steel-browser
+DOCSTRING
 set -eu
 
 echo "Steel CLI — browser automation for AI agents"
@@ -98,4 +118,7 @@ echo ""
 echo "  steel --help"
 echo "  steel login"
 echo "  steel browser start"
+echo ""
+echo "SKILL SETUP (recommended for agents):"
+echo "  npx skills add https://github.com/steel-dev/cli --skill steel-browser"
 echo ""
