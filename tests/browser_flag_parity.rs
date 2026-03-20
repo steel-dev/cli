@@ -232,7 +232,11 @@ fn steel_flag_parity() {
             if let Some(ab_long) = ab_flag.strip_prefix("--") {
                 if ab_long != *steel_long {
                     // Different long name → must be an alias
-                    let has_alias = arg.get_all_aliases().into_iter().flatten().any(|a| a == ab_long);
+                    let has_alias = arg
+                        .get_all_aliases()
+                        .into_iter()
+                        .flatten()
+                        .any(|a| a == ab_long);
                     if !has_alias {
                         failures.push(format!(
                             "[{}] Steel --{} needs alias `--{}` for agent-browser compat",
@@ -325,12 +329,13 @@ fn extract_command_flags(content: &str) -> BTreeMap<String, BTreeSet<String>> {
 
         // At match body level, look for arm patterns
         if depth_at_start == 0
-            && let Some(cmds) = parse_arm_commands(trimmed) {
-                current_cmds = cmds;
-                for cmd in &current_cmds {
-                    result.entry(cmd.clone()).or_insert_with(BTreeSet::new);
-                }
+            && let Some(cmds) = parse_arm_commands(trimmed)
+        {
+            current_cmds = cmds;
+            for cmd in &current_cmds {
+                result.entry(cmd.clone()).or_insert_with(BTreeSet::new);
             }
+        }
 
         // Extract flag literals from this line and attribute to current commands
         if !current_cmds.is_empty() {
@@ -442,14 +447,15 @@ fn find_commands_rs() -> Option<PathBuf> {
                 .file_name()
                 .to_string_lossy()
                 .starts_with("agent-browser-")
-                && let Ok(refs) = std::fs::read_dir(entry.path()) {
-                    for ref_entry in refs.flatten() {
-                        let p = ref_entry.path().join("cli/src/commands.rs");
-                        if p.exists() {
-                            return Some(p);
-                        }
+                && let Ok(refs) = std::fs::read_dir(entry.path())
+            {
+                for ref_entry in refs.flatten() {
+                    let p = ref_entry.path().join("cli/src/commands.rs");
+                    if p.exists() {
+                        return Some(p);
                     }
                 }
+            }
         }
     }
 

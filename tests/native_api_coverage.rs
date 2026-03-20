@@ -342,14 +342,15 @@ fn find_native_src() -> Option<PathBuf> {
                 .file_name()
                 .to_string_lossy()
                 .starts_with("agent-browser-")
-                && let Ok(refs) = std::fs::read_dir(entry.path()) {
-                    for ref_entry in refs.flatten() {
-                        let native = ref_entry.path().join("cli/src/native");
-                        if native.exists() {
-                            return Some(native);
-                        }
+                && let Ok(refs) = std::fs::read_dir(entry.path())
+            {
+                for ref_entry in refs.flatten() {
+                    let native = ref_entry.path().join("cli/src/native");
+                    if native.exists() {
+                        return Some(native);
                     }
                 }
+            }
         }
     }
 
@@ -379,12 +380,13 @@ fn extract_pub_fns(path: &Path) -> BTreeSet<String> {
         };
 
         if let Some(rest) = rest
-            && let Some(name) = rest.split(['(', '<', ' ']).next() {
-                let name = name.trim();
-                if !name.is_empty() {
-                    fns.insert(name.to_string());
-                }
+            && let Some(name) = rest.split(['(', '<', ' ']).next()
+        {
+            let name = name.trim();
+            if !name.is_empty() {
+                fns.insert(name.to_string());
             }
+        }
     }
 
     fns

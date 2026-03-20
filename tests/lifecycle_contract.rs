@@ -502,9 +502,10 @@ fn list_daemon_names_in(dir: &std::path::Path) -> Vec<String> {
         let name = name.to_string_lossy();
         if let Some(rest) = name.strip_prefix("daemon-")
             && let Some(session_name) = rest.strip_suffix(".sock")
-                && !session_name.is_empty() {
-                    names.push(session_name.to_string());
-                }
+            && !session_name.is_empty()
+        {
+            names.push(session_name.to_string());
+        }
     }
     names
 }

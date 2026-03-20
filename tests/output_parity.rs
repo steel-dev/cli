@@ -403,14 +403,15 @@ fn find_actions_rs() -> Option<PathBuf> {
                 .file_name()
                 .to_string_lossy()
                 .starts_with("agent-browser-")
-                && let Ok(refs) = std::fs::read_dir(entry.path()) {
-                    for ref_entry in refs.flatten() {
-                        let p = ref_entry.path().join("cli/src/native/actions.rs");
-                        if p.exists() {
-                            return Some(p);
-                        }
+                && let Ok(refs) = std::fs::read_dir(entry.path())
+            {
+                for ref_entry in refs.flatten() {
+                    let p = ref_entry.path().join("cli/src/native/actions.rs");
+                    if p.exists() {
+                        return Some(p);
                     }
                 }
+            }
         }
     }
 

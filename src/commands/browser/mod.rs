@@ -45,9 +45,10 @@ pub enum Command {
 pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
     let session = args.session;
     if let Some(ref name) = session
-        && let Some(err) = crate::browser::daemon::process::validate_session_name(name) {
-            anyhow::bail!("{err}");
-        }
+        && let Some(err) = crate::browser::daemon::process::validate_session_name(name)
+    {
+        anyhow::bail!("{err}");
+    }
     match args.command {
         Command::Start(args) => start::run(args, session.as_deref()).await,
         Command::Stop(args) => stop::run(args, session.as_deref()).await,
