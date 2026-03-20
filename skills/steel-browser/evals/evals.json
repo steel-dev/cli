@@ -1,0 +1,43 @@
+{
+  "skill_name": "steel-browser",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Go to https://quotes.toscrape.com and extract all the quotes from the first page along with their authors and tags. Save the results as a JSON file called quotes.json with each entry having 'text', 'author', and 'tags' fields.",
+      "expected_output": "A quotes.json file containing all quotes from the first page with text, author, and tags fields. The agent should try steel scrape first before opening a browser session. If a session is opened, it should be stopped when done.",
+      "files": [],
+      "expectations": [
+        "Agent uses a steel command (not curl/fetch/wget) to access the page",
+        "quotes.json file is created and contains valid JSON",
+        "quotes.json entries have 'text', 'author', and 'tags' fields",
+        "quotes.json contains at least 5 quotes",
+        "If a browser session was started, it is stopped before the task ends"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Fill out the form at https://httpbin.org/forms/post: set the customer name field to 'TestUser', select 'Medium' for pizza size, check the 'Bacon' topping, enter 'test order comment' in the comments field, then submit the form. Show me the response JSON that comes back.",
+      "expected_output": "Agent navigates to the form, fills in all requested fields, submits the form, and displays/saves the response JSON. Session should be started with a named --session flag (not a UUID), and stopped when done.",
+      "files": [],
+      "expectations": [
+        "Agent starts a browser session with steel browser start",
+        "Session name used is a human-readable string (not a UUID pattern like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)",
+        "Agent fills the custname field with 'TestUser' (visible in response or transcript)",
+        "Agent saves or displays the form submission response",
+        "Agent stops the browser session before finishing"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Go to https://the-internet.herokuapp.com/drag_and_drop — there are two boxes labeled A and B. Drag box A onto box B so they swap. Take a screenshot after the drag to confirm the swap worked.",
+      "expected_output": "Agent correctly implements drag-and-drop using eval with dispatchEvent (since steel browser drag doesn't exist). Should NOT try steel browser drag. A screenshot is taken showing the post-drag state.",
+      "files": [],
+      "expectations": [
+        "Agent does NOT attempt a command named 'steel browser drag'",
+        "Agent uses steel browser eval to perform the drag interaction",
+        "Agent takes a screenshot after the drag attempt",
+        "Agent stops the browser session before finishing"
+      ]
+    }
+  ]
+}
