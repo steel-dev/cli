@@ -17,55 +17,55 @@ pub enum BrowserId {
 }
 
 impl BrowserId {
-    pub fn all() -> &'static [BrowserId] {
+    pub const fn all() -> &'static [Self] {
         &[
-            BrowserId::Chrome,
-            BrowserId::Edge,
-            BrowserId::Brave,
-            BrowserId::Arc,
-            BrowserId::Opera,
-            BrowserId::Vivaldi,
+            Self::Chrome,
+            Self::Edge,
+            Self::Brave,
+            Self::Arc,
+            Self::Opera,
+            Self::Vivaldi,
         ]
     }
 
     #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<BrowserId> {
+    pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "chrome" => Some(BrowserId::Chrome),
-            "edge" => Some(BrowserId::Edge),
-            "brave" => Some(BrowserId::Brave),
-            "arc" => Some(BrowserId::Arc),
-            "opera" => Some(BrowserId::Opera),
-            "vivaldi" => Some(BrowserId::Vivaldi),
+            "chrome" => Some(Self::Chrome),
+            "edge" => Some(Self::Edge),
+            "brave" => Some(Self::Brave),
+            "arc" => Some(Self::Arc),
+            "opera" => Some(Self::Opera),
+            "vivaldi" => Some(Self::Vivaldi),
             _ => None,
         }
     }
 
-    pub fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
-            BrowserId::Chrome => "chrome",
-            BrowserId::Edge => "edge",
-            BrowserId::Brave => "brave",
-            BrowserId::Arc => "arc",
-            BrowserId::Opera => "opera",
-            BrowserId::Vivaldi => "vivaldi",
+            Self::Chrome => "chrome",
+            Self::Edge => "edge",
+            Self::Brave => "brave",
+            Self::Arc => "arc",
+            Self::Opera => "opera",
+            Self::Vivaldi => "vivaldi",
         }
     }
 
-    pub fn display_name(self) -> &'static str {
+    pub const fn display_name(self) -> &'static str {
         match self {
-            BrowserId::Chrome => "Google Chrome",
-            BrowserId::Edge => "Microsoft Edge",
-            BrowserId::Brave => "Brave Browser",
-            BrowserId::Arc => "Arc",
-            BrowserId::Opera => "Opera",
-            BrowserId::Vivaldi => "Vivaldi",
+            Self::Chrome => "Google Chrome",
+            Self::Edge => "Microsoft Edge",
+            Self::Brave => "Brave Browser",
+            Self::Arc => "Arc",
+            Self::Opera => "Opera",
+            Self::Vivaldi => "Vivaldi",
         }
     }
 
-    pub fn descriptor(self) -> BrowserDescriptor {
+    pub const fn descriptor(self) -> BrowserDescriptor {
         match self {
-            BrowserId::Chrome => BrowserDescriptor {
+            Self::Chrome => BrowserDescriptor {
                 id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Google/Chrome"),
@@ -83,7 +83,7 @@ impl BrowserId {
                     linux: Some("chrome"),
                 },
             },
-            BrowserId::Edge => BrowserDescriptor {
+            Self::Edge => BrowserDescriptor {
                 id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Microsoft Edge"),
@@ -101,7 +101,7 @@ impl BrowserId {
                     linux: Some("chromium"),
                 },
             },
-            BrowserId::Brave => BrowserDescriptor {
+            Self::Brave => BrowserDescriptor {
                 id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("BraveSoftware/Brave-Browser"),
@@ -119,7 +119,7 @@ impl BrowserId {
                     linux: Some("brave"),
                 },
             },
-            BrowserId::Arc => BrowserDescriptor {
+            Self::Arc => BrowserDescriptor {
                 id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Arc/User Data"),
@@ -137,7 +137,7 @@ impl BrowserId {
                     linux: None,
                 },
             },
-            BrowserId::Opera => BrowserDescriptor {
+            Self::Opera => BrowserDescriptor {
                 id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("com.operasoftware.Opera"),
@@ -155,7 +155,7 @@ impl BrowserId {
                     linux: Some("opera"),
                 },
             },
-            BrowserId::Vivaldi => BrowserDescriptor {
+            Self::Vivaldi => BrowserDescriptor {
                 id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Vivaldi"),
@@ -216,7 +216,7 @@ impl BrowserDescriptor {
         }
     }
 
-    fn process_names_for_current_os(&self) -> &[&str] {
+    const fn process_names_for_current_os(&self) -> &[&str] {
         if cfg!(target_os = "macos") {
             self.process_names.darwin
         } else if cfg!(target_os = "windows") {
@@ -226,7 +226,7 @@ impl BrowserDescriptor {
         }
     }
 
-    fn keychain_service_for_current_os(&self) -> Option<&str> {
+    const fn keychain_service_for_current_os(&self) -> Option<&str> {
         if cfg!(target_os = "macos") {
             self.keychain_service.darwin
         } else if cfg!(target_os = "windows") {
@@ -362,32 +362,24 @@ pub fn is_browser_running(browser: BrowserId) -> bool {
     }
 
     if cfg!(target_os = "windows") {
-        for name in names {
-            let ok = std::process::Command::new("tasklist")
+        names.iter().any(|name| {
+            std::process::Command::new("tasklist")
                 .args(["/FI", &format!("IMAGENAME eq {name}"), "/NH"])
                 .output()
                 .map(|o| String::from_utf8_lossy(&o.stdout).contains(name))
-                .unwrap_or(false);
-            if ok {
-                return true;
-            }
-        }
-        false
+                .unwrap_or(false)
+        })
     } else {
         // macOS and Linux: pgrep
-        for name in names {
-            let ok = std::process::Command::new("pgrep")
+        names.iter().any(|name| {
+            std::process::Command::new("pgrep")
                 .args(["-x", name])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status()
                 .map(|s| s.success())
-                .unwrap_or(false);
-            if ok {
-                return true;
-            }
-        }
-        false
+                .unwrap_or(false)
+        })
     }
 }
 

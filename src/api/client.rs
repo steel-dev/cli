@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use reqwest::Client;
 use serde_json::Value;
 use thiserror::Error;
@@ -6,6 +8,7 @@ use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ApiError {
     #[error("Missing Steel API key. Run `steel login` or set `STEEL_API_KEY`.")]
     MissingAuth,
@@ -20,7 +23,7 @@ pub enum ApiError {
     #[error("Steel API request failed ({status}): {message}")]
     RequestFailed {
         status: u16,
-        message: String,
+        message: Cow<'static, str>,
         body: Option<Value>,
     },
 
@@ -30,19 +33,19 @@ pub enum ApiError {
 
 impl ApiError {
     /// Check if this is a 404/410 (not found). Matches TS `isNotFoundApiError()`.
-    pub fn is_not_found(&self) -> bool {
-        matches!(self, ApiError::RequestFailed { status, .. } if *status == 404 || *status == 410)
+    pub const fn is_not_found(&self) -> bool {
+        matches!(self, Self::RequestFailed { status, .. } if *status == 404 || *status == 410)
     }
 }
 
 /// Extract a human-readable error message from a JSON response body.
 /// Matches TS `extractApiErrorMessage()`.
-fn extract_error_message(body: &Value, status_text: &str) -> String {
+fn extract_error_message(body: &Value, status_text: &str) -> Cow<'static, str> {
     // Try body.message
     if let Some(msg) = body.get("message").and_then(|v| v.as_str())
         && !msg.trim().is_empty()
     {
-        return msg.to_string();
+        return Cow::Owned(msg.to_string());
     }
 
     // Try body.error.message
@@ -52,14 +55,14 @@ fn extract_error_message(body: &Value, status_text: &str) -> String {
         .and_then(|v| v.as_str())
         && !msg.trim().is_empty()
     {
-        return msg.to_string();
+        return Cow::Owned(msg.to_string());
     }
 
     if !status_text.is_empty() {
-        return status_text.to_string();
+        return Cow::Owned(status_text.to_string());
     }
 
-    "Unknown API error".to_string()
+    Cow::Borrowed("Unknown API error")
 }
 
 pub struct SteelClient {

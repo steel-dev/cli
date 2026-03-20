@@ -19,7 +19,7 @@ struct ExpectedFlag {
     takes_value: bool,
 }
 
-fn flag(long: &'static str) -> ExpectedFlag {
+const fn flag(long: &'static str) -> ExpectedFlag {
     ExpectedFlag {
         long,
         short: None,
@@ -28,7 +28,7 @@ fn flag(long: &'static str) -> ExpectedFlag {
     }
 }
 
-fn flag_val(long: &'static str) -> ExpectedFlag {
+const fn flag_val(long: &'static str) -> ExpectedFlag {
     ExpectedFlag {
         long,
         short: None,
@@ -37,7 +37,7 @@ fn flag_val(long: &'static str) -> ExpectedFlag {
     }
 }
 
-fn flag_short(long: &'static str, short: char) -> ExpectedFlag {
+const fn flag_short(long: &'static str, short: char) -> ExpectedFlag {
     ExpectedFlag {
         long,
         short: Some(short),
@@ -46,7 +46,7 @@ fn flag_short(long: &'static str, short: char) -> ExpectedFlag {
     }
 }
 
-fn flag_val_required(long: &'static str) -> ExpectedFlag {
+const fn flag_val_required(long: &'static str) -> ExpectedFlag {
     ExpectedFlag {
         long,
         short: None,
@@ -55,7 +55,7 @@ fn flag_val_required(long: &'static str) -> ExpectedFlag {
     }
 }
 
-fn flag_val_short(long: &'static str, short: char) -> ExpectedFlag {
+const fn flag_val_short(long: &'static str, short: char) -> ExpectedFlag {
     ExpectedFlag {
         long,
         short: Some(short),

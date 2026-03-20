@@ -63,12 +63,14 @@ pub struct SessionInfo {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct DaemonRequest {
     pub id: u64,
     pub command: DaemonCommand,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum DaemonCommand {
     Navigate {
@@ -116,7 +118,9 @@ pub enum DaemonCommand {
     },
     Scroll {
         selector: Option<String>,
+        #[cfg_attr(test, proptest(strategy = "-1e6f64..1e6"))]
         delta_x: f64,
+        #[cfg_attr(test, proptest(strategy = "-1e6f64..1e6"))]
         delta_y: f64,
     },
     Select {
@@ -262,13 +266,17 @@ pub enum DaemonCommand {
 
     // ── Browser settings ──
     SetGeolocation {
+        #[cfg_attr(test, proptest(strategy = "-90.0f64..90.0"))]
         latitude: f64,
+        #[cfg_attr(test, proptest(strategy = "-180.0f64..180.0"))]
         longitude: f64,
+        #[cfg_attr(test, proptest(strategy = "proptest::option::of(0.0f64..1e6)"))]
         accuracy: Option<f64>,
     },
     SetViewport {
         width: u32,
         height: u32,
+        #[cfg_attr(test, proptest(strategy = "proptest::option::of(0.5f64..4.0)"))]
         device_scale_factor: Option<f64>,
         mobile: Option<bool>,
     },
@@ -291,6 +299,7 @@ pub enum DaemonCommand {
     },
     DiffScreenshot {
         baseline: String,
+        #[cfg_attr(test, proptest(strategy = "proptest::option::of(0.0f64..1.0)"))]
         threshold: Option<f64>,
         selector: Option<String>,
         full_page: bool,
@@ -303,13 +312,13 @@ pub enum DaemonCommand {
     GetSessionInfo,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DaemonResponse {
     pub id: u64,
     pub result: DaemonResult,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum DaemonResult {
     Ok { data: serde_json::Value },
@@ -546,5 +555,63 @@ mod tests {
         };
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["status"], "error");
+    }
+
+    // --- Property-based roundtrip tests ---
+    //
+    // proptest_derive generates deeply nested union types for enums with 50+
+    // variants, which overflows the default test thread stack.  We spawn a
+    // thread with an explicit 16 MiB stack to accommodate this.
+
+    mod proptest_roundtrip {
+        use super::*;
+        use proptest::prelude::*;
+        use proptest::test_runner::TestRunner;
+
+        const STACK_SIZE: usize = 16 * 1024 * 1024;
+
+        #[test]
+        fn daemon_command_roundtrip() {
+            std::thread::Builder::new()
+                .stack_size(STACK_SIZE)
+                .spawn(|| {
+                    let mut runner = TestRunner::default();
+                    runner
+                        .run(&any::<DaemonCommand>(), |cmd| {
+                            // Use Value roundtrip to avoid HashMap key ordering
+                            // and f64 string-repr precision issues.
+                            let val = serde_json::to_value(&cmd).unwrap();
+                            let back: DaemonCommand = serde_json::from_value(val.clone()).unwrap();
+                            let val2 = serde_json::to_value(&back).unwrap();
+                            prop_assert_eq!(val, val2);
+                            Ok(())
+                        })
+                        .unwrap();
+                })
+                .unwrap()
+                .join()
+                .unwrap();
+        }
+
+        #[test]
+        fn daemon_request_roundtrip() {
+            std::thread::Builder::new()
+                .stack_size(STACK_SIZE)
+                .spawn(|| {
+                    let mut runner = TestRunner::default();
+                    runner
+                        .run(&any::<DaemonRequest>(), |req| {
+                            let val = serde_json::to_value(&req).unwrap();
+                            let back: DaemonRequest = serde_json::from_value(val.clone()).unwrap();
+                            let val2 = serde_json::to_value(&back).unwrap();
+                            prop_assert_eq!(val, val2);
+                            Ok(())
+                        })
+                        .unwrap();
+                })
+                .unwrap()
+                .join()
+                .unwrap();
+        }
     }
 }

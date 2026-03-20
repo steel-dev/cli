@@ -229,12 +229,11 @@ fn steel_flag_parity() {
                 continue;
             };
 
-            if ab_flag.starts_with("--") {
-                let ab_long = &ab_flag[2..];
+            if let Some(ab_long) = ab_flag.strip_prefix("--") {
                 if ab_long != *steel_long {
                     // Different long name → must be an alias
-                    let aliases: Vec<&str> = arg.get_all_aliases().into_iter().flatten().collect();
-                    if !aliases.contains(&ab_long) {
+                    let has_alias = arg.get_all_aliases().into_iter().flatten().any(|a| a == ab_long);
+                    if !has_alias {
                         failures.push(format!(
                             "[{}] Steel --{} needs alias `--{}` for agent-browser compat",
                             parity.command, steel_long, ab_long,
@@ -325,14 +324,13 @@ fn extract_command_flags(content: &str) -> BTreeMap<String, BTreeSet<String>> {
         }
 
         // At match body level, look for arm patterns
-        if depth_at_start == 0 {
-            if let Some(cmds) = parse_arm_commands(trimmed) {
+        if depth_at_start == 0
+            && let Some(cmds) = parse_arm_commands(trimmed) {
                 current_cmds = cmds;
                 for cmd in &current_cmds {
                     result.entry(cmd.clone()).or_insert_with(BTreeSet::new);
                 }
             }
-        }
 
         // Extract flag literals from this line and attribute to current commands
         if !current_cmds.is_empty() {
@@ -390,7 +388,7 @@ fn extract_flag_literals(line: &str) -> Vec<String> {
                 && val[2..].chars().all(|c| c.is_alphanumeric() || c == '-');
             let is_short_flag = val.starts_with('-')
                 && val.len() == 2
-                && val.chars().nth(1).map_or(false, |c| c.is_alphabetic());
+                && val.chars().nth(1).is_some_and(|c| c.is_alphabetic());
             if is_long_flag || is_short_flag {
                 flags.push(val.to_string());
             }
@@ -444,8 +442,7 @@ fn find_commands_rs() -> Option<PathBuf> {
                 .file_name()
                 .to_string_lossy()
                 .starts_with("agent-browser-")
-            {
-                if let Ok(refs) = std::fs::read_dir(entry.path()) {
+                && let Ok(refs) = std::fs::read_dir(entry.path()) {
                     for ref_entry in refs.flatten() {
                         let p = ref_entry.path().join("cli/src/commands.rs");
                         if p.exists() {
@@ -453,7 +450,6 @@ fn find_commands_rs() -> Option<PathBuf> {
                         }
                     }
                 }
-            }
         }
     }
 

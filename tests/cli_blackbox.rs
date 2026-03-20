@@ -390,7 +390,8 @@ fn browser_sessions_help_shows_expected_flags() {
         "steel browser sessions --help should exit 0"
     );
     let out = stdout(&output);
-    for flag in &["--local"] {
+    {
+        let flag = &"--local";
         assert!(
             out.contains(flag),
             "browser sessions help should mention '{flag}', got: {out}"

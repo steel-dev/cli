@@ -312,7 +312,7 @@ async fn dispatch(
 use browser_engine::native::screenshot::ScreenshotOptions;
 use browser_engine::native::snapshot::SnapshotOptions;
 
-fn build_snapshot_options(
+const fn build_snapshot_options(
     interactive_only: bool,
     selector: Option<String>,
     compact: bool,

@@ -403,8 +403,7 @@ fn find_actions_rs() -> Option<PathBuf> {
                 .file_name()
                 .to_string_lossy()
                 .starts_with("agent-browser-")
-            {
-                if let Ok(refs) = std::fs::read_dir(entry.path()) {
+                && let Ok(refs) = std::fs::read_dir(entry.path()) {
                     for ref_entry in refs.flatten() {
                         let p = ref_entry.path().join("cli/src/native/actions.rs");
                         if p.exists() {
@@ -412,7 +411,6 @@ fn find_actions_rs() -> Option<PathBuf> {
                         }
                     }
                 }
-            }
         }
     }
 
@@ -435,6 +433,7 @@ fn extract_handler_output_keys(content: &str) -> BTreeMap<String, BTreeSet<Strin
             let mut brace_depth = 0i32;
             let mut started = false;
 
+            #[allow(clippy::needless_range_loop)] // j updates outer index i
             for j in i..lines.len() {
                 for ch in lines[j].chars() {
                     if ch == '{' {

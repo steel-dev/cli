@@ -65,6 +65,7 @@ pub fn cleanup_stale(session_name: &str) {
 
 /// Check if the daemon process for this session is still alive using its PID file.
 /// Returns `false` if the PID file is missing, unreadable, or the process is not running.
+#[allow(unsafe_code)]
 pub fn is_daemon_alive(session_name: &str) -> bool {
     let pid_file = pid_path(session_name);
     let Ok(contents) = std::fs::read_to_string(&pid_file) else {
@@ -74,6 +75,7 @@ pub fn is_daemon_alive(session_name: &str) -> bool {
         return false;
     };
     // kill(pid, 0) checks process existence without sending a signal
+    // SAFETY: kill(pid, 0) is a read-only probe with no side effects.
     unsafe { libc::kill(pid, 0) == 0 }
 }
 
@@ -171,11 +173,13 @@ pub async fn stop_daemon(session_name: &str) -> Result<()> {
 }
 
 /// Kill a daemon process by reading its PID file, then clean up.
+#[allow(unsafe_code)]
 pub fn kill_daemon(session_name: &str) -> Result<()> {
     let pid_file = pid_path(session_name);
     if let Ok(contents) = std::fs::read_to_string(&pid_file)
         && let Ok(pid) = contents.trim().parse::<i32>()
     {
+        // SAFETY: sending SIGTERM to a known daemon PID we own.
         unsafe { libc::kill(pid, libc::SIGTERM) };
     }
     cleanup_stale(session_name);
@@ -192,6 +196,7 @@ mod tests {
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock, unsafe_code)] // intentional: serialize env var mutations
     async fn wait_for_daemon_surfaces_log_on_early_exit() {
         let _guard = ENV_LOCK.lock().unwrap();
         let tmp = tempfile::TempDir::new().unwrap();
@@ -241,6 +246,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock, unsafe_code)] // intentional: serialize env var mutations
     async fn wait_for_daemon_empty_log_still_reports_exit() {
         let _guard = ENV_LOCK.lock().unwrap();
         let tmp = tempfile::TempDir::new().unwrap();

@@ -15,8 +15,8 @@ pub enum ApiMode {
 impl std::fmt::Display for ApiMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ApiMode::Cloud => write!(f, "cloud"),
-            ApiMode::Local => write!(f, "local"),
+            Self::Cloud => write!(f, "cloud"),
+            Self::Local => write!(f, "local"),
         }
     }
 }
@@ -37,7 +37,7 @@ impl ApiMode {
         }
 
         match self {
-            ApiMode::Cloud => {
+            Self::Cloud => {
                 let url = env_vars
                     .steel_api_url
                     .as_deref()
@@ -45,7 +45,7 @@ impl ApiMode {
                     .unwrap_or(DEFAULT_API_URL);
                 normalize_api_url(url)
             }
-            ApiMode::Local => {
+            Self::Local => {
                 // STEEL_BROWSER_API_URL → STEEL_LOCAL_API_URL → config → default
                 let url = env_vars
                     .steel_browser_api_url
@@ -66,14 +66,14 @@ impl ApiMode {
 
     /// Determine mode from CLI flags.
     /// Matches TS `resolveSessionMode()` / `resolveMode()`.
-    pub fn resolve(local: bool, api_url: Option<&str>) -> Self {
+    pub const fn resolve(local: bool, api_url: Option<&str>) -> Self {
         if local {
-            return ApiMode::Local;
+            return Self::Local;
         }
         if api_url.is_some() {
-            return ApiMode::Local;
+            return Self::Local;
         }
-        ApiMode::Cloud
+        Self::Cloud
     }
 }
 

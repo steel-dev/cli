@@ -763,9 +763,17 @@ impl ActionCommand {
                 },
                 O::Echo,
             ),
-            Self::DblClick(a) => (D::DblClick { selector: a.selector }, O::Echo),
+            Self::DblClick(a) => (
+                D::DblClick {
+                    selector: a.selector,
+                },
+                O::Echo,
+            ),
             Self::Fill(a) => (
-                D::Fill { selector: a.selector, value: a.value.join(" ") },
+                D::Fill {
+                    selector: a.selector,
+                    value: a.value.join(" "),
+                },
                 O::Echo,
             ),
             Self::Type(a) => (
@@ -778,23 +786,71 @@ impl ActionCommand {
                 O::Echo,
             ),
             Self::Press(a) => (D::Press { key: a.key }, O::Echo),
-            Self::Hover(a) => (D::Hover { selector: a.selector }, O::Echo),
-            Self::Focus(a) => (D::Focus { selector: a.selector }, O::Echo),
-            Self::Check(a) => (D::Check { selector: a.selector }, O::Echo),
-            Self::Uncheck(a) => (D::Uncheck { selector: a.selector }, O::Echo),
-            Self::Select(a) => (
-                D::Select { selector: a.selector, values: a.values },
+            Self::Hover(a) => (
+                D::Hover {
+                    selector: a.selector,
+                },
                 O::Echo,
             ),
-            Self::Clear(a) => (D::Clear { selector: a.selector }, O::Echo),
-            Self::SelectAll(a) => (D::SelectAll { selector: a.selector }, O::Echo),
+            Self::Focus(a) => (
+                D::Focus {
+                    selector: a.selector,
+                },
+                O::Echo,
+            ),
+            Self::Check(a) => (
+                D::Check {
+                    selector: a.selector,
+                },
+                O::Echo,
+            ),
+            Self::Uncheck(a) => (
+                D::Uncheck {
+                    selector: a.selector,
+                },
+                O::Echo,
+            ),
+            Self::Select(a) => (
+                D::Select {
+                    selector: a.selector,
+                    values: a.values,
+                },
+                O::Echo,
+            ),
+            Self::Clear(a) => (
+                D::Clear {
+                    selector: a.selector,
+                },
+                O::Echo,
+            ),
+            Self::SelectAll(a) => (
+                D::SelectAll {
+                    selector: a.selector,
+                },
+                O::Echo,
+            ),
             Self::Scroll(a) => {
                 let (dx, dy) = scroll_deltas(a.direction.as_deref(), a.amount);
-                (D::Scroll { selector: a.selector, delta_x: dx, delta_y: dy }, O::Echo)
+                (
+                    D::Scroll {
+                        selector: a.selector,
+                        delta_x: dx,
+                        delta_y: dy,
+                    },
+                    O::Echo,
+                )
             }
-            Self::ScrollIntoView(a) => (D::ScrollIntoView { selector: a.selector }, O::Echo),
+            Self::ScrollIntoView(a) => (
+                D::ScrollIntoView {
+                    selector: a.selector,
+                },
+                O::Echo,
+            ),
             Self::SetValue(a) => (
-                D::SetValue { selector: a.selector, value: a.value.join(" ") },
+                D::SetValue {
+                    selector: a.selector,
+                    value: a.value.join(" "),
+                },
                 O::Echo,
             ),
 
@@ -834,35 +890,83 @@ impl ActionCommand {
             }
             Self::Eval(a) => (D::Eval { script: a.script }, O::Data),
             Self::Find(a) => (
-                D::Find { selector: a.selector },
+                D::Find {
+                    selector: a.selector,
+                },
                 O::Custom(Box::new(display_find)),
             ),
             Self::Content => (D::Content, O::Text),
 
             // ── Get info ────────────────────────────────────────────
             Self::Get { command } => match command {
-                GetCommand::Text(a) => (D::GetText { selector: a.selector }, O::Field("text")),
-                GetCommand::Html(a) => (D::InnerHtml { selector: a.selector }, O::Field("html")),
-                GetCommand::Value(a) => (D::InputValue { selector: a.selector }, O::Field("value")),
+                GetCommand::Text(a) => (
+                    D::GetText {
+                        selector: a.selector,
+                    },
+                    O::Field("text"),
+                ),
+                GetCommand::Html(a) => (
+                    D::InnerHtml {
+                        selector: a.selector,
+                    },
+                    O::Field("html"),
+                ),
+                GetCommand::Value(a) => (
+                    D::InputValue {
+                        selector: a.selector,
+                    },
+                    O::Field("value"),
+                ),
                 GetCommand::Attr(a) => (
-                    D::GetAttribute { selector: a.selector, attribute: a.attribute },
+                    D::GetAttribute {
+                        selector: a.selector,
+                        attribute: a.attribute,
+                    },
                     O::Field("value"),
                 ),
                 GetCommand::Url => (D::Url, O::Text),
                 GetCommand::Title => (D::Title, O::Text),
-                GetCommand::Count(a) => (D::Count { selector: a.selector }, O::Field("count")),
-                GetCommand::Box(a) => (D::BoundingBox { selector: a.selector }, O::Data),
+                GetCommand::Count(a) => (
+                    D::Count {
+                        selector: a.selector,
+                    },
+                    O::Field("count"),
+                ),
+                GetCommand::Box(a) => (
+                    D::BoundingBox {
+                        selector: a.selector,
+                    },
+                    O::Data,
+                ),
                 GetCommand::Styles(a) => (
-                    D::Styles { selector: a.selector, properties: optional_vec(a.property) },
+                    D::Styles {
+                        selector: a.selector,
+                        properties: optional_vec(a.property),
+                    },
                     O::Data,
                 ),
             },
 
             // ── Check state ─────────────────────────────────────────
             Self::Is { command } => match command {
-                IsCommand::Visible(a) => (D::IsVisible { selector: a.selector }, O::Field("visible")),
-                IsCommand::Enabled(a) => (D::IsEnabled { selector: a.selector }, O::Field("enabled")),
-                IsCommand::Checked(a) => (D::IsChecked { selector: a.selector }, O::Field("checked")),
+                IsCommand::Visible(a) => (
+                    D::IsVisible {
+                        selector: a.selector,
+                    },
+                    O::Field("visible"),
+                ),
+                IsCommand::Enabled(a) => (
+                    D::IsEnabled {
+                        selector: a.selector,
+                    },
+                    O::Field("enabled"),
+                ),
+                IsCommand::Checked(a) => (
+                    D::IsChecked {
+                        selector: a.selector,
+                    },
+                    O::Field("checked"),
+                ),
             },
 
             // ── Wait ────────────────────────────────────────────────
@@ -912,28 +1016,54 @@ impl ActionCommand {
                 };
                 match sub.command {
                     None => (
-                        D::StorageGet { storage_type: st.to_string(), key: sub.key },
+                        D::StorageGet {
+                            storage_type: st.to_string(),
+                            key: sub.key,
+                        },
                         O::Data,
                     ),
                     Some(StorageActionCommand::Set(a)) => (
-                        D::StorageSet { storage_type: st.to_string(), key: a.key, value: a.value },
+                        D::StorageSet {
+                            storage_type: st.to_string(),
+                            key: a.key,
+                            value: a.value,
+                        },
                         O::Echo,
                     ),
                     Some(StorageActionCommand::Clear) => (
-                        D::StorageClear { storage_type: st.to_string() },
+                        D::StorageClear {
+                            storage_type: st.to_string(),
+                        },
                         O::Echo,
                     ),
                 }
             }
 
             // ── Drag & drop ─────────────────────────────────────────
-            Self::Drag(a) => (D::Drag { source: a.source, target: a.target }, O::Echo),
+            Self::Drag(a) => (
+                D::Drag {
+                    source: a.source,
+                    target: a.target,
+                },
+                O::Echo,
+            ),
 
             // ── File upload ─────────────────────────────────────────
-            Self::Upload(a) => (D::Upload { selector: a.selector, files: a.files }, O::Echo),
+            Self::Upload(a) => (
+                D::Upload {
+                    selector: a.selector,
+                    files: a.files,
+                },
+                O::Echo,
+            ),
 
             // ── Visual ──────────────────────────────────────────────
-            Self::Highlight(a) => (D::Highlight { selector: a.selector }, O::Echo),
+            Self::Highlight(a) => (
+                D::Highlight {
+                    selector: a.selector,
+                },
+                O::Echo,
+            ),
 
             // ── Browser settings ────────────────────────────────────
             Self::Set { command } => match command {
@@ -964,7 +1094,9 @@ impl ActionCommand {
                     (D::SetHeaders { headers }, O::Echo)
                 }
                 SetCommand::UserAgent(a) => (
-                    D::SetUserAgent { user_agent: a.user_agent.join(" ") },
+                    D::SetUserAgent {
+                        user_agent: a.user_agent.join(" "),
+                    },
                     O::Echo,
                 ),
             },
@@ -984,7 +1116,11 @@ impl ActionCommand {
                     O::Custom(Box::new(display_diff_snapshot)),
                 ),
                 DiffCommand::Screenshot(a) => {
-                    let output_path = a.output.as_ref().map(|p| resolve_output_path(p)).transpose()?;
+                    let output_path = a
+                        .output
+                        .as_ref()
+                        .map(|p| resolve_output_path(p))
+                        .transpose()?;
                     (
                         D::DiffScreenshot {
                             baseline: resolve_output_path(&a.baseline)?,

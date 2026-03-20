@@ -12,9 +12,9 @@ pub enum AuthSource {
 impl std::fmt::Display for AuthSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AuthSource::Env => write!(f, "env (STEEL_API_KEY)"),
-            AuthSource::Config => write!(f, "config"),
-            AuthSource::None => write!(f, "none"),
+            Self::Env => write!(f, "env (STEEL_API_KEY)"),
+            Self::Config => write!(f, "config"),
+            Self::None => write!(f, "none"),
         }
     }
 }

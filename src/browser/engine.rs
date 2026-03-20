@@ -766,8 +766,8 @@ impl BrowserEngine {
         let steps = 10u32;
         for i in 1..=steps {
             let t = i as f64 / steps as f64;
-            let x = src_x + (tgt_x - src_x) * t;
-            let y = src_y + (tgt_y - src_y) * t;
+            let x = (tgt_x - src_x).mul_add(t, src_x);
+            let y = (tgt_y - src_y).mul_add(t, src_y);
             client
                 .send_command(
                     "Input.dispatchMouseEvent",
