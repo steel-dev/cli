@@ -183,7 +183,8 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
     }
 
     // Check for existing profile
-    if let Some(existing) = profile_store::read_profile(&args.name)? {
+    let existing = profile_store::read_profile(&args.name)?;
+    if let Some(ref existing) = existing {
         eprintln!(
             "Profile \"{}\" already exists (id: {}). Overwriting.",
             args.name, existing.profile_id
@@ -280,8 +281,18 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
 
     // Upload
     println!("  Uploading...");
-    let profile_id =
-        profile_porter::upload_profile_to_steel(result.zip_buffer, &api_key, &api_base).await?;
+    let profile_id = if let Some(ref existing) = existing {
+        profile_porter::update_profile_on_steel(
+            &existing.profile_id,
+            result.zip_buffer,
+            &api_key,
+            &api_base,
+        )
+        .await?;
+        existing.profile_id.clone()
+    } else {
+        profile_porter::upload_profile_to_steel(result.zip_buffer, &api_key, &api_base).await?
+    };
 
     // Save metadata
     profile_store::write_profile(
