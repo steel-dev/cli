@@ -44,7 +44,7 @@ getrandom = "0.3"
 
 libc = "0.2"
 tempfile = "3"
-jiff = "0.1"
+jiff = "0.2"
 
 [dev-dependencies]
 wiremock = "0.6"
