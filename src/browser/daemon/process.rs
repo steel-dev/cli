@@ -89,7 +89,11 @@ pub fn cleanup_if_dead(session_name: &str) -> bool {
 
 /// Spawn a daemon process for the given session. The create params are passed via
 /// environment variable to avoid leaking API keys in the process list.
-pub fn spawn_daemon(session_name: &str, params: &DaemonCreateParams) -> Result<()> {
+///
+pub fn spawn_daemon(
+    session_name: &str,
+    params: &DaemonCreateParams,
+) -> Result<std::process::Child> {
     let exe = std::env::current_exe()?;
 
     cleanup_stale(session_name);
@@ -101,7 +105,7 @@ pub fn spawn_daemon(session_name: &str, params: &DaemonCreateParams) -> Result<(
 
     let params_json = serde_json::to_string(params)?;
 
-    std::process::Command::new(exe)
+    let child = std::process::Command::new(exe)
         .args(["__daemon", "--session-name", session_name])
         .env("STEEL_DAEMON_PARAMS", params_json)
         .stdin(std::process::Stdio::null())
@@ -109,15 +113,35 @@ pub fn spawn_daemon(session_name: &str, params: &DaemonCreateParams) -> Result<(
         .stderr(log)
         .spawn()?;
 
-    Ok(())
+    Ok(child)
 }
 
 /// Wait until the daemon socket is connectable.
-pub async fn wait_for_daemon(session_name: &str, timeout: Duration) -> Result<()> {
+///
+pub async fn wait_for_daemon(
+    session_name: &str,
+    mut child: std::process::Child,
+    timeout: Duration,
+) -> Result<()> {
     let sock = socket_path(session_name);
     let start = std::time::Instant::now();
 
     while start.elapsed() < timeout {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let log_file = log_path(session_name);
+                let log_contents = std::fs::read_to_string(&log_file).unwrap_or_default();
+                let error_detail = log_contents
+                    .lines()
+                    .rev()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("unknown error (check daemon log)");
+                bail!("Browser daemon exited ({status}): {error_detail}");
+            }
+            Ok(None) => {} // still running
+            Err(_) => {}   // can't query status; fall through to socket poll
+        }
+
         if sock.exists() && tokio::net::UnixStream::connect(&sock).await.is_ok() {
             return Ok(());
         }
@@ -125,8 +149,9 @@ pub async fn wait_for_daemon(session_name: &str, timeout: Duration) -> Result<()
     }
 
     bail!(
-        "Browser daemon failed to start within {}s",
-        timeout.as_secs()
+        "Browser daemon failed to start within {}s. Check logs: {}",
+        timeout.as_secs(),
+        log_path(session_name).display(),
     );
 }
 
@@ -160,6 +185,94 @@ pub fn kill_daemon(session_name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── wait_for_daemon early exit detection ─────────────────────────
+
+    /// Serialize tests that mutate STEEL_CONFIG_DIR to avoid env var races.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[tokio::test]
+    async fn wait_for_daemon_surfaces_log_on_early_exit() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let session_name = "test-early-exit";
+
+        // Override config dir so log_path/socket_path resolve into our temp dir.
+        // SAFETY: access serialized via ENV_LOCK.
+        unsafe { std::env::set_var("STEEL_CONFIG_DIR", tmp.path()) };
+
+        // Pre-create the daemon log with a known error message.
+        let log = log_path(session_name);
+        std::fs::write(
+            &log,
+            "Error: Steel API request failed (401): Invalid API key\n",
+        )
+        .unwrap();
+
+        // Spawn a process that exits immediately.
+        let child = std::process::Command::new("sh")
+            .args(["-c", "exit 1"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+
+        // Give the child a moment to actually exit.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let start = std::time::Instant::now();
+        let result = wait_for_daemon(session_name, child, Duration::from_secs(30)).await;
+
+        unsafe { std::env::remove_var("STEEL_CONFIG_DIR") };
+
+        assert!(result.is_err(), "should fail when child exits early");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Invalid API key"),
+            "should contain the actual error from the log, got: {err_msg}"
+        );
+        // Should detect failure quickly, not wait for the full timeout.
+        assert!(
+            start.elapsed().as_secs() < 5,
+            "should detect early exit quickly, took {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[tokio::test]
+    async fn wait_for_daemon_empty_log_still_reports_exit() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let session_name = "test-empty-log";
+
+        unsafe { std::env::set_var("STEEL_CONFIG_DIR", tmp.path()) };
+
+        // Log file doesn't exist — should still report the exit.
+        let child = std::process::Command::new("sh")
+            .args(["-c", "exit 42"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let result = wait_for_daemon(session_name, child, Duration::from_secs(30)).await;
+
+        unsafe { std::env::remove_var("STEEL_CONFIG_DIR") };
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        // Should mention the exit status and some fallback message.
+        assert!(
+            err_msg.contains("daemon") || err_msg.contains("exit"),
+            "should mention daemon/exit, got: {err_msg}"
+        );
+    }
+
+    // ── validate_session_name ────────────────────────────────────────
 
     #[test]
     fn valid_session_names() {

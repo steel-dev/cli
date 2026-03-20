@@ -162,11 +162,15 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
                 idle_sleep.as_mut().reset(tokio::time::Instant::now() + IDLE_TIMEOUT);
                 match result {
                     Ok((stream, _)) => {
-                        match handle_connection(&mut engine, &session_info, stream).await {
+                        match handle_connection(&mut engine, &session_info, stream, expires_at).await {
                             ConnectionResult::Continue => {}
                             ConnectionResult::Shutdown => break,
                             ConnectionResult::Disconnected => {
                                 eprintln!("[daemon] CDP disconnected during command, shutting down");
+                                break;
+                            }
+                            ConnectionResult::Expired => {
+                                eprintln!("[daemon] Session timeout reached, shutting down");
                                 break;
                             }
                         }
@@ -211,12 +215,14 @@ enum ConnectionResult {
     Continue,
     Shutdown,
     Disconnected,
+    Expired,
 }
 
 async fn handle_connection(
     engine: &mut BrowserEngine,
     session_info: &SessionInfo,
     stream: tokio::net::UnixStream,
+    expires_at: Option<tokio::time::Instant>,
 ) -> ConnectionResult {
     let (read_half, mut write_half) = tokio::io::split(stream);
     let mut reader = BufReader::new(read_half);
@@ -246,7 +252,26 @@ async fn handle_connection(
                     request.command,
                     DaemonCommand::Shutdown | DaemonCommand::Close
                 );
-                let result = dispatch(engine, session_info, request.command).await;
+
+                let result = match expires_at {
+                    Some(deadline) => {
+                        tokio::select! {
+                            result = dispatch(engine, session_info, request.command) => result,
+                            _ = tokio::time::sleep_until(deadline) => {
+                                let resp = DaemonResponse {
+                                    id: request.id,
+                                    result: DaemonResult::Error {
+                                        message: "Session expired".into(),
+                                    },
+                                };
+                                let json = serde_json::to_string(&resp).unwrap() + "\n";
+                                let _ = write_half.write_all(json.as_bytes()).await;
+                                return ConnectionResult::Expired;
+                            }
+                        }
+                    }
+                    None => dispatch(engine, session_info, request.command).await,
+                };
 
                 // Check if CDP connection died during dispatch
                 let cdp_dead =

@@ -263,24 +263,52 @@ fn nonexistent_command_fails() {
 #[test]
 fn browser_start_without_auth_or_local_fails() {
     // With no API key and no --local flag, `browser start` should fail
-    // with an auth-related error (no key configured).
+    // with the actual daemon error (missing API key), not a generic timeout.
+    let start = std::time::Instant::now();
     let output = run(&["browser", "start"]);
+    let elapsed = start.elapsed();
+
     assert!(
         !output.status.success(),
         "steel browser start without auth should exit non-zero"
     );
+
     let err = stderr(&output);
     let out = stdout(&output);
     let combined = format!("{err}{out}");
     let lower = combined.to_lowercase();
+
+    // The error should surface the actual daemon failure reason (missing API key),
+    // not a generic "failed to start within 30s" timeout message.
     assert!(
-        lower.contains("api")
-            || lower.contains("auth")
-            || lower.contains("key")
-            || lower.contains("login")
-            || lower.contains("error")
-            || lower.contains("credential"),
-        "output should mention auth/api-key/login, got: {combined}"
+        lower.contains("api key") || lower.contains("api_key") || lower.contains("login"),
+        "output should mention the actual auth error (API key / login), got: {combined}"
+    );
+
+    // The daemon exits almost immediately on missing auth. With early exit detection,
+    // this should complete in well under 10 seconds (not the 30s timeout).
+    assert!(
+        elapsed.as_secs() < 15,
+        "should detect daemon failure quickly, but took {elapsed:?}"
+    );
+}
+
+#[test]
+fn browser_start_without_auth_json_mode_surfaces_error() {
+    // In --json mode, the actual daemon error should also appear in the output.
+    let output = run(&["--json", "browser", "start"]);
+    assert!(!output.status.success());
+
+    let out = stdout(&output);
+    let parsed: serde_json::Value = serde_json::from_str(out.trim())
+        .unwrap_or_else(|_| panic!("expected valid JSON, got: {out}"));
+    assert_eq!(parsed["success"], false);
+
+    let error_msg = parsed["error"].as_str().unwrap_or("");
+    let lower = error_msg.to_lowercase();
+    assert!(
+        lower.contains("api key") || lower.contains("api_key") || lower.contains("login"),
+        "JSON error should mention the actual auth error, got: {error_msg}"
     );
 }
 

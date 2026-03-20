@@ -102,8 +102,8 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         credentials: args.credentials,
     };
 
-    process::spawn_daemon(&session_name, &params)?;
-    process::wait_for_daemon(&session_name, std::time::Duration::from_secs(30)).await?;
+    let child = process::spawn_daemon(&session_name, &params)?;
+    process::wait_for_daemon(&session_name, child, std::time::Duration::from_secs(30)).await?;
 
     // Connect and get session info
     let mut client = DaemonClient::connect(&session_name).await?;
