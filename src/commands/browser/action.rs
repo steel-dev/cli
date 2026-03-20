@@ -1146,6 +1146,9 @@ pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
     let mut client = ensure_daemon(session).await?;
 
     let result = dispatch_action(&mut client, action).await;
+    // Release the daemon connection before health-checking so the daemon's
+    // main loop can accept a new connection for the ping probe.
+    drop(client);
     if let Err(ref err) = result {
         // On failure, check if the remote session is still alive.
         // If not, clear stale state and give a helpful error.

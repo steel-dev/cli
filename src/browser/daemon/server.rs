@@ -230,8 +230,12 @@ async fn handle_connection(
 
     loop {
         line.clear();
-        match reader.read_line(&mut line).await {
-            Err(_) | Ok(0) => return ConnectionResult::Continue,
+        // Bound the idle wait so the main select! loop can run health checks
+        // and timers between commands.  Current clients send one command per
+        // connection and disconnect immediately, so 5 s is generous.
+        match tokio::time::timeout(Duration::from_secs(5), reader.read_line(&mut line)).await {
+            Err(_) => return ConnectionResult::Continue, // idle timeout
+            Ok(Err(_)) | Ok(Ok(0)) => return ConnectionResult::Continue,
             Ok(_) => {
                 let request: DaemonRequest = match serde_json::from_str(&line) {
                     Ok(r) => r,
