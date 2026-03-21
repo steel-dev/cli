@@ -31,17 +31,13 @@ if (existsSync(BINARY_PATH)) {
 } else {
   console.error("Steel CLI native binary not found.");
   console.error("");
-  console.error(
-    "The @steel-dev/cli npm package is now a migration shim."
-  );
+  console.error("The @steel-dev/cli npm package is now a migration shim.");
   console.error(
     "The actual CLI has moved to a native binary distributed via GitHub Releases."
   );
   console.error("");
   console.error("Install the native binary:");
-  console.error(
-    "  curl -LsSf https://steel.dev/install.sh | sh"
-  );
+  console.error("  curl -LsSf https://setup.steel.dev | sh");
   console.error("");
   console.error("Then add to your PATH:");
   console.error('  export PATH="$HOME/.steel/bin:$PATH"');

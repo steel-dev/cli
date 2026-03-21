@@ -245,7 +245,7 @@ Then apply targeted fixes:
 - Stale session state:
   `steel browser stop --all` then restart with a fresh named session.
 - `steel: command not found`:
-  install the native binary with `curl -LsSf https://steel.dev/install.sh | sh`
+  install the native binary with `curl -LsSf https://setup.steel.dev | sh`
   and add `$HOME/.steel/bin` to your PATH.
 
 If issue persists, use the full playbook:
@@ -255,19 +255,19 @@ If issue persists, use the full playbook:
 
 The following commands do **not** exist. Do not attempt them. Use `eval` workarounds instead.
 
-| Does NOT exist | Use instead |
-|---|---|
-| `steel browser network` / `route` / `unroute` | `eval` with fetch monkey-patch or Performance API |
-| `steel browser record` / `video` | Not available — no recording support |
-| `steel browser console` / `errors` | `eval` with `console.log` interceptor |
-| `steel browser frame` | `eval` with `document.querySelector('iframe').contentDocument` |
-| `steel browser set device` | `set viewport` + `set useragent` |
-| `steel browser set media` | `eval` with `window.matchMedia` override |
-| `steel browser set credentials` | Use `steel credentials` commands + `--credentials` flag on start |
-| `steel browser geolocation` | `steel browser set geo <lat> <lon>` |
-| `steel browser mouse` | `eval` with `Input.dispatchMouseEvent` via CDP or MouseEvent dispatch |
-| `steel browser tabs` | `steel browser tab list` (singular `tab`, not `tabs`) |
-| `steel browser execute` / `run` | `steel browser eval` |
+| Does NOT exist                                | Use instead                                                           |
+| --------------------------------------------- | --------------------------------------------------------------------- |
+| `steel browser network` / `route` / `unroute` | `eval` with fetch monkey-patch or Performance API                     |
+| `steel browser record` / `video`              | Not available — no recording support                                  |
+| `steel browser console` / `errors`            | `eval` with `console.log` interceptor                                 |
+| `steel browser frame`                         | `eval` with `document.querySelector('iframe').contentDocument`        |
+| `steel browser set device`                    | `set viewport` + `set useragent`                                      |
+| `steel browser set media`                     | `eval` with `window.matchMedia` override                              |
+| `steel browser set credentials`               | Use `steel credentials` commands + `--credentials` flag on start      |
+| `steel browser geolocation`                   | `steel browser set geo <lat> <lon>`                                   |
+| `steel browser mouse`                         | `eval` with `Input.dispatchMouseEvent` via CDP or MouseEvent dispatch |
+| `steel browser tabs`                          | `steel browser tab list` (singular `tab`, not `tabs`)                 |
+| `steel browser execute` / `run`               | `steel browser eval`                                                  |
 
 ## Guardrails
 
