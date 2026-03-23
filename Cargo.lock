@@ -2562,7 +2562,7 @@ dependencies = [
  "clap",
  "dialoguer",
  "dirs 6.0.0",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "hmac",
  "jiff",
  "libc",

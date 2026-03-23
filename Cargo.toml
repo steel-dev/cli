@@ -40,7 +40,7 @@ hmac = "0.12"
 # Browser engine
 browser-engine = { git = "https://github.com/steel-dev/agent-browser", branch = "as-lib", package = "agent-browser" }
 aes-gcm = "0.10"
-getrandom = "0.3"
+getrandom = "0.4"
 
 libc = "0.2"
 tempfile = "3"
