@@ -1,5 +1,7 @@
 use clap::Parser;
 
+use crate::status;
+
 #[derive(Parser)]
 pub struct Args {
     /// Remove all cached files and directories
@@ -13,13 +15,13 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .join("steel");
 
     if !args.clean {
-        println!("Steel CLI cache directory: {}", cache_dir.display());
-        println!("Use --clean to remove all cached files.");
+        status!("Steel CLI cache directory: {}", cache_dir.display());
+        status!("Use --clean to remove all cached files.");
         return Ok(());
     }
 
     if !cache_dir.exists() {
-        println!("Cache directory does not exist. Nothing to clean.");
+        status!("Cache directory does not exist. Nothing to clean.");
         return Ok(());
     }
 
@@ -35,8 +37,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         count += 1;
     }
 
-    println!("Removed {count} item(s) from cache.");
-    println!("Cache directory: {}", cache_dir.display());
+    status!("Removed {count} item(s) from cache.");
+    status!("Cache directory: {}", cache_dir.display());
 
     Ok(())
 }

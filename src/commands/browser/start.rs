@@ -2,6 +2,7 @@ use clap::Parser;
 use serde_json::json;
 
 use crate::browser::daemon::client::DaemonClient;
+use crate::status;
 use crate::browser::daemon::process;
 use crate::browser::daemon::protocol::{DaemonCommand, DaemonCreateParams, SessionInfo};
 use crate::browser::lifecycle::sanitize_connect_url;
@@ -77,7 +78,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     // `start` always creates a fresh session — use `steel browser sessions`
     // to inspect existing ones.
     if DaemonClient::connect(&session_name).await.is_ok() {
-        eprintln!("Replacing existing session \"{session_name}\"...");
+        status!("Replacing existing session \"{session_name}\"...");
         process::stop_daemon(&session_name).await?;
     } else {
         // No live daemon, but stale files may remain

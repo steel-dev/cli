@@ -5,6 +5,7 @@ use tokio::net::TcpListener;
 
 use crate::config;
 use crate::config::auth;
+use crate::status;
 use crate::config::settings::{Config, read_config_from, write_config_to};
 
 #[derive(Parser)]
@@ -16,17 +17,17 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
     // Check if already logged in
     let existing_auth = auth::resolve_auth();
     if existing_auth.api_key.is_some() {
-        println!("You are already logged in.");
+        status!("You are already logged in.");
         return Ok(());
     }
 
-    println!("Launching browser for authentication...");
+    status!("Launching browser for authentication...");
 
     let (api_key, name) = login_flow().await?;
 
     save_api_key(&api_key, &name)?;
 
-    println!("Authentication successful! Your API key has been saved.");
+    status!("Authentication successful! Your API key has been saved.");
 
     Ok(())
 }
@@ -45,13 +46,13 @@ async fn login_flow() -> anyhow::Result<(String, String)> {
         state
     );
 
-    println!("Opening your browser for authentication...");
-    println!("If it does not open automatically, please click:");
-    println!("{auth_url}");
+    status!("Opening your browser for authentication...");
+    status!("If it does not open automatically, please click:");
+    status!("{auth_url}");
 
     if let Err(e) = open::that(&auth_url) {
-        eprintln!("Warning: could not open browser automatically: {e}");
-        eprintln!("Please open the URL above manually.");
+        status!("Warning: could not open browser automatically: {e}");
+        status!("Please open the URL above manually.");
     }
 
     // Wait for the callback with timeout

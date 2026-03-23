@@ -4,6 +4,8 @@ use clap::Parser;
 use dialoguer::{Input, Select};
 use serde::Deserialize;
 
+use crate::status;
+
 #[derive(Parser)]
 pub struct Args {
     /// Template to start from
@@ -99,7 +101,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         manifest.version, template_path
     );
 
-    println!("Downloading template '{}'...", example.title);
+    status!("Downloading template '{}'...", example.title);
 
     let client = reqwest::Client::new();
     let response = client.get(&download_url).send().await?;
@@ -136,20 +138,20 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         anyhow::bail!("Failed to extract template archive.");
     }
 
-    println!(
+    status!(
         "Project '{}' created at {}",
         project_name,
         target_dir.display()
     );
-    println!("\nNext steps:");
-    println!("  cd {project_name}");
+    status!("\nNext steps:");
+    status!("  cd {project_name}");
 
     match example.language.as_deref() {
         Some("python") => {
-            println!("  pip install -r requirements.txt");
+            status!("  pip install -r requirements.txt");
         }
         _ => {
-            println!("  npm install");
+            status!("  npm install");
         }
     }
 

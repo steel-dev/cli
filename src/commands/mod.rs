@@ -179,6 +179,8 @@ Environment:
   STEEL_BROWSER_API_URL                Steel Browser API endpoint
   STEEL_LOCAL_API_URL                  Local runtime API endpoint
   STEEL_CONFIG_DIR                     Custom config directory
+  STEEL_FORCE_TTY                      Force text output when piped (disable auto-JSON)
+  NO_COLOR                             Disable colored output
 
 Examples:
   steel scrape https://example.com
@@ -288,7 +290,7 @@ pub enum Command {
 }
 
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
-    crate::util::output::set_json_mode(cli.json);
+    crate::util::output::init(cli.json);
     crate::util::api::init(cli.local, cli.api_url);
 
     match cli.command {

@@ -3,6 +3,7 @@ use std::process::Command as ProcessCommand;
 use clap::{Parser, Subcommand};
 
 use crate::config;
+use crate::status;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -66,9 +67,9 @@ fn run_install(args: InstallArgs) -> anyhow::Result<()> {
     let path = repo_path();
 
     if path.exists() {
-        println!("Local Steel Browser runtime already installed.");
-        println!("repo_path: {}", path.display());
-        println!("repo_url: {repo_url}");
+        status!("Local Steel Browser runtime already installed.");
+        status!("repo_path: {}", path.display());
+        status!("repo_url: {repo_url}");
         return Ok(());
     }
 
@@ -85,9 +86,9 @@ fn run_install(args: InstallArgs) -> anyhow::Result<()> {
         anyhow::bail!("Failed to clone repository.");
     }
 
-    println!("Local Steel Browser runtime installed.");
-    println!("repo_path: {}", path.display());
-    println!("repo_url: {repo_url}");
+    status!("Local Steel Browser runtime installed.");
+    status!("repo_path: {}", path.display());
+    status!("repo_url: {repo_url}");
 
     Ok(())
 }
@@ -95,7 +96,7 @@ fn run_install(args: InstallArgs) -> anyhow::Result<()> {
 fn run_start(args: StartArgs) -> anyhow::Result<()> {
     if args.docker_check {
         return if is_docker_running() {
-            println!("Docker is running.");
+            status!("Docker is running.");
             Ok(())
         } else {
             anyhow::bail!("Docker is not running.");
@@ -124,9 +125,9 @@ fn run_start(args: StartArgs) -> anyhow::Result<()> {
         anyhow::bail!("Failed to start local Steel Browser runtime.");
     }
 
-    println!("Local Steel Browser runtime started.");
-    println!("repo_path: {}", path.display());
-    println!("api_port: {port}");
+    status!("Local Steel Browser runtime started.");
+    status!("repo_path: {}", path.display());
+    status!("api_port: {port}");
 
     Ok(())
 }
@@ -150,8 +151,8 @@ fn run_stop(args: StopArgs) -> anyhow::Result<()> {
         anyhow::bail!("Failed to stop local Steel Browser runtime.");
     }
 
-    println!("Local Steel Browser runtime stopped.");
-    println!("repo_path: {}", path.display());
+    status!("Local Steel Browser runtime stopped.");
+    status!("repo_path: {}", path.display());
 
     Ok(())
 }

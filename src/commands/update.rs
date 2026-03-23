@@ -1,5 +1,7 @@
 use clap::Parser;
 
+use crate::status;
+
 #[derive(Parser)]
 pub struct Args {
     /// Force update even if already on latest version
@@ -12,7 +14,7 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    println!("Checking for updates...");
+    status!("Checking for updates...");
 
     let client = reqwest::Client::new();
     let current_version = env!("CARGO_PKG_VERSION");
@@ -35,7 +37,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     };
 
     let Some(latest) = latest_version else {
-        println!("Could not check for updates. Please check your network connection.");
+        status!("Could not check for updates. Please check your network connection.");
         return Ok(());
     };
 
@@ -43,20 +45,20 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     if args.check {
         if is_newer {
-            println!("Update available: v{current_version} -> v{latest}");
-            println!("Run `steel update` to install.");
+            status!("Update available: v{current_version} -> v{latest}");
+            status!("Run `steel update` to install.");
         } else {
-            println!("v{current_version} (latest)");
+            status!("v{current_version} (latest)");
         }
         return Ok(());
     }
 
     if !is_newer && !args.force {
-        println!("v{current_version} (latest)");
+        status!("v{current_version} (latest)");
         return Ok(());
     }
 
-    println!("Updating v{current_version} -> v{latest}...");
+    status!("Updating v{current_version} -> v{latest}...");
 
     // Use cargo-dist installer
     let status = std::process::Command::new("sh")
@@ -70,7 +72,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     match status {
         Ok(s) if s.success() => {
-            println!("Updated to v{latest}");
+            status!("Updated to v{latest}");
         }
         _ => {
             anyhow::bail!(

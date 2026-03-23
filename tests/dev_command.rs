@@ -16,9 +16,11 @@ fn steel_cmd() -> Command {
 }
 
 /// Helper: run `steel` with a temporary STEEL_CONFIG_DIR so tests are isolated.
+/// Also sets STEEL_FORCE_TTY=1 to keep text output in piped test environments.
 fn steel_with_tmp_config(tmp: &tempfile::TempDir) -> Command {
     let mut cmd = steel_cmd();
     cmd.env("STEEL_CONFIG_DIR", tmp.path());
+    cmd.env("STEEL_FORCE_TTY", "1");
     cmd
 }
 
@@ -176,10 +178,10 @@ fn install_skips_when_repo_already_exists() {
         "steel dev install should succeed (skip) when repo exists"
     );
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stdout.contains("already installed"),
-        "expected 'already installed' in stdout, got:\n{stdout}"
+        stderr.contains("already installed"),
+        "expected 'already installed' in stderr, got:\n{stderr}"
     );
 }
 

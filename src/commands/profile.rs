@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use serde_json::json;
 
 use crate::browser::{profile_porter, profile_store};
+use crate::status;
 use crate::util::{api, output};
 
 #[derive(Subcommand)]
@@ -185,9 +186,10 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
     // Check for existing profile
     let existing = profile_store::read_profile(&args.name)?;
     if let Some(ref existing) = existing {
-        eprintln!(
+        status!(
             "Profile \"{}\" already exists (id: {}). Overwriting.",
-            args.name, existing.profile_id
+            args.name,
+            existing.profile_id
         );
     }
 
@@ -235,7 +237,7 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
             .filter(|b| profile_porter::is_browser_running(*b))
             .collect();
         for b in &running {
-            eprintln!(
+            status!(
                 "Warning: {} is currently running. Some data may be locked.",
                 b.display_name()
             );
@@ -266,7 +268,7 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
     let selected = selected.profile;
 
     // Package
-    println!(
+    status!(
         "Importing {} ({}) → {}...",
         selected.dir_name,
         browser_id.display_name(),
@@ -274,13 +276,13 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
     );
     let result =
         profile_porter::package_profile(browser_id, &selected.dir_name, args.full, &|msg| {
-            println!("  {msg}");
+            status!("  {msg}");
         })?;
 
     let size_mb = result.zip_buffer.len() as f64 / 1024.0 / 1024.0;
 
     // Upload
-    println!("  Uploading...");
+    status!("  Uploading...");
     let profile_id = if let Some(ref existing) = existing {
         profile_porter::update_profile_on_steel(
             &existing.profile_id,
@@ -302,22 +304,25 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         Some(browser_id.as_str()),
     )?;
 
-    println!();
-    println!("  {}", args.name);
-    println!("  id: {profile_id}");
+    status!();
+    status!("  {}", args.name);
+    status!("  id: {profile_id}");
     if result.cookies_skipped > 0 {
-        println!(
+        status!(
             "  cookies: {} re-encrypted, {} skipped · {:.1} MB",
-            result.cookies_reencrypted, result.cookies_skipped, size_mb
+            result.cookies_reencrypted,
+            result.cookies_skipped,
+            size_mb
         );
     } else {
-        println!(
+        status!(
             "  cookies: {} re-encrypted · {:.1} MB",
-            result.cookies_reencrypted, size_mb
+            result.cookies_reencrypted,
+            size_mb
         );
     }
-    println!();
-    println!("  steel browser start --profile {}", args.name);
+    status!();
+    status!("  steel browser start --profile {}", args.name);
 
     Ok(())
 }
@@ -373,27 +378,27 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
     }
 
     if profile_porter::is_browser_running(browser_id) {
-        eprintln!(
+        status!(
             "Warning: {} is currently running. Some data may be locked.",
             browser_id.display_name()
         );
     }
 
     // Package
-    println!(
+    status!(
         "Syncing {} ({}) → {}...",
         profile_source,
         browser_id.display_name(),
         args.name
     );
     let result = profile_porter::package_profile(browser_id, &profile_source, args.full, &|msg| {
-        println!("  {msg}");
+        status!("  {msg}");
     })?;
 
     let size_mb = result.zip_buffer.len() as f64 / 1024.0 / 1024.0;
 
     // Update on Steel
-    println!("  Uploading...");
+    status!("  Uploading...");
     profile_porter::update_profile_on_steel(
         &stored.profile_id,
         result.zip_buffer,
@@ -416,17 +421,20 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         )?;
     }
 
-    println!();
-    println!("  Synced {}", args.name);
+    status!();
+    status!("  Synced {}", args.name);
     if result.cookies_skipped > 0 {
-        println!(
+        status!(
             "  {} cookies re-encrypted, {} skipped · {:.1} MB",
-            result.cookies_reencrypted, result.cookies_skipped, size_mb
+            result.cookies_reencrypted,
+            result.cookies_skipped,
+            size_mb
         );
     } else {
-        println!(
+        status!(
             "  {} cookies re-encrypted · {:.1} MB",
-            result.cookies_reencrypted, size_mb
+            result.cookies_reencrypted,
+            size_mb
         );
     }
 
