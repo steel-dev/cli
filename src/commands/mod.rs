@@ -2,6 +2,7 @@ pub mod browser;
 pub mod cache;
 pub mod config;
 pub mod credentials;
+pub mod describe;
 pub mod dev;
 pub mod forge;
 pub mod login;
@@ -239,7 +240,7 @@ pub enum Command {
         session_name: String,
     },
 
-    /// Scrape webpage content (markdown output by default)
+    /// Scrape webpage content
     Scrape(scrape::Args),
 
     /// Capture a screenshot of a webpage
@@ -287,6 +288,9 @@ pub enum Command {
         #[command(subcommand)]
         command: profile::Command,
     },
+
+    /// Describe commands and parameters
+    Describe(describe::Args),
 }
 
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
@@ -315,5 +319,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Update(args) => update::run(args).await,
         Command::Cache(args) => cache::run(args).await,
         Command::Profile { command } => profile::run(command).await,
+        Command::Describe(args) => describe::run(args).await,
     }
 }
