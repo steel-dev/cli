@@ -21,6 +21,7 @@ use browser_engine::native::snapshot::{self, SnapshotOptions};
 pub struct BrowserEngine {
     pub manager: BrowserManager,
     pub ref_map: RefMap,
+    pub iframe_sessions: HashMap<String, String>,
 }
 
 impl BrowserEngine {
@@ -32,6 +33,7 @@ impl BrowserEngine {
         Ok(Self {
             manager,
             ref_map: RefMap::new(),
+            iframe_sessions: HashMap::new(),
         })
     }
 
@@ -52,7 +54,7 @@ impl BrowserEngine {
             .manager
             .active_session_id()
             .map_err(|e| anyhow::anyhow!(e))?;
-        snapshot::take_snapshot(client, session_id, &options, &mut self.ref_map)
+        snapshot::take_snapshot(client, session_id, &options, &mut self.ref_map, None, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -118,8 +120,8 @@ impl BrowserEngine {
 
         if new_tab {
             // Resolve element's href and open in new tab
-            let object_id =
-                element::resolve_element_object_id(client, session_id, &self.ref_map, selector)
+            let (object_id, _effective_session) =
+                element::resolve_element_object_id(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
                     .await
                     .map_err(|e| anyhow::anyhow!(e))?;
             let call_params = serde_json::json!({
@@ -160,6 +162,7 @@ impl BrowserEngine {
             selector,
             button.unwrap_or("left"),
             click_count.unwrap_or(1),
+            &self.iframe_sessions,
         )
         .await
         .map_err(|e| anyhow::anyhow!(e))
@@ -168,7 +171,7 @@ impl BrowserEngine {
     /// Fill an input field (clears first, then inserts text).
     pub async fn fill(&self, selector: &str, value: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::fill(client, session_id, &self.ref_map, selector, value)
+        interaction::fill(client, session_id, &self.ref_map, selector, value, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -190,6 +193,7 @@ impl BrowserEngine {
             text,
             clear,
             delay_ms,
+            &self.iframe_sessions,
         )
         .await
         .map_err(|e| anyhow::anyhow!(e))
@@ -212,9 +216,9 @@ impl BrowserEngine {
                 ..SnapshotOptions::default()
             };
             let _ =
-                snapshot::take_snapshot(client, session_id, &snap_opts, &mut self.ref_map).await;
+                snapshot::take_snapshot(client, session_id, &snap_opts, &mut self.ref_map, None, &self.iframe_sessions).await;
         }
-        screenshot::take_screenshot(client, session_id, &self.ref_map, &options)
+        screenshot::take_screenshot(client, session_id, &self.ref_map, &options, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -222,7 +226,7 @@ impl BrowserEngine {
     /// Hover over an element.
     pub async fn hover(&self, selector: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::hover(client, session_id, &self.ref_map, selector)
+        interaction::hover(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -237,6 +241,7 @@ impl BrowserEngine {
             selector,
             delta_x,
             delta_y,
+            &self.iframe_sessions,
         )
         .await
         .map_err(|e| anyhow::anyhow!(e))
@@ -245,7 +250,7 @@ impl BrowserEngine {
     /// Select dropdown option(s).
     pub async fn select(&self, selector: &str, values: &[String]) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::select_option(client, session_id, &self.ref_map, selector, values)
+        interaction::select_option(client, session_id, &self.ref_map, selector, values, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -261,7 +266,7 @@ impl BrowserEngine {
     /// Check a checkbox.
     pub async fn check(&self, selector: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::check(client, session_id, &self.ref_map, selector)
+        interaction::check(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -269,7 +274,7 @@ impl BrowserEngine {
     /// Uncheck a checkbox.
     pub async fn uncheck(&self, selector: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::uncheck(client, session_id, &self.ref_map, selector)
+        interaction::uncheck(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -277,7 +282,7 @@ impl BrowserEngine {
     /// Get the text content of an element.
     pub async fn get_text(&self, selector: &str) -> Result<String> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::get_element_text(client, session_id, &self.ref_map, selector)
+        element::get_element_text(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -289,7 +294,7 @@ impl BrowserEngine {
         attribute: &str,
     ) -> Result<serde_json::Value> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::get_element_attribute(client, session_id, &self.ref_map, selector, attribute)
+        element::get_element_attribute(client, session_id, &self.ref_map, selector, attribute, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -297,7 +302,7 @@ impl BrowserEngine {
     /// Check if an element is visible.
     pub async fn is_visible(&self, selector: &str) -> Result<bool> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::is_element_visible(client, session_id, &self.ref_map, selector)
+        element::is_element_visible(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -305,7 +310,7 @@ impl BrowserEngine {
     /// Check if an element is enabled.
     pub async fn is_enabled(&self, selector: &str) -> Result<bool> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::is_element_enabled(client, session_id, &self.ref_map, selector)
+        element::is_element_enabled(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -313,7 +318,7 @@ impl BrowserEngine {
     /// Check if a checkbox/radio is checked.
     pub async fn is_checked(&self, selector: &str) -> Result<bool> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::is_element_checked(client, session_id, &self.ref_map, selector)
+        element::is_element_checked(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -444,7 +449,7 @@ impl BrowserEngine {
     /// Double-click an element.
     pub async fn dblclick(&self, selector: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::dblclick(client, session_id, &self.ref_map, selector)
+        interaction::dblclick(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -452,7 +457,7 @@ impl BrowserEngine {
     /// Focus an element.
     pub async fn focus(&self, selector: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::focus(client, session_id, &self.ref_map, selector)
+        interaction::focus(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -460,7 +465,7 @@ impl BrowserEngine {
     /// Clear an input field.
     pub async fn clear(&self, selector: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::clear(client, session_id, &self.ref_map, selector)
+        interaction::clear(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -468,7 +473,7 @@ impl BrowserEngine {
     /// Select all text in an input.
     pub async fn select_all(&self, selector: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::select_all(client, session_id, &self.ref_map, selector)
+        interaction::select_all(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -476,7 +481,7 @@ impl BrowserEngine {
     /// Scroll an element into view.
     pub async fn scroll_into_view(&self, selector: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::scroll_into_view(client, session_id, &self.ref_map, selector)
+        interaction::scroll_into_view(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -484,7 +489,7 @@ impl BrowserEngine {
     /// Get inner text of an element.
     pub async fn inner_text(&self, selector: &str) -> Result<String> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::get_element_inner_text(client, session_id, &self.ref_map, selector)
+        element::get_element_inner_text(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -492,7 +497,7 @@ impl BrowserEngine {
     /// Get inner HTML of an element.
     pub async fn inner_html(&self, selector: &str) -> Result<String> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::get_element_inner_html(client, session_id, &self.ref_map, selector)
+        element::get_element_inner_html(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -500,7 +505,7 @@ impl BrowserEngine {
     /// Get the value of an input/textarea.
     pub async fn input_value(&self, selector: &str) -> Result<String> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::get_element_input_value(client, session_id, &self.ref_map, selector)
+        element::get_element_input_value(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -508,7 +513,7 @@ impl BrowserEngine {
     /// Set the value of an input (without events).
     pub async fn set_value(&self, selector: &str, value: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::set_element_value(client, session_id, &self.ref_map, selector, value)
+        element::set_element_value(client, session_id, &self.ref_map, selector, value, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -524,7 +529,7 @@ impl BrowserEngine {
     /// Get the bounding box of an element.
     pub async fn bounding_box(&self, selector: &str) -> Result<serde_json::Value> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::get_element_bounding_box(client, session_id, &self.ref_map, selector)
+        element::get_element_bounding_box(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -536,7 +541,7 @@ impl BrowserEngine {
         properties: Option<Vec<String>>,
     ) -> Result<serde_json::Value> {
         let (client, session_id) = self.active_client_and_session()?;
-        element::get_element_styles(client, session_id, &self.ref_map, selector, properties)
+        element::get_element_styles(client, session_id, &self.ref_map, selector, properties, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -733,10 +738,10 @@ impl BrowserEngine {
     /// Drag and drop from one element to another.
     pub async fn drag(&self, source: &str, target: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        let src_box = element::get_element_bounding_box(client, session_id, &self.ref_map, source)
+        let src_box = element::get_element_bounding_box(client, session_id, &self.ref_map, source, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
-        let tgt_box = element::get_element_bounding_box(client, session_id, &self.ref_map, target)
+        let tgt_box = element::get_element_bounding_box(client, session_id, &self.ref_map, target, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
 
@@ -802,8 +807,8 @@ impl BrowserEngine {
     /// Upload files to a file input element.
     pub async fn upload_files(&self, selector: &str, files: &[String]) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        let object_id =
-            element::resolve_element_object_id(client, session_id, &self.ref_map, selector)
+        let (object_id, _effective_session) =
+            element::resolve_element_object_id(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
                 .await
                 .map_err(|e| anyhow::anyhow!(e))?;
         client
@@ -822,7 +827,7 @@ impl BrowserEngine {
     /// Visually highlight an element.
     pub async fn highlight(&self, selector: &str) -> Result<()> {
         let (client, session_id) = self.active_client_and_session()?;
-        interaction::highlight(client, session_id, &self.ref_map, selector)
+        interaction::highlight(client, session_id, &self.ref_map, selector, &self.iframe_sessions)
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
