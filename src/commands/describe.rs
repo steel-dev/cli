@@ -83,10 +83,7 @@ pub async fn run(args: Args) -> Result<()> {
 
 // ── Command resolution ──────────────────────────────────────────────
 
-fn resolve_command(
-    root: &clap::Command,
-    path: &[String],
-) -> Result<(clap::Command, Vec<String>)> {
+fn resolve_command(root: &clap::Command, path: &[String]) -> Result<(clap::Command, Vec<String>)> {
     let mut current = root.clone();
     let mut resolved_path = vec![root.get_name().to_string()];
 

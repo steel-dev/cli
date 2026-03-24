@@ -90,20 +90,17 @@ const FLAG_PARITY: &[FlagParity] = &[
     FlagParity {
         command: "screenshot",
         steel_path: &["screenshot"],
-        // Screenshot flags are global in agent-browser (Flags struct),
-        // so they won't appear in the screenshot match arm.
-        inline_covered: &[],
+        // --full and -f now appear inline in agent-browser's screenshot match arm.
+        // Steel maps these via --full-page with alias --full.
+        inline_covered: &[("--full", "full-page"), ("-f", "full-page")],
         inline_skipped: &[],
         global_covered: &[
-            ("--full", "full-page"),
             ("--annotate", "annotate"),
             ("--screenshot-format", "format"),
             ("--screenshot-quality", "quality"),
         ],
-        // -f is the global short for --full in agent-browser; in Steel's
-        // subcommand architecture we use --full as alias instead.
         // --screenshot-dir: not exposed as CLI flag (hardcoded to None).
-        global_skipped: &["-f", "--screenshot-dir"],
+        global_skipped: &["--screenshot-dir"],
     },
     FlagParity {
         command: "navigate",

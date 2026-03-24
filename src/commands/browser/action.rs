@@ -423,7 +423,7 @@ pub struct SnapshotArgs {
 #[derive(Parser)]
 pub struct ScreenshotArgs {
     /// Capture the full scrollable page
-    #[arg(long, alias = "full")]
+    #[arg(short = 'f', long, alias = "full")]
     pub full_page: bool,
     /// Output file path
     #[arg(short, long, default_value = "screenshot.png")]
