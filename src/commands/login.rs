@@ -5,8 +5,8 @@ use tokio::net::TcpListener;
 
 use crate::config;
 use crate::config::auth;
-use crate::status;
 use crate::config::settings::{Config, read_config_from, write_config_to};
+use crate::status;
 
 #[derive(Parser)]
 pub struct Args {}

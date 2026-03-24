@@ -40,7 +40,7 @@ pub struct SubcommandInfo {
     pub has_subcommands: bool,
     // Only present in --all mode
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub subcommands: Option<Vec<SubcommandInfo>>,
+    pub subcommands: Option<Vec<Self>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parameters: Option<Vec<ParameterInfo>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -83,8 +83,8 @@ pub async fn run(args: Args) -> Result<()> {
 
 // ── Command resolution ──────────────────────────────────────────────
 
-fn resolve_command<'a>(
-    root: &'a clap::Command,
+fn resolve_command(
+    root: &clap::Command,
     path: &[String],
 ) -> Result<(clap::Command, Vec<String>)> {
     let mut current = root.clone();

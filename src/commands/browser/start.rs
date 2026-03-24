@@ -2,11 +2,11 @@ use clap::Parser;
 use serde_json::json;
 
 use crate::browser::daemon::client::DaemonClient;
-use crate::status;
 use crate::browser::daemon::process;
 use crate::browser::daemon::protocol::{DaemonCommand, DaemonCreateParams, SessionInfo};
 use crate::browser::lifecycle::sanitize_connect_url;
 use crate::browser::profile_store;
+use crate::status;
 use crate::util::{api, output};
 
 #[derive(Parser)]
