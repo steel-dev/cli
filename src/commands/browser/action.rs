@@ -7,8 +7,10 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::browser::daemon::client::DaemonClient;
-use crate::browser::daemon::protocol::DaemonCommand;
-use crate::util::output;
+use crate::browser::daemon::process;
+use crate::browser::daemon::protocol::{DaemonCommand, DaemonCreateParams};
+use crate::status;
+use crate::util::{api, output};
 
 // ── Shared arg types ────────────────────────────────────────────────
 
@@ -1169,17 +1171,34 @@ async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Re
 async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
     let name = session_name.unwrap_or("default");
     // connect() already cleans up stale sockets via cleanup_if_dead()
-    DaemonClient::connect(name).await.map_err(|_| {
-        if name == "default" {
-            anyhow::anyhow!(
-                "No active browser session. Start one with: steel browser start"
-            )
-        } else {
-            anyhow::anyhow!(
-                "No running session \"{name}\". Start one with: steel browser start --session {name}"
-            )
-        }
-    })
+    if let Ok(client) = DaemonClient::connect(name).await {
+        return Ok(client);
+    }
+
+    status!("Starting browser session...");
+
+    let (mode, base_url, auth) = api::resolve_with_auth();
+    let params = DaemonCreateParams {
+        api_key: auth.api_key,
+        base_url,
+        mode,
+        session_name: name.to_string(),
+        stealth: false,
+        proxy_url: None,
+        timeout_ms: None,
+        headless: None,
+        region: None,
+        solve_captcha: false,
+        profile_id: None,
+        persist_profile: false,
+        namespace: None,
+        credentials: false,
+    };
+
+    let child = process::spawn_daemon(name, &params)?;
+    process::wait_for_daemon(name, child, std::time::Duration::from_secs(30)).await?;
+
+    DaemonClient::connect(name).await
 }
 
 /// On action failure, check if daemon is still reachable. If not, suggest restarting.
