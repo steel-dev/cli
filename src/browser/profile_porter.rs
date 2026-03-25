@@ -673,9 +673,11 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
     let conn = rusqlite::Connection::open(&tmp_path)?;
 
     let meta_version: i64 = conn
-        .query_row("SELECT value FROM meta WHERE key='version'", [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT CAST(value AS INTEGER) FROM meta WHERE key='version'",
+            [],
+            |row| row.get(0),
+        )
         .unwrap_or(0);
 
     let mut stmt = conn.prepare(
@@ -1127,5 +1129,580 @@ mod tests {
         let files = collect_files(dir, dir);
         assert_eq!(files.len(), 1);
         assert!(files.contains_key("good.txt"));
+    }
+
+    struct TestCookie {
+        host_key: &'static str,
+        name: &'static str,
+        value: &'static str,
+    }
+
+    /// Create a minimal Chromium Cookies SQLite DB with the real schema.
+    fn create_test_cookies_db(path: &Path, meta_version: i64, cookies: &[(&str, &str, &[u8])]) {
+        let conn = rusqlite::Connection::open(path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);
+             CREATE TABLE cookies(
+                 creation_utc INTEGER NOT NULL,
+                 host_key TEXT NOT NULL DEFAULT '',
+                 top_frame_site_key TEXT NOT NULL DEFAULT '',
+                 name TEXT NOT NULL DEFAULT '',
+                 value TEXT NOT NULL DEFAULT '',
+                 encrypted_value BLOB NOT NULL DEFAULT X'',
+                 path TEXT NOT NULL DEFAULT '/',
+                 expires_utc INTEGER NOT NULL DEFAULT 0,
+                 is_secure INTEGER NOT NULL DEFAULT 0,
+                 is_httponly INTEGER NOT NULL DEFAULT 0,
+                 last_access_utc INTEGER NOT NULL DEFAULT 0,
+                 has_expires INTEGER NOT NULL DEFAULT 1,
+                 is_persistent INTEGER NOT NULL DEFAULT 1,
+                 priority INTEGER NOT NULL DEFAULT 1,
+                 samesite INTEGER NOT NULL DEFAULT -1,
+                 source_scheme INTEGER NOT NULL DEFAULT 0,
+                 source_port INTEGER NOT NULL DEFAULT -1,
+                 last_update_utc INTEGER NOT NULL DEFAULT 0,
+                 source_type INTEGER NOT NULL DEFAULT 0,
+                 has_cross_site_ancestor INTEGER NOT NULL DEFAULT 0
+             );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES ('version', ?1)",
+            rusqlite::params![meta_version],
+        )
+        .unwrap();
+        for (i, (host_key, name, encrypted_value)) in cookies.iter().enumerate() {
+            conn.execute(
+                "INSERT INTO cookies (creation_utc, host_key, name, encrypted_value, \
+                 last_access_utc, last_update_utc) VALUES (?1, ?2, ?3, ?4, ?1, ?1)",
+                rusqlite::params![i as i64 + 1, host_key, name, *encrypted_value],
+            )
+            .unwrap();
+        }
+    }
+
+    /// Create a browser profile directory with encrypted test cookies.
+    fn scaffold_browser_profile(
+        base_dir: &Path,
+        profile_name: &str,
+        meta_version: i64,
+        test_cookies: &[TestCookie],
+        source_key: &[u8; 16],
+    ) -> PathBuf {
+        let profile_dir = base_dir.join(profile_name);
+        std::fs::create_dir_all(&profile_dir).unwrap();
+
+        let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
+            .iter()
+            .map(|c| {
+                let enc = encrypt_cookie(c.value, source_key, c.host_key, meta_version);
+                (c.host_key, c.name, enc)
+            })
+            .collect();
+        let cookie_refs: Vec<(&str, &str, &[u8])> = encrypted
+            .iter()
+            .map(|(h, n, e)| (*h, *n, e.as_slice()))
+            .collect();
+
+        create_test_cookies_db(&profile_dir.join("Cookies"), meta_version, &cookie_refs);
+
+        let ls_dir = profile_dir.join("Local Storage").join("leveldb");
+        std::fs::create_dir_all(&ls_dir).unwrap();
+        std::fs::write(ls_dir.join("CURRENT"), "MANIFEST-000001\n").unwrap();
+
+        profile_dir
+    }
+
+    /// Verify that a re-encrypted DB can be decrypted with the "peanuts" key.
+    fn verify_reencrypted_db(
+        db_bytes: &[u8],
+        expected_cookies: &[(&str, &str, &str)],
+        meta_version: i64,
+    ) {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), db_bytes).unwrap();
+        let conn = rusqlite::Connection::open(tmp.path()).unwrap();
+        let peanuts_key = derive_target_key();
+
+        let mut stmt = conn
+            .prepare("SELECT host_key, name, encrypted_value FROM cookies ORDER BY creation_utc")
+            .unwrap();
+        let rows: Vec<(String, String, Vec<u8>)> = stmt
+            .query_map([], |row| {
+                let ev: Vec<u8> = match row.get_ref(2)? {
+                    rusqlite::types::ValueRef::Blob(b) => b.to_vec(),
+                    rusqlite::types::ValueRef::Text(t) => t.to_vec(),
+                    _ => Vec::new(),
+                };
+                Ok((row.get(0)?, row.get(1)?, ev))
+            })
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap();
+
+        assert_eq!(rows.len(), expected_cookies.len(), "cookie count mismatch");
+        for ((host_key, name, encrypted_value), (exp_host, exp_name, exp_value)) in
+            rows.iter().zip(expected_cookies.iter())
+        {
+            assert_eq!(host_key, exp_host);
+            assert_eq!(name, exp_name);
+            let decrypted = decrypt_cookie(
+                encrypted_value,
+                &peanuts_key,
+                host_key,
+                meta_version,
+                CryptoAlgorithm::Aes128Cbc,
+            );
+            assert_eq!(
+                decrypted.as_deref(),
+                Some(*exp_value),
+                "Cookie {name} on {host_key} not decryptable with peanuts key"
+            );
+        }
+    }
+
+    /// Find a Chromium-based binary on the system for compatibility testing.
+    fn find_chromium_binary() -> Option<String> {
+        let candidates: &[&str] = if cfg!(target_os = "macos") {
+            &["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
+        } else {
+            &[
+                "google-chrome-stable",
+                "google-chrome",
+                "chromium-browser",
+                "chromium",
+            ]
+        };
+        for &c in candidates {
+            let ok = if c.contains('/') {
+                Path::new(c).exists()
+            } else {
+                std::process::Command::new(c)
+                    .arg("--version")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+            };
+            if ok {
+                return Some(c.to_string());
+            }
+        }
+        None
+    }
+
+    /// Extract the packaged zip and launch Chromium headless to verify the
+    /// profile loads without crashing.
+    fn verify_chromium_loads_profile(zip_buffer: &[u8]) {
+        let Some(chromium) = find_chromium_binary() else {
+            eprintln!("Skipping Chromium load test — no binary found");
+            return;
+        };
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cursor = std::io::Cursor::new(zip_buffer);
+        let mut archive = zip::ZipArchive::new(cursor).unwrap();
+        archive.extract(tmp.path()).unwrap();
+
+        let output = std::process::Command::new(&chromium)
+            .args([
+                "--headless",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--no-first-run",
+                "--disable-sync",
+                &format!("--user-data-dir={}", tmp.path().display()),
+                "--dump-dom",
+                "about:blank",
+            ])
+            .output()
+            .expect("failed to launch Chromium");
+
+        assert!(
+            output.status.success(),
+            "Chromium failed to load packaged profile:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    // ─── Unit tests: reencrypt pipeline ──────────────────────────────────────
+
+    #[test]
+    fn reencrypt_cookies_db_synthetic() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cookies_path = tmp.path().join("Cookies");
+
+        let source_key = derive_key("testpass", 1);
+        let target_key = derive_target_key();
+        assert_ne!(source_key, target_key, "source and target keys must differ");
+
+        let meta_version = 20;
+        let test_cookies = [
+            TestCookie {
+                host_key: ".example.com",
+                name: "session",
+                value: "abc123",
+            },
+            TestCookie {
+                host_key: ".google.com",
+                name: "NID",
+                value: "some_value",
+            },
+            TestCookie {
+                host_key: "localhost",
+                name: "dev_token",
+                value: "dev_secret",
+            },
+        ];
+
+        let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
+            .iter()
+            .map(|c| {
+                let enc = encrypt_cookie(c.value, &source_key, c.host_key, meta_version);
+                (c.host_key, c.name, enc)
+            })
+            .collect();
+        let cookie_refs: Vec<(&str, &str, &[u8])> = encrypted
+            .iter()
+            .map(|(h, n, e)| (*h, *n, e.as_slice()))
+            .collect();
+
+        create_test_cookies_db(&cookies_path, meta_version, &cookie_refs);
+
+        let mut sk = [0u8; 32];
+        sk[..16].copy_from_slice(&source_key);
+        let provider = KeyProvider {
+            source_key: sk,
+            source_key_len: 16,
+            source_algorithm: CryptoAlgorithm::Aes128Cbc,
+        };
+
+        let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
+        assert_eq!(result.converted, 3);
+        assert_eq!(result.skipped, 0);
+
+        verify_reencrypted_db(
+            &result.buffer,
+            &[
+                (".example.com", "session", "abc123"),
+                (".google.com", "NID", "some_value"),
+                ("localhost", "dev_token", "dev_secret"),
+            ],
+            meta_version,
+        );
+    }
+
+    #[test]
+    fn reencrypt_cookies_db_v24_domain_hash() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cookies_path = tmp.path().join("Cookies");
+
+        let source_key = derive_key("testpass", 1);
+        let meta_version = 24;
+
+        let test_cookies = [
+            TestCookie {
+                host_key: ".example.com",
+                name: "session",
+                value: "v24_value",
+            },
+            TestCookie {
+                host_key: ".domain.org",
+                name: "pref",
+                value: "domain_pref",
+            },
+        ];
+
+        let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
+            .iter()
+            .map(|c| {
+                let enc = encrypt_cookie(c.value, &source_key, c.host_key, meta_version);
+                (c.host_key, c.name, enc)
+            })
+            .collect();
+        let cookie_refs: Vec<(&str, &str, &[u8])> = encrypted
+            .iter()
+            .map(|(h, n, e)| (*h, *n, e.as_slice()))
+            .collect();
+
+        create_test_cookies_db(&cookies_path, meta_version, &cookie_refs);
+
+        let mut sk = [0u8; 32];
+        sk[..16].copy_from_slice(&source_key);
+        let provider = KeyProvider {
+            source_key: sk,
+            source_key_len: 16,
+            source_algorithm: CryptoAlgorithm::Aes128Cbc,
+        };
+
+        let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
+        assert_eq!(result.converted, 2);
+        assert_eq!(result.skipped, 0);
+
+        verify_reencrypted_db(
+            &result.buffer,
+            &[
+                (".example.com", "session", "v24_value"),
+                (".domain.org", "pref", "domain_pref"),
+            ],
+            meta_version,
+        );
+    }
+
+    #[test]
+    fn reencrypt_mixed_valid_and_corrupt() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cookies_path = tmp.path().join("Cookies");
+
+        let source_key = derive_key("testpass", 1);
+        let meta_version = 20;
+
+        let valid_enc = encrypt_cookie("good_value", &source_key, ".example.com", meta_version);
+        let corrupt1 = b"v10garbage_not_valid_ciphertext".to_vec();
+        let corrupt2 = b"v10\x00\x01\x02\x03".to_vec();
+
+        let cookies: Vec<(&str, &str, &[u8])> = vec![
+            (".example.com", "good", valid_enc.as_slice()),
+            (".bad1.com", "corrupt1", corrupt1.as_slice()),
+            (".bad2.com", "corrupt2", corrupt2.as_slice()),
+        ];
+
+        create_test_cookies_db(&cookies_path, meta_version, &cookies);
+
+        let mut sk = [0u8; 32];
+        sk[..16].copy_from_slice(&source_key);
+        let provider = KeyProvider {
+            source_key: sk,
+            source_key_len: 16,
+            source_algorithm: CryptoAlgorithm::Aes128Cbc,
+        };
+
+        let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
+        assert_eq!(result.converted, 1);
+        assert_eq!(result.skipped, 2);
+    }
+
+    // ─── Browser integration tests (#[ignore]) ──────────────────────────────
+
+    fn run_browser_integration_test(browser: BrowserId) {
+        if cfg!(target_os = "windows") {
+            eprintln!("Skipping integration test on Windows");
+            return;
+        }
+
+        // 1. Browser installation check
+        let profiles = find_browser_profiles(browser);
+        if profiles.is_empty() {
+            eprintln!("Skipping {} — no profiles found", browser.display_name());
+            return;
+        }
+
+        // 2. Key extraction
+        let provider = get_key_provider(browser)
+            .unwrap_or_else(|e| panic!("Failed to get key for {}: {e}", browser.display_name()));
+
+        // 3. Schema verification on existing profile
+        let desc = browser.descriptor();
+        let base_dir = desc.profile_base_dir().unwrap();
+        let first_cookies = base_dir.join(&profiles[0].dir_name).join("Cookies");
+        let meta_version: i64 = if first_cookies.exists() {
+            let conn = rusqlite::Connection::open(&first_cookies).unwrap();
+            let v: i64 = conn
+                .query_row(
+                    "SELECT CAST(value AS INTEGER) FROM meta WHERE key='version'",
+                    [],
+                    |r| r.get(0),
+                )
+                .expect("meta table should have version");
+            let mut stmt = conn.prepare("PRAGMA table_info(cookies)").unwrap();
+            let columns: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .collect::<std::result::Result<_, _>>()
+                .unwrap();
+            assert!(
+                columns.contains(&"host_key".to_string()),
+                "missing host_key"
+            );
+            assert!(
+                columns.contains(&"encrypted_value".to_string()),
+                "missing encrypted_value"
+            );
+            v
+        } else {
+            20
+        };
+
+        // 4. Create test profile
+        let test_cookies = [
+            TestCookie {
+                host_key: ".example.com",
+                name: "session",
+                value: "integration_session",
+            },
+            TestCookie {
+                host_key: ".test.org",
+                name: "auth",
+                value: "integration_auth",
+            },
+            TestCookie {
+                host_key: "localhost",
+                name: "dev",
+                value: "integration_dev",
+            },
+        ];
+        let source_key_16: [u8; 16] = provider.source_key[..16].try_into().unwrap();
+        let test_profile_name = "SteelTest";
+        let test_profile_dir = base_dir.join(test_profile_name);
+
+        if test_profile_dir.exists() {
+            std::fs::remove_dir_all(&test_profile_dir).unwrap();
+        }
+        scaffold_browser_profile(
+            &base_dir,
+            test_profile_name,
+            meta_version,
+            &test_cookies,
+            &source_key_16,
+        );
+
+        // 5. reencrypt_cookies_db
+        let reencrypt = reencrypt_cookies_db(&test_profile_dir.join("Cookies"), &provider).unwrap();
+        assert!(reencrypt.converted > 0, "should convert cookies");
+        assert_eq!(reencrypt.skipped, 0, "should not skip cookies");
+
+        // 6. package_profile
+        let pkg = package_profile(browser, test_profile_name, false, &|_| {}).unwrap();
+        assert!(pkg.cookies_reencrypted > 0);
+        assert_eq!(pkg.cookies_skipped, 0);
+
+        let cursor = std::io::Cursor::new(&pkg.zip_buffer);
+        let mut archive = zip::ZipArchive::new(cursor).unwrap();
+
+        // Default/Cookies — valid SQLite, decryptable with peanuts key
+        {
+            let mut entry = archive
+                .by_name("Default/Cookies")
+                .expect("zip missing Default/Cookies");
+            let mut buf = Vec::new();
+            std::io::Read::read_to_end(&mut entry, &mut buf).unwrap();
+            assert_eq!(&buf[..16], b"SQLite format 3\0", "not a valid SQLite file");
+            verify_reencrypted_db(
+                &buf,
+                &[
+                    (".example.com", "session", "integration_session"),
+                    (".test.org", "auth", "integration_auth"),
+                    ("localhost", "dev", "integration_dev"),
+                ],
+                meta_version,
+            );
+        }
+
+        // Default/Preferences — exit_type: Normal
+        {
+            let mut entry = archive
+                .by_name("Default/Preferences")
+                .expect("zip missing Default/Preferences");
+            let mut buf = Vec::new();
+            std::io::Read::read_to_end(&mut entry, &mut buf).unwrap();
+            let prefs: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+            assert_eq!(prefs["profile"]["exit_type"], "Normal");
+        }
+
+        // No LOCK, .log, .pma files
+        for i in 0..archive.len() {
+            let name = archive.by_index(i).unwrap().name().to_string();
+            assert!(!name.contains("LOCK"), "zip contains LOCK: {name}");
+            assert!(!name.ends_with(".log"), "zip contains .log: {name}");
+            assert!(!name.ends_with(".pma"), "zip contains .pma: {name}");
+        }
+
+        // 7. Verify Chromium can load the packaged profile
+        verify_chromium_loads_profile(&pkg.zip_buffer);
+
+        // 8. Cleanup
+        let _ = std::fs::remove_dir_all(&test_profile_dir);
+    }
+
+    #[test]
+    #[ignore]
+    fn integration_chrome_profile_import() {
+        run_browser_integration_test(BrowserId::Chrome);
+    }
+
+    #[test]
+    #[ignore]
+    fn integration_brave_profile_import() {
+        run_browser_integration_test(BrowserId::Brave);
+    }
+
+    #[test]
+    #[ignore]
+    fn integration_edge_profile_import() {
+        run_browser_integration_test(BrowserId::Edge);
+    }
+
+    #[test]
+    #[ignore]
+    fn integration_opera_profile_import() {
+        run_browser_integration_test(BrowserId::Opera);
+    }
+
+    #[test]
+    #[ignore]
+    fn integration_vivaldi_profile_import() {
+        run_browser_integration_test(BrowserId::Vivaldi);
+    }
+
+    #[test]
+    #[ignore]
+    fn integration_gnome_keyring_key_differentiation() {
+        if std::env::var("STEEL_TEST_GNOME_KEYRING").is_err() {
+            eprintln!("Skipping — STEEL_TEST_GNOME_KEYRING not set");
+            return;
+        }
+
+        let provider =
+            get_key_provider(BrowserId::Chrome).expect("Chrome key provider with GNOME Keyring");
+        let source_key_16: [u8; 16] = provider.source_key[..16].try_into().unwrap();
+        let peanuts_key = derive_target_key();
+        assert_ne!(
+            source_key_16, peanuts_key,
+            "GNOME Keyring source key should differ from peanuts"
+        );
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cookies_path = tmp.path().join("Cookies");
+        let meta_version = 20;
+
+        let test_cookies = [TestCookie {
+            host_key: ".gnome.test",
+            name: "keyring",
+            value: "secret_from_keyring",
+        }];
+        let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
+            .iter()
+            .map(|c| {
+                let enc = encrypt_cookie(c.value, &source_key_16, c.host_key, meta_version);
+                (c.host_key, c.name, enc)
+            })
+            .collect();
+        let cookie_refs: Vec<(&str, &str, &[u8])> = encrypted
+            .iter()
+            .map(|(h, n, e)| (*h, *n, e.as_slice()))
+            .collect();
+
+        create_test_cookies_db(&cookies_path, meta_version, &cookie_refs);
+
+        let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
+        assert_eq!(result.converted, 1);
+        assert_eq!(result.skipped, 0);
+
+        verify_reencrypted_db(
+            &result.buffer,
+            &[(".gnome.test", "keyring", "secret_from_keyring")],
+            meta_version,
+        );
     }
 }

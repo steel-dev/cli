@@ -1,0 +1,142 @@
+name: Browser Integration Tests
+
+on:
+  pull_request:
+    paths:
+      - "src/browser/profile_porter.rs"
+      - "src/browser/profile_store.rs"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: ${{ matrix.browser }} (Linux)
+    runs-on: ubuntu-latest
+    env:
+      DISPLAY: ":99"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - browser: chrome
+            test_filter: integration_chrome
+            binary: google-chrome-stable
+            setup: |
+              wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+              echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+              sudo apt-get update && sudo apt-get install -y google-chrome-stable
+          - browser: brave
+            test_filter: integration_brave
+            binary: brave-browser
+            setup: |
+              sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+              echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | sudo tee /etc/apt/sources.list.d/brave-browser.list
+              sudo apt-get update && sudo apt-get install -y brave-browser
+          - browser: edge
+            test_filter: integration_edge
+            binary: microsoft-edge-stable
+            setup: |
+              curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-edge.gpg
+              echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-edge.gpg] https://packages.microsoft.com/repos/edge stable main" | sudo tee /etc/apt/sources.list.d/microsoft-edge.list
+              sudo apt-get update && sudo apt-get install -y microsoft-edge-stable
+          - browser: opera
+            test_filter: integration_opera
+            binary: opera
+            setup: |
+              curl -fsSL https://deb.opera.com/archive.key | sudo gpg --dearmor -o /usr/share/keyrings/opera.gpg
+              echo "deb [signed-by=/usr/share/keyrings/opera.gpg] https://deb.opera.com/opera-stable/ stable non-free" | sudo tee /etc/apt/sources.list.d/opera.list
+              sudo apt-get update && sudo apt-get install -y opera-stable
+          - browser: vivaldi
+            test_filter: integration_vivaldi
+            binary: vivaldi-stable
+            setup: |
+              curl -fsSL https://repo.vivaldi.com/archive/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/vivaldi.gpg
+              echo "deb [signed-by=/usr/share/keyrings/vivaldi.gpg] https://repo.vivaldi.com/archive/deb/ stable main" | sudo tee /etc/apt/sources.list.d/vivaldi.list
+              sudo apt-get update && sudo apt-get install -y vivaldi-stable
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+
+      - name: Install ${{ matrix.browser }}
+        run: ${{ matrix.setup }}
+
+      - name: Ensure Chrome available (for Chromium load test)
+        run: |
+          command -v google-chrome-stable &>/dev/null || (
+            wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg &&
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list &&
+            sudo apt-get update && sudo apt-get install -y google-chrome-stable
+          )
+
+      - name: Start Xvfb
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 2
+
+      - name: Initialize browser profile
+        run: |
+          timeout 15 ${{ matrix.binary }} --no-first-run --disable-sync --disable-gpu about:blank || true
+          pkill -f "${{ matrix.binary }}" 2>/dev/null || true
+          sleep 1
+          find ~/.config -name "Cookies" -type f || true
+
+      - name: Run integration tests
+        run: cargo nextest run --run-ignored only -E 'test(${{ matrix.test_filter }})'
+
+  gnome-keyring:
+    name: GNOME Keyring (Linux)
+    runs-on: ubuntu-latest
+    env:
+      DISPLAY: ":99"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+
+      - name: Install Chrome + GNOME Keyring
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update && sudo apt-get install -y google-chrome-stable gnome-keyring libsecret-tools xvfb dbus-x11
+
+      - name: Setup, initialize, and test
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 2
+          eval $(dbus-launch --sh-syntax)
+          echo "" | gnome-keyring-daemon --unlock --components=secrets
+          echo -n "my-custom-chrome-password" | secret-tool store --label="Chrome Safe Storage" application chrome
+          timeout 15 google-chrome-stable --no-first-run --disable-sync --disable-gpu about:blank || true
+          pkill -f "google-chrome" 2>/dev/null || true
+          sleep 1
+          STEEL_TEST_GNOME_KEYRING=1 cargo nextest run --run-ignored only -E 'test(integration_gnome_keyring)'
+
+  macos:
+    name: Chrome (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+
+      - name: Initialize Chrome profile
+        run: |
+          timeout 15 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --no-first-run --disable-sync about:blank || true
+          pkill -f "Google Chrome" 2>/dev/null || true
+          sleep 1
+
+      - name: Run integration tests
+        run: cargo nextest run --run-ignored only -E 'test(integration_chrome)'
