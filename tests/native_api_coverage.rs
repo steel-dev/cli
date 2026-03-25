@@ -73,7 +73,7 @@ const ELEMENT: ModuleCoverage = ModuleCoverage {
         "get_element_bounding_box",
         "get_element_styles",
     ],
-    skipped: &["resolve_element_center"],
+    skipped: &["resolve_element_center", "add_with_frame"],
 };
 
 // ── cookies.rs ──────────────────────────────────────────────────────
@@ -148,6 +148,7 @@ const STATE: ModuleCoverage = ModuleCoverage {
         "state_rename",
         "find_auto_state_file",
         "get_sessions_dir",
+        "dispatch_state_command",
     ],
 };
 
@@ -223,6 +224,7 @@ const BROWSER: ModuleCoverage = ModuleCoverage {
         "from_str",
         "kill",
         "wait_or_kill",
+        "default_timeout_ms",
     ],
 };
 
