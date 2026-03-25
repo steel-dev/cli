@@ -477,7 +477,12 @@ mod tests {
         // At the browser level, session is global and should appear in global_args
         let v = describe_path(&["browser"]);
         let global = v["global_args"].as_array().unwrap();
-        assert!(global.iter().map(|g| g["name"].as_str().unwrap()).any(|x| x == "session"));
+        assert!(
+            global
+                .iter()
+                .map(|g| g["name"].as_str().unwrap())
+                .any(|x| x == "session")
+        );
 
         // At the root level, json and local are global
         let root = describe_path(&[]);
@@ -491,7 +496,12 @@ mod tests {
 
         // Global args should not appear in subcommand list
         let subs = root["subcommands"].as_array().unwrap();
-        assert!(!subs.iter().map(|s| s["name"].as_str().unwrap()).any(|x| x == "json"));
+        assert!(
+            !subs
+                .iter()
+                .map(|s| s["name"].as_str().unwrap())
+                .any(|x| x == "json")
+        );
     }
 
     #[test]
@@ -499,6 +509,11 @@ mod tests {
         let v = describe_path(&[]);
         let global = v["global_args"].as_array().unwrap();
         // no-update-check is hidden
-        assert!(!global.iter().map(|g| g["name"].as_str().unwrap()).any(|x| x == "no-update-check"));
+        assert!(
+            !global
+                .iter()
+                .map(|g| g["name"].as_str().unwrap())
+                .any(|x| x == "no-update-check")
+        );
     }
 }
