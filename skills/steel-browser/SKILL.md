@@ -213,7 +213,7 @@ steel browser live --session <name>
 | Session not reused between commands | Use exact same `--session <name>` on every command |
 | CAPTCHA blocking | `steel browser captcha status --wait`; restart with `--stealth` |
 | Stale session / stuck state | `steel browser stop --all` then fresh named session |
-| `steel: command not found` | `curl -LsSf https://setup.steel.dev \| sh` and add `$HOME/.steel/bin` to PATH |
+| `steel: command not found` | `curl -sSf https://setup.steel.dev \| sh` and add `$HOME/.steel/bin` to PATH |
 
 Full playbook: [references/troubleshooting.md](references/troubleshooting.md).
 

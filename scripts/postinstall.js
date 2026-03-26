@@ -18,7 +18,7 @@ function main() {
   if (process.env.CI && !process.env.STEEL_FORCE_INSTALL) {
     console.log("[steel] Skipping native binary install in CI.");
     console.log(
-      "[steel] Set STEEL_FORCE_INSTALL=1 to override, or use: curl -LsSf https://setup.steel.dev | sh"
+      "[steel] Set STEEL_FORCE_INSTALL=1 to override, or use: curl -sSf https://setup.steel.dev | sh"
     );
     return;
   }
@@ -41,7 +41,7 @@ function main() {
   } catch {
     console.error("[steel] Error: curl is required but not found.");
     console.error(
-      "[steel] Install curl, then run: curl -LsSf https://setup.steel.dev | sh"
+      "[steel] Install curl, then run: curl -sSf https://setup.steel.dev | sh"
     );
     // Don't fail npm install — just warn
     return;
@@ -63,7 +63,7 @@ function main() {
     console.error("");
     console.error("[steel] Automatic installation failed.");
     console.error("[steel] Install manually:");
-    console.error("  curl -LsSf https://setup.steel.dev | sh");
+    console.error("  curl -sSf https://setup.steel.dev | sh");
     console.error("");
     console.error(
       "[steel] Or download from: https://github.com/steel-dev/cli/releases"

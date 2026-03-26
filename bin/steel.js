@@ -37,7 +37,7 @@ if (existsSync(BINARY_PATH)) {
   );
   console.error("");
   console.error("Install the native binary:");
-  console.error("  curl -LsSf https://setup.steel.dev | sh");
+  console.error("  curl -sSf https://setup.steel.dev | sh");
   console.error("");
   console.error("Then add to your PATH:");
   console.error('  export PATH="$HOME/.steel/bin:$PATH"');
