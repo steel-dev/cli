@@ -80,10 +80,24 @@ jobs:
           Xvfb :99 -screen 0 1920x1080x24 &
           sleep 2
 
-      - name: Initialize browser profile
+      - name: Initialize browser profile with cookies
         run: |
-          timeout 15 ${{ matrix.binary }} --no-first-run --disable-sync --disable-gpu about:blank || true
+          python3 -c "
+          from http.server import HTTPServer, BaseHTTPRequestHandler
+          class H(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  self.send_response(200)
+                  self.send_header('Set-Cookie', 'steel_test=integration; Path=/; Max-Age=86400')
+                  self.send_header('Set-Cookie', 'steel_session=abc123; Path=/; Max-Age=86400')
+                  self.end_headers()
+                  self.wfile.write(b'ok')
+              def log_message(self, *args): pass
+          HTTPServer(('127.0.0.1', 8765), H).serve_forever()
+          " &
+          sleep 1
+          timeout 15 ${{ matrix.binary }} --no-first-run --disable-sync --disable-gpu http://127.0.0.1:8765/ || true
           pkill -f "${{ matrix.binary }}" 2>/dev/null || true
+          kill %1 2>/dev/null || true
           sleep 1
           find ~/.config -name "Cookies" -type f || true
 
@@ -116,8 +130,22 @@ jobs:
           eval $(dbus-launch --sh-syntax)
           echo "" | gnome-keyring-daemon --unlock --components=secrets
           echo -n "my-custom-chrome-password" | secret-tool store --label="Chrome Safe Storage" application chrome
-          timeout 15 google-chrome-stable --no-first-run --disable-sync --disable-gpu about:blank || true
+          python3 -c "
+          from http.server import HTTPServer, BaseHTTPRequestHandler
+          class H(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  self.send_response(200)
+                  self.send_header('Set-Cookie', 'steel_test=integration; Path=/; Max-Age=86400')
+                  self.send_header('Set-Cookie', 'steel_session=abc123; Path=/; Max-Age=86400')
+                  self.end_headers()
+                  self.wfile.write(b'ok')
+              def log_message(self, *args): pass
+          HTTPServer(('127.0.0.1', 8765), H).serve_forever()
+          " &
+          sleep 1
+          timeout 15 google-chrome-stable --no-first-run --disable-sync --disable-gpu http://127.0.0.1:8765/ || true
           pkill -f "google-chrome" 2>/dev/null || true
+          kill %1 2>/dev/null || true
           sleep 1
           STEEL_TEST_GNOME_KEYRING=1 cargo nextest run --run-ignored only -E 'test(integration_gnome_keyring)'
 
@@ -132,10 +160,24 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
 
-      - name: Initialize Chrome profile
+      - name: Initialize Chrome profile with cookies
         run: |
-          timeout 15 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --no-first-run --disable-sync about:blank || true
+          python3 -c "
+          from http.server import HTTPServer, BaseHTTPRequestHandler
+          class H(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  self.send_response(200)
+                  self.send_header('Set-Cookie', 'steel_test=integration; Path=/; Max-Age=86400')
+                  self.send_header('Set-Cookie', 'steel_session=abc123; Path=/; Max-Age=86400')
+                  self.end_headers()
+                  self.wfile.write(b'ok')
+              def log_message(self, *args): pass
+          HTTPServer(('127.0.0.1', 8765), H).serve_forever()
+          " &
+          sleep 1
+          timeout 15 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --no-first-run --disable-sync http://127.0.0.1:8765/ || true
           pkill -f "Google Chrome" 2>/dev/null || true
+          kill %1 2>/dev/null || true
           sleep 1
 
       - name: Run integration tests
