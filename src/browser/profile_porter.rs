@@ -1280,9 +1280,7 @@ mod tests {
                 Vec::new()
             } else {
                 let conn = rusqlite::Connection::open(&db_path).unwrap();
-                let mut stmt = conn
-                    .prepare("SELECT host_key, name FROM cookies")
-                    .unwrap();
+                let mut stmt = conn.prepare("SELECT host_key, name FROM cookies").unwrap();
                 stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
                     .unwrap()
                     .collect::<std::result::Result<_, _>>()
@@ -1344,9 +1342,9 @@ mod tests {
 
         // Every cookie from the packaged DB must be visible to Chromium
         for (host, name) in &expected_cookies {
-            let found = cdp_cookies.iter().any(|c| {
-                c["domain"].as_str() == Some(host) && c["name"].as_str() == Some(name)
-            });
+            let found = cdp_cookies
+                .iter()
+                .any(|c| c["domain"].as_str() == Some(host) && c["name"].as_str() == Some(name));
             assert!(
                 found,
                 "Cookie {name} on {host} not found via CDP. Got: {cdp_cookies:?}"
@@ -1367,7 +1365,8 @@ mod tests {
         stream
             .set_read_timeout(Some(std::time::Duration::from_secs(5)))
             .ok();
-        let request = format!("GET {path} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\n\r\n");
+        let request =
+            format!("GET {path} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\n\r\n");
         std::io::Write::write_all(&mut stream, request.as_bytes()).unwrap();
 
         let mut response = Vec::new();
@@ -1714,7 +1713,10 @@ mod tests {
                 .unwrap()
                 .collect::<std::result::Result<_, _>>()
                 .unwrap();
-            assert!(columns.contains(&"host_key".to_string()), "missing host_key");
+            assert!(
+                columns.contains(&"host_key".to_string()),
+                "missing host_key"
+            );
             assert!(
                 columns.contains(&"encrypted_value".to_string()),
                 "missing encrypted_value"
