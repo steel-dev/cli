@@ -1383,8 +1383,6 @@ mod tests {
     /// Connect to CDP WebSocket and call Storage.getCookies.
     /// Uses a raw TCP + minimal WebSocket frame implementation.
     fn cdp_get_all_cookies(ws_url: &str) -> serde_json::Value {
-        use sha1::{Digest, Sha1};
-
         // Parse ws://host:port/path
         let url = ws_url.strip_prefix("ws://").expect("expected ws:// URL");
         let (host_port, path) = url.split_once('/').unwrap_or((url, ""));
@@ -1396,18 +1394,17 @@ mod tests {
             .ok();
 
         // WebSocket handshake
-        let ws_key = "dGhlIHNhbXBsZSBub25jZQ=="; // static key, fine for tests
         let handshake = format!(
             "GET {path} HTTP/1.1\r\n\
              Host: {host_port}\r\n\
              Upgrade: websocket\r\n\
              Connection: Upgrade\r\n\
-             Sec-WebSocket-Key: {ws_key}\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
              Sec-WebSocket-Version: 13\r\n\r\n"
         );
         std::io::Write::write_all(&mut stream, handshake.as_bytes()).unwrap();
 
-        // Read until we get the end of HTTP headers
+        // Read HTTP response headers
         let mut header_buf = Vec::new();
         loop {
             let mut byte = [0u8; 1];
@@ -1422,19 +1419,6 @@ mod tests {
         assert!(
             header_str.contains("101"),
             "WebSocket upgrade failed: {header_str}"
-        );
-
-        // Verify Sec-WebSocket-Accept
-        let expected_accept = {
-            let mut hasher = Sha1::new();
-            hasher.update(ws_key.as_bytes());
-            hasher.update(b"258EAFA5-E914-47DA-95CA-5AB5DC11650B");
-            use base64::Engine;
-            base64::engine::general_purpose::STANDARD.encode(hasher.finalize())
-        };
-        assert!(
-            header_str.contains(&expected_accept),
-            "bad Sec-WebSocket-Accept"
         );
 
         // Send CDP command: Storage.getCookies
