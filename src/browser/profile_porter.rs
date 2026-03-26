@@ -1292,9 +1292,9 @@ mod tests {
         None
     }
 
-    /// Extract the packaged zip and launch Chromium headless to verify the
-    /// profile loads without crashing.
-    fn verify_chromium_loads_profile(zip_buffer: &[u8]) {
+    /// Extract the packaged zip, launch Chromium with the profile, and verify
+    /// cookies are accessible via CDP (`Storage.getCookies`).
+    fn verify_chromium_loads_profile(zip_buffer: &[u8], expected_cookies: &[(&str, &str)]) {
         let Some(chromium) = find_chromium_binary() else {
             eprintln!("Skipping Chromium load test — no binary found");
             return;
@@ -1305,7 +1305,12 @@ mod tests {
         let mut archive = zip::ZipArchive::new(cursor).unwrap();
         archive.extract(tmp.path()).unwrap();
 
-        let output = std::process::Command::new(&chromium)
+        // Find a free port for CDP
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let mut child = std::process::Command::new(&chromium)
             .args([
                 "--headless",
                 "--disable-gpu",
@@ -1313,17 +1318,215 @@ mod tests {
                 "--no-first-run",
                 "--disable-sync",
                 &format!("--user-data-dir={}", tmp.path().display()),
-                "--dump-dom",
+                &format!("--remote-debugging-port={port}"),
                 "about:blank",
             ])
-            .output()
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
             .expect("failed to launch Chromium");
 
-        assert!(
-            output.status.success(),
-            "Chromium failed to load packaged profile:\n{}",
-            String::from_utf8_lossy(&output.stderr)
+        // Wait for CDP to become available
+        let cdp_base = format!("http://127.0.0.1:{port}");
+        let mut cdp_ready = false;
+        for _ in 0..50 {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
+                cdp_ready = true;
+                break;
+            }
+        }
+        if !cdp_ready {
+            child.kill().ok();
+            child.wait().ok();
+            panic!("Chromium CDP did not become available within 10s");
+        }
+
+        // Get the first page's WebSocket debugger URL
+        let version_body = http_get(&format!("{cdp_base}/json/version"));
+        let version: serde_json::Value = serde_json::from_str(&version_body)
+            .unwrap_or_else(|e| panic!("bad /json/version response: {e}\n{version_body}"));
+        let ws_url = version["webSocketDebuggerUrl"]
+            .as_str()
+            .expect("missing webSocketDebuggerUrl");
+
+        // Connect to WebSocket and call Storage.getCookies
+        let cookies_json = cdp_get_all_cookies(ws_url);
+        let cookies: Vec<serde_json::Value> = cookies_json
+            .as_array()
+            .expect("cookies should be an array")
+            .to_vec();
+
+        // Verify expected cookies are present
+        for (host, name) in expected_cookies {
+            let found = cookies.iter().any(|c| {
+                c["domain"].as_str() == Some(host) && c["name"].as_str() == Some(name)
+            });
+            assert!(found, "Cookie {name} on {host} not found via CDP. Got: {cookies:?}");
+        }
+
+        child.kill().ok();
+        child.wait().ok();
+    }
+
+    /// Minimal sync HTTP GET using std::net only (no reqwest dependency in tests).
+    fn http_get(url: &str) -> String {
+        let url = url.strip_prefix("http://").unwrap_or(url);
+        let (host_port, path) = url.split_once('/').unwrap_or((url, ""));
+        let path = format!("/{path}");
+
+        let mut stream = std::net::TcpStream::connect(host_port).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .ok();
+        let request = format!("GET {path} HTTP/1.1\r\nHost: {host_port}\r\nConnection: close\r\n\r\n");
+        std::io::Write::write_all(&mut stream, request.as_bytes()).unwrap();
+
+        let mut response = Vec::new();
+        std::io::Read::read_to_end(&mut stream, &mut response).ok();
+        let response = String::from_utf8_lossy(&response);
+
+        // Split headers from body
+        response
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body.to_string())
+            .unwrap_or_default()
+    }
+
+    /// Connect to CDP WebSocket and call Storage.getCookies.
+    /// Uses a raw TCP + minimal WebSocket frame implementation.
+    fn cdp_get_all_cookies(ws_url: &str) -> serde_json::Value {
+        use sha1::{Digest, Sha1};
+
+        // Parse ws://host:port/path
+        let url = ws_url.strip_prefix("ws://").expect("expected ws:// URL");
+        let (host_port, path) = url.split_once('/').unwrap_or((url, ""));
+        let path = format!("/{path}");
+
+        let mut stream = std::net::TcpStream::connect(host_port).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+            .ok();
+
+        // WebSocket handshake
+        let ws_key = "dGhlIHNhbXBsZSBub25jZQ=="; // static key, fine for tests
+        let handshake = format!(
+            "GET {path} HTTP/1.1\r\n\
+             Host: {host_port}\r\n\
+             Upgrade: websocket\r\n\
+             Connection: Upgrade\r\n\
+             Sec-WebSocket-Key: {ws_key}\r\n\
+             Sec-WebSocket-Version: 13\r\n\r\n"
         );
+        std::io::Write::write_all(&mut stream, handshake.as_bytes()).unwrap();
+
+        // Read until we get the end of HTTP headers
+        let mut header_buf = Vec::new();
+        loop {
+            let mut byte = [0u8; 1];
+            std::io::Read::read_exact(&mut stream, &mut byte).unwrap();
+            header_buf.push(byte[0]);
+            if header_buf.ends_with(b"\r\n\r\n") {
+                break;
+            }
+        }
+
+        let header_str = String::from_utf8_lossy(&header_buf);
+        assert!(
+            header_str.contains("101"),
+            "WebSocket upgrade failed: {header_str}"
+        );
+
+        // Verify Sec-WebSocket-Accept
+        let expected_accept = {
+            let mut hasher = Sha1::new();
+            hasher.update(ws_key.as_bytes());
+            hasher.update(b"258EAFA5-E914-47DA-95CA-5AB5DC11650B");
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.encode(hasher.finalize())
+        };
+        assert!(
+            header_str.contains(&expected_accept),
+            "bad Sec-WebSocket-Accept"
+        );
+
+        // Send CDP command: Storage.getCookies
+        let cmd = serde_json::json!({"id": 1, "method": "Storage.getCookies"});
+        let payload = serde_json::to_vec(&cmd).unwrap();
+        ws_send_frame(&mut stream, &payload);
+
+        // Read response frames until we get our result (id: 1)
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            if std::time::Instant::now() > deadline {
+                panic!("Timed out waiting for CDP response");
+            }
+            let frame = ws_read_frame(&mut stream);
+            if let Ok(msg) = serde_json::from_slice::<serde_json::Value>(&frame)
+                && msg.get("id") == Some(&serde_json::json!(1))
+            {
+                return msg["result"]["cookies"].clone();
+            }
+        }
+    }
+
+    fn ws_send_frame(stream: &mut std::net::TcpStream, payload: &[u8]) {
+        let mut frame = Vec::new();
+        // FIN + text opcode
+        frame.push(0x81);
+        // Masked + length
+        let len = payload.len();
+        if len < 126 {
+            frame.push(0x80 | len as u8);
+        } else if len <= 65535 {
+            frame.push(0x80 | 126);
+            frame.extend_from_slice(&(len as u16).to_be_bytes());
+        } else {
+            frame.push(0x80 | 127);
+            frame.extend_from_slice(&(len as u64).to_be_bytes());
+        }
+        // Masking key (all zeros — simple, fine for tests)
+        let mask = [0u8; 4];
+        frame.extend_from_slice(&mask);
+        // Payload (mask XOR with zero = identity)
+        frame.extend_from_slice(payload);
+        std::io::Write::write_all(stream, &frame).unwrap();
+    }
+
+    fn ws_read_frame(stream: &mut std::net::TcpStream) -> Vec<u8> {
+        let mut header = [0u8; 2];
+        std::io::Read::read_exact(stream, &mut header).unwrap();
+
+        let masked = header[1] & 0x80 != 0;
+        let mut len = (header[1] & 0x7F) as u64;
+
+        if len == 126 {
+            let mut buf = [0u8; 2];
+            std::io::Read::read_exact(stream, &mut buf).unwrap();
+            len = u16::from_be_bytes(buf) as u64;
+        } else if len == 127 {
+            let mut buf = [0u8; 8];
+            std::io::Read::read_exact(stream, &mut buf).unwrap();
+            len = u64::from_be_bytes(buf);
+        }
+
+        let mask_key = if masked {
+            let mut buf = [0u8; 4];
+            std::io::Read::read_exact(stream, &mut buf).unwrap();
+            buf
+        } else {
+            [0u8; 4]
+        };
+
+        let mut payload = vec![0u8; len as usize];
+        std::io::Read::read_exact(stream, &mut payload).unwrap();
+
+        if masked {
+            for (i, byte) in payload.iter_mut().enumerate() {
+                *byte ^= mask_key[i % 4];
+            }
+        }
+        payload
     }
 
     // ─── Unit tests: reencrypt pipeline ──────────────────────────────────────
@@ -1618,8 +1821,15 @@ mod tests {
             assert!(!name.ends_with(".pma"), "zip contains .pma: {name}");
         }
 
-        // 7. Verify Chromium can load the packaged profile
-        verify_chromium_loads_profile(&pkg.zip_buffer);
+        // 7. Verify Chromium can load the packaged profile and read cookies via CDP
+        verify_chromium_loads_profile(
+            &pkg.zip_buffer,
+            &[
+                (".example.com", "session"),
+                (".test.org", "auth"),
+                ("localhost", "dev"),
+            ],
+        );
 
         // 8. Cleanup
         let _ = std::fs::remove_dir_all(&test_profile_dir);
