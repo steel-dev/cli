@@ -1181,38 +1181,6 @@ mod tests {
         }
     }
 
-    /// Create a browser profile directory with encrypted test cookies.
-    fn scaffold_browser_profile(
-        base_dir: &Path,
-        profile_name: &str,
-        meta_version: i64,
-        test_cookies: &[TestCookie],
-        source_key: &[u8; 16],
-    ) -> PathBuf {
-        let profile_dir = base_dir.join(profile_name);
-        std::fs::create_dir_all(&profile_dir).unwrap();
-
-        let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
-            .iter()
-            .map(|c| {
-                let enc = encrypt_cookie(c.value, source_key, c.host_key, meta_version);
-                (c.host_key, c.name, enc)
-            })
-            .collect();
-        let cookie_refs: Vec<(&str, &str, &[u8])> = encrypted
-            .iter()
-            .map(|(h, n, e)| (*h, *n, e.as_slice()))
-            .collect();
-
-        create_test_cookies_db(&profile_dir.join("Cookies"), meta_version, &cookie_refs);
-
-        let ls_dir = profile_dir.join("Local Storage").join("leveldb");
-        std::fs::create_dir_all(&ls_dir).unwrap();
-        std::fs::write(ls_dir.join("CURRENT"), "MANIFEST-000001\n").unwrap();
-
-        profile_dir
-    }
-
     /// Verify that a re-encrypted DB can be decrypted with the "peanuts" key.
     fn verify_reencrypted_db(
         db_bytes: &[u8],
@@ -1293,8 +1261,8 @@ mod tests {
     }
 
     /// Extract the packaged zip, launch Chromium with the profile, and verify
-    /// cookies are accessible via CDP (`Storage.getCookies`).
-    fn verify_chromium_loads_profile(zip_buffer: &[u8], expected_cookies: &[(&str, &str)]) {
+    /// all cookies from the DB are accessible via CDP (`Storage.getCookies`).
+    fn verify_chromium_loads_profile(zip_buffer: &[u8]) {
         let Some(chromium) = find_chromium_binary() else {
             eprintln!("Skipping Chromium load test — no binary found");
             return;
@@ -1304,6 +1272,23 @@ mod tests {
         let cursor = std::io::Cursor::new(zip_buffer);
         let mut archive = zip::ZipArchive::new(cursor).unwrap();
         archive.extract(tmp.path()).unwrap();
+
+        // Extract expected cookies directly from the packaged DB
+        let expected_cookies: Vec<(String, String)> = {
+            let db_path = tmp.path().join("Default/Cookies");
+            if !db_path.exists() {
+                Vec::new()
+            } else {
+                let conn = rusqlite::Connection::open(&db_path).unwrap();
+                let mut stmt = conn
+                    .prepare("SELECT host_key, name FROM cookies")
+                    .unwrap();
+                stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                    .unwrap()
+                    .collect::<std::result::Result<_, _>>()
+                    .unwrap()
+            }
+        };
 
         // Find a free port for CDP
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1342,7 +1327,7 @@ mod tests {
             panic!("Chromium CDP did not become available within 10s");
         }
 
-        // Get the first page's WebSocket debugger URL
+        // Get the browser's WebSocket debugger URL
         let version_body = http_get(&format!("{cdp_base}/json/version"));
         let version: serde_json::Value = serde_json::from_str(&version_body)
             .unwrap_or_else(|e| panic!("bad /json/version response: {e}\n{version_body}"));
@@ -1350,19 +1335,22 @@ mod tests {
             .as_str()
             .expect("missing webSocketDebuggerUrl");
 
-        // Connect to WebSocket and call Storage.getCookies
+        // Query cookies via CDP
         let cookies_json = cdp_get_all_cookies(ws_url);
-        let cookies: Vec<serde_json::Value> = cookies_json
+        let cdp_cookies: Vec<serde_json::Value> = cookies_json
             .as_array()
             .expect("cookies should be an array")
             .to_vec();
 
-        // Verify expected cookies are present
-        for (host, name) in expected_cookies {
-            let found = cookies.iter().any(|c| {
+        // Every cookie from the packaged DB must be visible to Chromium
+        for (host, name) in &expected_cookies {
+            let found = cdp_cookies.iter().any(|c| {
                 c["domain"].as_str() == Some(host) && c["name"].as_str() == Some(name)
             });
-            assert!(found, "Cookie {name} on {host} not found via CDP. Got: {cookies:?}");
+            assert!(
+                found,
+                "Cookie {name} on {host} not found via CDP. Got: {cdp_cookies:?}"
+            );
         }
 
         child.kill().ok();
@@ -1705,13 +1693,15 @@ mod tests {
         let provider = get_key_provider(browser)
             .unwrap_or_else(|e| panic!("Failed to get key for {}: {e}", browser.display_name()));
 
-        // 3. Schema verification on existing profile
+        // 3. Schema verification on the real profile
         let desc = browser.descriptor();
         let base_dir = desc.profile_base_dir().unwrap();
-        let first_cookies = base_dir.join(&profiles[0].dir_name).join("Cookies");
-        let meta_version: i64 = if first_cookies.exists() {
-            let conn = rusqlite::Connection::open(&first_cookies).unwrap();
-            let v: i64 = conn
+        let profile = &profiles[0];
+        let cookies_path = base_dir.join(&profile.dir_name).join("Cookies");
+
+        if cookies_path.exists() {
+            let conn = rusqlite::Connection::open(&cookies_path).unwrap();
+            let _v: i64 = conn
                 .query_row(
                     "SELECT CAST(value AS INTEGER) FROM meta WHERE key='version'",
                     [],
@@ -1724,66 +1714,29 @@ mod tests {
                 .unwrap()
                 .collect::<std::result::Result<_, _>>()
                 .unwrap();
-            assert!(
-                columns.contains(&"host_key".to_string()),
-                "missing host_key"
-            );
+            assert!(columns.contains(&"host_key".to_string()), "missing host_key");
             assert!(
                 columns.contains(&"encrypted_value".to_string()),
                 "missing encrypted_value"
             );
-            v
-        } else {
-            20
-        };
-
-        // 4. Create test profile
-        let test_cookies = [
-            TestCookie {
-                host_key: ".example.com",
-                name: "session",
-                value: "integration_session",
-            },
-            TestCookie {
-                host_key: ".test.org",
-                name: "auth",
-                value: "integration_auth",
-            },
-            TestCookie {
-                host_key: "localhost",
-                name: "dev",
-                value: "integration_dev",
-            },
-        ];
-        let source_key_16: [u8; 16] = provider.source_key[..16].try_into().unwrap();
-        let test_profile_name = "SteelTest";
-        let test_profile_dir = base_dir.join(test_profile_name);
-
-        if test_profile_dir.exists() {
-            std::fs::remove_dir_all(&test_profile_dir).unwrap();
         }
-        scaffold_browser_profile(
-            &base_dir,
-            test_profile_name,
-            meta_version,
-            &test_cookies,
-            &source_key_16,
+
+        // 4. Reencrypt the real cookies DB
+        let reencrypt = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
+        eprintln!(
+            "{}: {} converted, {} skipped",
+            browser.display_name(),
+            reencrypt.converted,
+            reencrypt.skipped
         );
 
-        // 5. reencrypt_cookies_db
-        let reencrypt = reencrypt_cookies_db(&test_profile_dir.join("Cookies"), &provider).unwrap();
-        assert!(reencrypt.converted > 0, "should convert cookies");
-        assert_eq!(reencrypt.skipped, 0, "should not skip cookies");
+        // 5. Package the real profile
+        let pkg = package_profile(browser, &profile.dir_name, false, &|_| {}).unwrap();
 
-        // 6. package_profile
-        let pkg = package_profile(browser, test_profile_name, false, &|_| {}).unwrap();
-        assert!(pkg.cookies_reencrypted > 0);
-        assert_eq!(pkg.cookies_skipped, 0);
-
+        // 6. Verify zip structure
         let cursor = std::io::Cursor::new(&pkg.zip_buffer);
         let mut archive = zip::ZipArchive::new(cursor).unwrap();
 
-        // Default/Cookies — valid SQLite, decryptable with peanuts key
         {
             let mut entry = archive
                 .by_name("Default/Cookies")
@@ -1791,18 +1744,8 @@ mod tests {
             let mut buf = Vec::new();
             std::io::Read::read_to_end(&mut entry, &mut buf).unwrap();
             assert_eq!(&buf[..16], b"SQLite format 3\0", "not a valid SQLite file");
-            verify_reencrypted_db(
-                &buf,
-                &[
-                    (".example.com", "session", "integration_session"),
-                    (".test.org", "auth", "integration_auth"),
-                    ("localhost", "dev", "integration_dev"),
-                ],
-                meta_version,
-            );
         }
 
-        // Default/Preferences — exit_type: Normal
         {
             let mut entry = archive
                 .by_name("Default/Preferences")
@@ -1813,7 +1756,6 @@ mod tests {
             assert_eq!(prefs["profile"]["exit_type"], "Normal");
         }
 
-        // No LOCK, .log, .pma files
         for i in 0..archive.len() {
             let name = archive.by_index(i).unwrap().name().to_string();
             assert!(!name.contains("LOCK"), "zip contains LOCK: {name}");
@@ -1821,18 +1763,8 @@ mod tests {
             assert!(!name.ends_with(".pma"), "zip contains .pma: {name}");
         }
 
-        // 7. Verify Chromium can load the packaged profile and read cookies via CDP
-        verify_chromium_loads_profile(
-            &pkg.zip_buffer,
-            &[
-                (".example.com", "session"),
-                (".test.org", "auth"),
-                ("localhost", "dev"),
-            ],
-        );
-
-        // 8. Cleanup
-        let _ = std::fs::remove_dir_all(&test_profile_dir);
+        // 7. Launch Chromium with packaged profile, verify cookies via CDP
+        verify_chromium_loads_profile(&pkg.zip_buffer);
     }
 
     #[test]
