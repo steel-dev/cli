@@ -416,8 +416,14 @@ fn get_macos_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         )
     })?;
 
+    // Chromium stores the keychain entry with account = browser name (e.g. "Chrome")
+    // and service = "Chrome Safe Storage". Specifying both avoids ambiguity.
+    let account = service
+        .strip_suffix(" Safe Storage")
+        .unwrap_or(service);
+
     let output = std::process::Command::new("security")
-        .args(["find-generic-password", "-w", "-s", service])
+        .args(["find-generic-password", "-w", "-a", account, "-s", service])
         .output()
         .context("Failed to run `security` command")?;
 
