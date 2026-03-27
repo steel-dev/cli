@@ -385,7 +385,7 @@ pub fn is_browser_running(browser: BrowserId) -> bool {
 
 // ─── Key providers ──────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CryptoAlgorithm {
     Aes128Cbc,
     Aes256Gcm,
@@ -571,7 +571,7 @@ fn decrypt_cookie(
         return None;
     }
     let prefix = &encrypted_value[..3];
-    if prefix != b"v10" && prefix != b"v20" {
+    if prefix != b"v10" && prefix != b"v11" && prefix != b"v20" {
         return None;
     }
 
@@ -703,14 +703,38 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
     {
         let mut update = tx.prepare("UPDATE cookies SET encrypted_value = ? WHERE rowid = ?")?;
 
+        // On Linux, Chromium may have encrypted some cookies with an empty password
+        // due to a bug. Try the empty-password key as a fallback.
+        // Ref: https://chromium.googlesource.com/chromium/src/+/bbd54702284caca1f92d656fdcadf2ccca6f4165
+        let empty_key_fallback = if provider.source_algorithm == CryptoAlgorithm::Aes128Cbc {
+            let k = derive_key("", 1);
+            let mut buf = [0u8; 32];
+            buf[..16].copy_from_slice(&k);
+            Some((buf, 16usize))
+        } else {
+            None
+        };
+
         for (rowid, host_key, encrypted_value) in &rows {
-            let Some(plaintext) = decrypt_cookie(
+            let plaintext = decrypt_cookie(
                 encrypted_value,
                 &provider.source_key[..provider.source_key_len],
                 host_key,
                 meta_version,
                 provider.source_algorithm,
-            ) else {
+            )
+            .or_else(|| {
+                let (key, len) = empty_key_fallback.as_ref()?;
+                decrypt_cookie(
+                    encrypted_value,
+                    &key[..*len],
+                    host_key,
+                    meta_version,
+                    provider.source_algorithm,
+                )
+            });
+
+            let Some(plaintext) = plaintext else {
                 skipped += 1;
                 continue;
             };
@@ -1031,6 +1055,62 @@ mod tests {
     fn decrypt_short_data_returns_none() {
         let key = derive_key("k", 1);
         assert!(decrypt_cookie(b"v1", &key, "host", 20, CryptoAlgorithm::Aes128Cbc).is_none());
+    }
+
+    // ── yt-dlp test vectors ──────────────────────────────────────────────────
+
+    #[test]
+    fn ytdlp_linux_v10_peanuts() {
+        let key = derive_key("peanuts", 1);
+        let encrypted_value: &[u8] =
+            b"v10\xccW%\xcd\xe6\xe6\x9fM\x22\x20\xa7\xb0\xca\xe4\x07\xd6";
+        let result =
+            decrypt_cookie(encrypted_value, &key, "", 0, CryptoAlgorithm::Aes128Cbc).unwrap();
+        assert_eq!(result, "USD");
+    }
+
+    #[test]
+    fn ytdlp_linux_v11_empty_password() {
+        // v11 = same AES-128-CBC, but keyring password (here: empty string fallback)
+        let key = derive_key("", 1);
+        let encrypted_value: &[u8] = b"v11#\x81\x10>`w\x8f)\xc0\xb2\xc1\r\xf4\x1al\xdd\x93\xfd\xf8\xf8N\xf2\xa9\x83\xf1\xe9o\x0elVQd";
+        let result =
+            decrypt_cookie(encrypted_value, &key, "", 0, CryptoAlgorithm::Aes128Cbc).unwrap();
+        assert_eq!(result, "tz=Europe.London");
+    }
+
+    #[test]
+    fn ytdlp_macos_v10() {
+        let key = derive_key("6eIDUdtKAacvlHwBVwvg/Q==", 1003);
+        let encrypted_value: &[u8] =
+            b"v10\xb3\xbe\xad\xa1[\x9fC\xa1\x98\xe0\x9a\x01\xd9\xcf\xbfc";
+        let result =
+            decrypt_cookie(encrypted_value, &key, "", 0, CryptoAlgorithm::Aes128Cbc).unwrap();
+        assert_eq!(result, "2021-06-01-22");
+    }
+
+    #[test]
+    fn ytdlp_windows_v10_aes256gcm() {
+        let key: &[u8] = b"\x59\xef\xad\xad\xee\x72\x70\xf0\x59\xe6\x9b\x12\xc2\x3c\x7a\x16\x5d\x0a\xbb\xb8\xcb\xd7\x9b\x41\xc3\x14\x65\x99\x7b\xd6\xf4\x26";
+        let encrypted_value: &[u8] = b"v10\x54\xb8\xf3\xb8\x01\xa7\x54\x74\x63\x56\xfc\x88\xb8\xb8\xef\x05\xb5\xfd\x18\xc9\x30\x00\x39\xab\xb1\x89\x33\x85\x29\x87\xe1\xa9\x2d\xa3\xad\x3d";
+        let result =
+            decrypt_cookie(encrypted_value, key, "", 0, CryptoAlgorithm::Aes256Gcm).unwrap();
+        assert_eq!(result, "32101439");
+    }
+
+    #[test]
+    fn ytdlp_derive_key_peanuts() {
+        // yt-dlp: pbkdf2_sha1(b'peanuts', b' ' * 16, 1, 16) == b'g\xe1...'
+        // but Chromium uses salt="saltysalt", not spaces. Verify our derive_key matches.
+        let key = derive_key("peanuts", 1);
+        assert_eq!(key.len(), 16);
+        // Cross-check: yt-dlp's LinuxChromeCookieDecryptor.derive_key(b'abc')
+        // == b'7\xa1\xec\xd4m\xfcA\xc7\xb19Z\xd0\x19\xdcM\x17'
+        let abc_key = derive_key("abc", 1);
+        assert_eq!(
+            abc_key,
+            [0x37, 0xa1, 0xec, 0xd4, 0x6d, 0xfc, 0x41, 0xc7, 0xb1, 0x39, 0x5a, 0xd0, 0x19, 0xdc, 0x4d, 0x17]
+        );
     }
 
     #[test]
