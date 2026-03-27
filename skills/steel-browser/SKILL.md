@@ -15,30 +15,93 @@ description: >-
   themselves, or conceptual questions about browser tools.
 ---
 
-# Steel Browser Skill
+# Steel
 
-Steel gives agents cloud browser sessions and fast API tools (`scrape`, `screenshot`, `pdf`).
+> Cloud browser infrastructure for AI agents. Steel gives your agent a real browser that can navigate pages, fill forms, solve CAPTCHAs, and extract content.
 
-## Choose the right tool first
+If Steel is not installed yet, execute the setup steps below autonomously. Only ask the user to do one thing: click the authentication link.
 
-| Goal | Tool |
+OBJECTIVE: Install the Steel CLI, authenticate, and verify everything works.
+
+DONE WHEN: `steel scrape https://example.com` returns page content successfully.
+
+## Setup
+
+### Step 1: Install Steel CLI
+
+Check if `steel` is already available:
+
+```bash
+steel --version
+```
+
+If the command is not found, install it:
+
+```bash
+curl -sSf https://setup.steel.dev/install.sh | sh
+export PATH="$HOME/.steel/bin:$PATH"
+```
+
+### Step 2: Authenticate
+
+If `STEEL_API_KEY` is already set in the environment, skip this step.
+
+Otherwise, run:
+
+```bash
+steel login
+```
+
+This will print a URL. **Ask the user to click the link to complete authentication.** Wait for the command to finish — it will print "Authentication successful" when the user has approved.
+
+### Step 3: Verify
+
+```bash
+steel scrape https://example.com
+```
+
+This should return Markdown content. If it does, setup is complete.
+
+---
+
+## Choose the right tool
+
+| Task | Tool |
 |------|------|
-| Extract text/HTML from a mostly-static page | `steel scrape <url>` |
-| One-shot screenshot or PDF | `steel screenshot <url>` / `steel pdf <url>` |
-| Multi-step interaction, login, forms, JS-heavy pages | `steel browser start` + interaction loop |
-| Anti-bot / CAPTCHA sites | `steel browser start --stealth` |
+| Extract text/HTML from a page | `steel scrape <url>` |
+| Take a screenshot | `steel screenshot <url>` |
+| Generate a PDF | `steel pdf <url>` |
+| Multi-step interaction, login, forms, JS-heavy pages | `steel browser` session |
+| Anti-bot / CAPTCHA sites | `steel browser --stealth` session |
 
-Start with `steel scrape` when you only need page content. Escalate to `steel browser` when the page requires interaction or JavaScript rendering.
+**Start with `steel scrape` when you only need page content.** Escalate to `steel browser` when the page requires interaction or JavaScript rendering.
 
-## Core workflow
+## API tools (one-shot, no session needed)
 
-1. **Start** a named session (use `--session-timeout 3600000` for tasks over 5 min)
+```bash
+# Scrape — returns Markdown by default, use --raw for full JSON
+steel scrape https://example.com
+steel scrape https://example.com --format html
+steel scrape https://example.com --stealth --proxy
+
+# Screenshot
+steel screenshot https://example.com
+steel screenshot https://example.com --full-page
+
+# PDF
+steel pdf https://example.com
+```
+
+## Interactive browser session
+
+### Core workflow
+
+1. **Start** a named session
 2. **Navigate** to the target URL
-3. **Snapshot** to get current page state and element refs
-4. **Interact** using refs from the snapshot (click, fill, select, etc.)
-5. **Re-snapshot** after every navigation or meaningful DOM change
-6. **Verify** state with `wait`, `get`, or another snapshot
-7. **Stop** the session when done
+3. **Snapshot** to get page state and element refs
+4. **Interact** using `@eN` refs from the snapshot
+5. **Re-snapshot** after every navigation or DOM change (refs expire)
+6. **Stop** the session when done
 
 ```bash
 steel browser start --session my-task --session-timeout 3600000
@@ -51,13 +114,10 @@ steel browser snapshot -i --session my-task
 steel browser stop --session my-task
 ```
 
-**RULE: Never use an `@eN` ref without a fresh snapshot. Refs expire after navigation or DOM changes.**
-
-Element refs from `snapshot -i` are more reliable than CSS selectors — always prefer them. Use `snapshot -i -c` for large DOMs, or `-d 3` to limit depth.
-
-Always use the same `--session <name>` on every command in a workflow. The `--session` flag takes the name string you chose, not the UUID from JSON output.
-
-## Essential commands
+**Rules:**
+- Always use the same `--session <name>` on every command.
+- Never use an `@eN` ref without a fresh snapshot — refs expire after navigation or DOM changes.
+- Prefer element refs from `snapshot -i` over CSS selectors. Use `-c` for large DOMs, `-d 3` to limit depth.
 
 ### Session lifecycle
 
@@ -97,7 +157,6 @@ steel browser type @e2 "value" --delay 50 --session <name>
 steel browser press Enter --session <name>
 steel browser press Control+a --session <name>
 steel browser hover @e1 --session <name>
-steel browser click @e1 --session <name>            # prefer click for checkboxes
 steel browser select @e1 "option" --session <name>
 steel browser scroll down 500 --session <name>
 steel browser scrollintoview @e1 --session <name>
@@ -130,7 +189,7 @@ steel browser eval "document.querySelectorAll('a').length" --session <name>
 steel browser find ".item" --session <name>
 ```
 
-### Screenshots and capture
+### Screenshots (in-session)
 
 ```bash
 steel browser screenshot -o ./page.png --session <name>
@@ -138,21 +197,21 @@ steel browser screenshot --full --session <name>
 steel browser screenshot --selector "#chart" --session <name>
 ```
 
-Top-level `steel screenshot <url>` and `steel pdf <url>` are stateless one-shot API calls — they do not take `--session`, `--stealth`, or `-o` flags. Use `steel browser screenshot` for in-session captures.
+Top-level `steel screenshot <url>` and `steel pdf <url>` are stateless one-shot API calls — they do not take `--session` or `-o` flags. Use `steel browser screenshot` for in-session captures.
 
 ### Cookies and storage
 
 ```bash
-steel browser cookies --session <name>                              # list all cookies
-steel browser cookies set <name> <value> --session <name>           # set a cookie
-steel browser cookies set <name> <value> --domain .example.com      # with domain
-steel browser cookies clear --session <name>                        # clear all cookies
+steel browser cookies --session <name>
+steel browser cookies set <name> <value> --session <name>
+steel browser cookies set <name> <value> --domain .example.com
+steel browser cookies clear --session <name>
 
-steel browser storage local --session <name>                        # get all localStorage
-steel browser storage local <key> --session <name>                  # get one key
-steel browser storage local set <key> <value> --session <name>      # set a value
-steel browser storage local clear --session <name>                  # clear localStorage
-steel browser storage session --session <name>                      # sessionStorage (same API)
+steel browser storage local --session <name>
+steel browser storage local <key> --session <name>
+steel browser storage local set <key> <value> --session <name>
+steel browser storage local clear --session <name>
+steel browser storage session --session <name>
 ```
 
 ### Browser settings
@@ -164,8 +223,6 @@ steel browser set offline on --session <name>
 steel browser set useragent "Custom UA" --session <name>
 ```
 
-Note: `steel browser set headers` panics in steel 0.3.2 (clap bug). Use `eval` for header injection.
-
 ### CAPTCHA
 
 ```bash
@@ -174,52 +231,95 @@ steel browser captcha status --wait --session <name>
 steel browser captcha solve --session <name>
 ```
 
-## eval for capability gaps
+### eval for capability gaps
 
-Use `steel browser eval "<js>" --session <name>` when no direct command exists. Common uses: network interception (fetch monkey-patch), cookie manipulation beyond the `cookies` command, DOM state injection, complex form widgets (React date pickers, autocomplete inputs).
-
-For detailed eval patterns (drag fallback, network interception, file upload injection), see [references/steel-browser-commands.md](references/steel-browser-commands.md).
+Use `steel browser eval "<js>" --session <name>` when no direct command exists. Common uses: network interception, DOM state injection, complex form widgets.
 
 ## Commands that do NOT exist
 
-Do not attempt these. They will fail and waste turns.
+Do not attempt these — they will fail.
 
 | Does NOT exist | Use instead |
 |---|---|
-| `steel browser record` / `video` | No recording; use `steel browser live` for viewer URL |
-| `steel browser triple-click` | `press Control+a` or `eval` with `.select()` |
+| `steel browser record` / `video` | `steel browser live` for viewer URL |
 | `steel browser network` / `route` | `eval` with fetch monkey-patch |
 | `steel browser console` / `errors` | `eval` with console interceptor |
 | `steel browser frame` | `eval` with iframe contentDocument |
-| `steel browser tabs` (plural) | `steel browser tab list` (singular `tab`) |
+| `steel browser tabs` (plural) | `steel browser tab list` (singular) |
 | `steel browser execute` / `run` | `steel browser eval` |
-| `steel browser is-visible` | `steel browser is` |
-| `steel browser set device` | `set viewport` + `set useragent` separately |
 | `steel browser resize` | `steel browser set viewport W H` |
 | `steel browser geolocation` | `steel browser set geo LAT LON` |
-| `steel browser pdf` | Top-level `steel pdf <url>` (no browser session needed) |
+| `steel browser pdf` | Top-level `steel pdf <url>` |
+
+## SDK integration (programmatic)
+
+If you need to use Steel from code instead of the CLI:
+
+### Python (Playwright)
+
+```bash
+pip install steel-sdk playwright
+```
+
+```python
+from playwright.sync_api import sync_playwright
+from steel import Steel
+import os
+
+client = Steel(steel_api_key=os.environ["STEEL_API_KEY"])
+session = client.sessions.create()
+
+try:
+    pw = sync_playwright().start()
+    browser = pw.chromium.connect_over_cdp(session.websocket_url)
+    page = browser.contexts[0].pages[0]
+
+    page.goto("https://example.com")
+    print(page.title())
+finally:
+    browser.close()
+    pw.stop()
+    client.sessions.release(session.id)
+```
+
+### Node.js (Puppeteer)
+
+```bash
+npm install steel-sdk puppeteer
+```
+
+```typescript
+import Steel from 'steel-sdk';
+import puppeteer from 'puppeteer';
+
+const client = new Steel({ steelAPIKey: process.env.STEEL_API_KEY });
+const session = await client.sessions.create();
+
+try {
+  const browser = await puppeteer.connect({
+    browserWSEndpoint: `${session.websocketUrl}?apiKey=${process.env.STEEL_API_KEY}`,
+  });
+  const page = await browser.newPage();
+  await page.goto('https://example.com');
+  console.log(await page.title());
+  await browser.disconnect();
+} finally {
+  await client.sessions.release(session.id);
+}
+```
+
+**Key pattern:** Create session → connect via CDP websocket URL → use any browser library → release session.
 
 ## Troubleshooting
 
-```bash
-steel browser sessions
-steel browser live --session <name>
-```
-
 | Symptom | Fix |
 |---------|-----|
-| `Missing browser auth` | `steel login` or set `STEEL_API_KEY` |
-| `No running session "<name>"` | Check spelling; run `steel browser stop --all` then restart with same name |
-| Session not reused between commands | Use exact same `--session <name>` on every command |
-| CAPTCHA blocking | `steel browser captcha status --wait`; restart with `--stealth` |
-| Stale session / stuck state | `steel browser stop --all` then fresh named session |
-| `steel: command not found` | `curl -sSf https://setup.steel.dev \| sh` and add `$HOME/.steel/bin` to PATH |
+| `steel: command not found` | `curl -sSf https://setup.steel.dev/install.sh \| sh && export PATH="$HOME/.steel/bin:$PATH"` |
+| `Missing browser auth` | `steel login` or set `STEEL_API_KEY` env var |
+| Authentication error in SDK | `export STEEL_API_KEY="your_key"` |
+| `No running session` | Check session name; `steel browser stop --all` then restart |
+| Stale element refs | Re-run `steel browser snapshot -i` before interacting |
+| CAPTCHA blocking | `steel browser start --stealth --session <name>` |
+| Session timeout | Add `--session-timeout 3600000` for tasks over 5 minutes |
 
-Full playbook: [references/troubleshooting.md](references/troubleshooting.md).
-
-## Reference routing
-
-- Full command reference: [references/steel-browser-commands.md](references/steel-browser-commands.md)
-- Lifecycle, endpoints, CAPTCHA modes: [references/steel-browser-lifecycle.md](references/steel-browser-lifecycle.md)
-- Migration from agent-browser: [references/migration-agent-browser.md](references/migration-agent-browser.md)
-- Error recovery playbooks: [references/troubleshooting.md](references/troubleshooting.md)
+If you run into issues, refer to https://docs.steel.dev or run `steel --help`.
