@@ -448,10 +448,45 @@ fn get_macos_key_provider(browser: BrowserId) -> Result<KeyProvider> {
     })
 }
 
+/// KWallet keyring name for a browser, matching Chromium's convention.
+/// Ref: https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/os_crypt/sync/key_storage_kwallet.cc
+fn kwallet_keyring_name(browser: BrowserId) -> &'static str {
+    match browser {
+        BrowserId::Chrome => "Chrome",
+        BrowserId::Brave => "Brave",
+        BrowserId::Edge | BrowserId::Opera => "Chromium",
+        BrowserId::Vivaldi => "Chrome",
+        BrowserId::Arc => "Arc",
+    }
+}
+
+fn try_kwallet_password(browser: BrowserId) -> Option<String> {
+    let name = kwallet_keyring_name(browser);
+    let output = std::process::Command::new("kwallet-query")
+        .args([
+            "--read-password",
+            &format!("{name} Safe Storage"),
+            "--folder",
+            &format!("{name} Keys"),
+            "kdewallet",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let pw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if pw.is_empty() || pw.to_lowercase().starts_with("failed to read") {
+        return None;
+    }
+    Some(pw)
+}
+
 fn get_linux_key_provider(browser: BrowserId) -> Result<KeyProvider> {
     let desc = browser.descriptor();
     let app_name = desc.keychain_service_for_current_os();
 
+    // Try GNOME/freedesktop secret service first, then KWallet, then "peanuts" fallback.
     let passphrase = if let Some(app) = app_name {
         std::process::Command::new("secret-tool")
             .args(["lookup", "application", app])
@@ -460,6 +495,7 @@ fn get_linux_key_provider(browser: BrowserId) -> Result<KeyProvider> {
             .filter(|o| o.status.success())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .filter(|s| !s.is_empty())
+            .or_else(|| try_kwallet_password(browser))
             .unwrap_or_else(|| "peanuts".to_string())
     } else {
         "peanuts".to_string()
