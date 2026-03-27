@@ -152,7 +152,8 @@ impl BrowserId {
                 keychain_service: PlatformStr {
                     darwin: Some("Opera Safe Storage"),
                     win32: None,
-                    linux: Some("opera"),
+                    // Opera on Linux uses Chromium's default keyring name
+                    linux: Some("chromium"),
                 },
             },
             Self::Vivaldi => BrowserDescriptor {
@@ -170,7 +171,8 @@ impl BrowserId {
                 keychain_service: PlatformStr {
                     darwin: Some("Vivaldi Safe Storage"),
                     win32: None,
-                    linux: Some("vivaldi"),
+                    // Vivaldi on Linux uses Chrome's keyring name
+                    linux: Some("chrome"),
                 },
             },
         }
@@ -418,9 +420,7 @@ fn get_macos_key_provider(browser: BrowserId) -> Result<KeyProvider> {
 
     // Chromium stores the keychain entry with account = browser name (e.g. "Chrome")
     // and service = "Chrome Safe Storage". Specifying both avoids ambiguity.
-    let account = service
-        .strip_suffix(" Safe Storage")
-        .unwrap_or(service);
+    let account = service.strip_suffix(" Safe Storage").unwrap_or(service);
 
     let output = std::process::Command::new("security")
         .args(["find-generic-password", "-w", "-a", account, "-s", service])
@@ -761,10 +761,7 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
             // Old Chromium versions (macOS/Windows) stored cookies as plaintext
             // without a version prefix. Treat non-v10/v11/v20 data as plaintext.
             let is_known_prefix = encrypted_value.len() >= 3
-                && matches!(
-                    &encrypted_value[..3],
-                    b"v10" | b"v11" | b"v20"
-                );
+                && matches!(&encrypted_value[..3], b"v10" | b"v11" | b"v20");
 
             let plaintext = if is_known_prefix {
                 decrypt_cookie(
@@ -1116,8 +1113,7 @@ mod tests {
     #[test]
     fn ytdlp_linux_v10_peanuts() {
         let key = derive_key("peanuts", 1);
-        let encrypted_value: &[u8] =
-            b"v10\xccW%\xcd\xe6\xe6\x9fM\x22\x20\xa7\xb0\xca\xe4\x07\xd6";
+        let encrypted_value: &[u8] = b"v10\xccW%\xcd\xe6\xe6\x9fM\x22\x20\xa7\xb0\xca\xe4\x07\xd6";
         let result =
             decrypt_cookie(encrypted_value, &key, "", 0, CryptoAlgorithm::Aes128Cbc).unwrap();
         assert_eq!(result, "USD");
@@ -1136,8 +1132,7 @@ mod tests {
     #[test]
     fn ytdlp_macos_v10() {
         let key = derive_key("6eIDUdtKAacvlHwBVwvg/Q==", 1003);
-        let encrypted_value: &[u8] =
-            b"v10\xb3\xbe\xad\xa1[\x9fC\xa1\x98\xe0\x9a\x01\xd9\xcf\xbfc";
+        let encrypted_value: &[u8] = b"v10\xb3\xbe\xad\xa1[\x9fC\xa1\x98\xe0\x9a\x01\xd9\xcf\xbfc";
         let result =
             decrypt_cookie(encrypted_value, &key, "", 0, CryptoAlgorithm::Aes128Cbc).unwrap();
         assert_eq!(result, "2021-06-01-22");
@@ -1154,16 +1149,25 @@ mod tests {
 
     #[test]
     fn ytdlp_derive_key_peanuts() {
-        // yt-dlp: pbkdf2_sha1(b'peanuts', b' ' * 16, 1, 16) == b'g\xe1...'
-        // but Chromium uses salt="saltysalt", not spaces. Verify our derive_key matches.
-        let key = derive_key("peanuts", 1);
-        assert_eq!(key.len(), 16);
         // Cross-check: yt-dlp's LinuxChromeCookieDecryptor.derive_key(b'abc')
         // == b'7\xa1\xec\xd4m\xfcA\xc7\xb19Z\xd0\x19\xdcM\x17'
-        let abc_key = derive_key("abc", 1);
+        let abc_key_linux = derive_key("abc", 1);
         assert_eq!(
-            abc_key,
-            [0x37, 0xa1, 0xec, 0xd4, 0x6d, 0xfc, 0x41, 0xc7, 0xb1, 0x39, 0x5a, 0xd0, 0x19, 0xdc, 0x4d, 0x17]
+            abc_key_linux,
+            [
+                0x37, 0xa1, 0xec, 0xd4, 0x6d, 0xfc, 0x41, 0xc7, 0xb1, 0x39, 0x5a, 0xd0, 0x19, 0xdc,
+                0x4d, 0x17
+            ]
+        );
+        // Cross-check: yt-dlp's MacChromeCookieDecryptor.derive_key(b'abc')
+        // == b'Y\xe2\xc0\xd0P\xf6\xf4\xe1l\xc1\x8cQ\xcb|\xcdY'
+        let abc_key_mac = derive_key("abc", 1003);
+        assert_eq!(
+            abc_key_mac,
+            [
+                0x59, 0xe2, 0xc0, 0xd0, 0x50, 0xf6, 0xf4, 0xe1, 0x6c, 0xc1, 0x8c, 0x51, 0xcb, 0x7c,
+                0xcd, 0x59
+            ]
         );
     }
 
