@@ -722,23 +722,35 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
         };
 
         for (rowid, host_key, encrypted_value) in &rows {
-            let plaintext = decrypt_cookie(
-                encrypted_value,
-                &provider.source_key[..provider.source_key_len],
-                host_key,
-                meta_version,
-                provider.source_algorithm,
-            )
-            .or_else(|| {
-                let (key, len) = empty_key_fallback.as_ref()?;
+            // Old Chromium versions (macOS/Windows) stored cookies as plaintext
+            // without a version prefix. Treat non-v10/v11/v20 data as plaintext.
+            let is_known_prefix = encrypted_value.len() >= 3
+                && matches!(
+                    &encrypted_value[..3],
+                    b"v10" | b"v11" | b"v20"
+                );
+
+            let plaintext = if is_known_prefix {
                 decrypt_cookie(
                     encrypted_value,
-                    &key[..*len],
+                    &provider.source_key[..provider.source_key_len],
                     host_key,
                     meta_version,
                     provider.source_algorithm,
                 )
-            });
+                .or_else(|| {
+                    let (key, len) = empty_key_fallback.as_ref()?;
+                    decrypt_cookie(
+                        encrypted_value,
+                        &key[..*len],
+                        host_key,
+                        meta_version,
+                        provider.source_algorithm,
+                    )
+                })
+            } else {
+                String::from_utf8(encrypted_value.clone()).ok()
+            };
 
             let Some(plaintext) = plaintext else {
                 skipped += 1;
