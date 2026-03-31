@@ -1,6 +1,7 @@
 ---
 name: steel-browser
-allowed-tools: Bash(steel:*)
+allowed-tools:
+  - "Bash(steel:*)"
 description: >-
   Use this skill for any web task where WebFetch or curl would fail or be
   insufficient — pages that require JavaScript to render, forms to fill and
