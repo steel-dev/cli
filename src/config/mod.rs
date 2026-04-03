@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 
 pub const DEFAULT_API_URL: &str = "https://api.steel.dev/v1";
 pub const DEFAULT_LOCAL_API_URL: &str = "http://localhost:3000/v1";
-pub const LOGIN_URL: &str = "https://app.steel.dev/sign-in";
-pub const SUCCESS_URL: &str = "https://app.steel.dev/sign-in/cli-success";
-pub const API_KEYS_URL: &str = "https://api.steel.dev/v1/api-keys";
+pub const DEVICE_AUTH_URL: &str = "https://api.steel.dev/v1/auth/device";
+pub const DEVICE_TOKEN_URL: &str = "https://api.steel.dev/v1/auth/device/token";
 pub const REPO_URL: &str = "https://github.com/steel-dev/steel-browser.git";
 
 /// Resolve the Steel config directory.
