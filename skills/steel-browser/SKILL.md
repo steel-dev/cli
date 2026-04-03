@@ -106,7 +106,7 @@ steel pdf https://example.com
 
 ```bash
 steel browser start --session my-task --session-timeout 3600000
-steel browser open https://example.com --session my-task
+steel browser navigate https://example.com --session my-task
 steel browser snapshot -i --session my-task
 steel browser fill @e3 "search term" --session my-task
 steel browser click @e7 --session my-task
@@ -135,7 +135,7 @@ steel browser stop --all
 ### Navigation and inspection
 
 ```bash
-steel browser open <url> --session <name>
+steel browser navigate <url> --session <name>
 steel browser snapshot                         # full accessibility tree
 steel browser snapshot -i                      # interactive elements + refs
 steel browser snapshot -c                      # compact output
@@ -207,12 +207,8 @@ steel browser cookies --session <name>
 steel browser cookies set <name> <value> --session <name>
 steel browser cookies set <name> <value> --domain .example.com
 steel browser cookies clear --session <name>
-
-steel browser storage local --session <name>
-steel browser storage local <key> --session <name>
-steel browser storage local set <key> <value> --session <name>
-steel browser storage local clear --session <name>
 steel browser storage session --session <name>
+steel browser storage session set authToken "abc123" --session <name>
 ```
 
 ### Browser settings
