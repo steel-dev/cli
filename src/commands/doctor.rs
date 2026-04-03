@@ -31,10 +31,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let mut checks = if args.preflight {
         check_auth_and_api(mode, &base_url, &auth).await
     } else {
-        let (auth_api, version) = tokio::join!(
-            check_auth_and_api(mode, &base_url, &auth),
-            check_version(),
-        );
+        let (auth_api, version) =
+            tokio::join!(check_auth_and_api(mode, &base_url, &auth), check_version(),);
         let sessions = check_sessions();
         let mut all = auth_api;
         all.extend(sessions);
