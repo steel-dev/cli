@@ -4,6 +4,14 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    ignore:
+      # sha1/sha2 0.11 use digest 0.11, which conflicts with pbkdf2 0.12,
+      # aes-gcm 0.10, aes 0.8, and cbc 0.1 (all still on digest 0.10).
+      # Unblock once pbkdf2/aes-gcm/aes/cbc ship stable digest 0.11 releases.
+      - dependency-name: "sha1"
+        versions: [">=0.11"]
+      - dependency-name: "sha2"
+        versions: [">=0.11"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
