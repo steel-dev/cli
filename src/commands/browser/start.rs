@@ -146,7 +146,7 @@ fn display_session_info(info: &SessionInfo) {
             data["liveUrl"] = json!(url);
         }
         if let Some(ref url) = info.connect_url {
-            data["connectUrl"] = json!(sanitize_connect_url(url));
+            data["connectUrl"] = json!(url);
         }
         if let Some(ref rem) = remaining {
             data["remainingMs"] = json!(rem.0);
