@@ -80,10 +80,10 @@ This should return Markdown content. If it does, setup is complete.
 ## API tools (one-shot, no session needed)
 
 ```bash
-# Scrape — returns Markdown by default, use --raw for full JSON
+# Scrape — returns Markdown by default (use --json flag for structured output)
 steel scrape https://example.com
 steel scrape https://example.com --format html
-steel scrape https://example.com --stealth --proxy
+steel scrape https://example.com --use-proxy
 
 # Screenshot
 steel screenshot https://example.com
