@@ -4,6 +4,7 @@ pub mod config;
 pub mod credentials;
 pub mod describe;
 pub mod dev;
+pub mod doctor;
 pub mod forge;
 pub mod login;
 pub mod logout;
@@ -171,6 +172,8 @@ Other:
   steel login                          Login to Steel (alias: auth)
   steel logout                         Logout from Steel
   steel config                         Show current configuration
+  steel doctor                         Check environment, auth, and connectivity
+    --preflight                          Only check auth and API (fast, for agents)
   steel update                         Update to latest version
   steel cache [-c]                     Manage CLI cache (-c to clean)
 
@@ -291,6 +294,9 @@ pub enum Command {
 
     /// Describe commands and parameters
     Describe(describe::Args),
+
+    /// Check environment, auth, and connectivity
+    Doctor(doctor::Args),
 }
 
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
@@ -320,5 +326,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Cache(args) => cache::run(args).await,
         Command::Profile { command } => profile::run(command).await,
         Command::Describe(args) => describe::run(args).await,
+        Command::Doctor(args) => doctor::run(args).await,
     }
 }
