@@ -46,15 +46,6 @@ const fn flag_short(long: &'static str, short: char) -> ExpectedFlag {
     }
 }
 
-const fn flag_val_required(long: &'static str) -> ExpectedFlag {
-    ExpectedFlag {
-        long,
-        short: None,
-        required: true,
-        takes_value: true,
-    }
-}
-
 const fn flag_val_short(long: &'static str, short: char) -> ExpectedFlag {
     ExpectedFlag {
         long,
