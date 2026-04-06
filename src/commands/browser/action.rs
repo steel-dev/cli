@@ -737,6 +737,12 @@ fn display_diff_screenshot(data: serde_json::Value) {
 // ── ActionCommand → (DaemonCommand, OutputStrategy) ─────────────────
 
 impl ActionCommand {
+    /// Convert to a DaemonCommand, discarding the output strategy.
+    /// Used by batch which handles output formatting itself.
+    pub(crate) fn into_daemon_command(self) -> Result<DaemonCommand> {
+        self.into_wire().map(|(cmd, _)| cmd)
+    }
+
     fn into_wire(self) -> Result<(DaemonCommand, OutputStrategy)> {
         use DaemonCommand as D;
         use OutputStrategy as O;
@@ -1159,6 +1165,19 @@ pub async fn run(action: ActionCommand, session: Option<&str>) -> Result<()> {
         }
     }
     result
+}
+
+/// Connect to (or spawn) a daemon for the given session. Used by batch.
+pub(crate) async fn connect_daemon(session: Option<&str>) -> Result<DaemonClient> {
+    ensure_daemon(session).await
+}
+
+/// Check if a daemon is still reachable after an error. Used by batch.
+pub(crate) async fn session_health_check(
+    session: Option<&str>,
+    err: &anyhow::Error,
+) -> Option<anyhow::Error> {
+    check_session_health(session, err).await
 }
 
 async fn dispatch_action(client: &mut DaemonClient, action: ActionCommand) -> Result<()> {

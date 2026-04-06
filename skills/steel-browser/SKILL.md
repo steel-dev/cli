@@ -119,6 +119,32 @@ steel browser stop --session my-task
 - Always use the same `--session <name>` on every command.
 - Never use an `@eN` ref without a fresh snapshot — refs expire after navigation or DOM changes.
 - Prefer element refs from `snapshot -i` over CSS selectors. Use `-c` for large DOMs, `-d 3` to limit depth.
+- Use `batch` to combine multiple commands into a single invocation for efficiency.
+
+### Batch execution
+
+Run multiple commands in one CLI call. Each quoted string is one command.
+
+```bash
+# Navigate and snapshot in one call
+steel browser batch "navigate https://example.com" "snapshot -i" --session my-task
+
+# Action + re-snapshot (no separate snapshot call needed)
+steel browser batch "click @e3" "snapshot -i" --session my-task
+
+# Multiple actions without intermediate snapshots
+steel browser batch "fill @e1 Seoul" "fill @e2 Tokyo" "click @e5" --session my-task
+
+# Stop on first error with --bail
+steel browser batch "click @e3" "snapshot -i" --session my-task --bail
+```
+
+Use `batch` when:
+- You need to snapshot after an action (most common case)
+- You are filling multiple form fields in sequence
+- You want to reduce the number of CLI invocations
+
+Use separate commands when you need to read the output of one command before deciding the next.
 
 ### Session lifecycle
 

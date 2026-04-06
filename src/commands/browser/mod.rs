@@ -1,4 +1,5 @@
 pub mod action;
+pub mod batch;
 pub mod captcha;
 pub mod live;
 pub mod sessions;
@@ -37,6 +38,9 @@ pub enum Command {
         command: captcha::Command,
     },
 
+    /// Run multiple browser commands in a single invocation
+    Batch(batch::Args),
+
     /// Browser actions (navigate, click, fill, snapshot, screenshot, …)
     #[command(flatten)]
     Action(action::ActionCommand),
@@ -55,6 +59,7 @@ pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
         Command::Sessions(args) => sessions::run(args).await,
         Command::Live(args) => live::run(args, session.as_deref()).await,
         Command::Captcha { command } => captcha::run(command, session.as_deref()).await,
+        Command::Batch(args) => batch::run(args, session.as_deref()).await,
         Command::Action(action) => action::run(action, session.as_deref()).await,
     }
 }

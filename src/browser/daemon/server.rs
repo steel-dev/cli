@@ -321,14 +321,14 @@ const fn build_snapshot_options(
     selector: Option<String>,
     compact: bool,
     max_depth: Option<usize>,
-    cursor: bool,
+    _cursor: bool,
 ) -> SnapshotOptions {
     SnapshotOptions {
         selector,
         interactive: interactive_only,
         compact,
         depth: max_depth,
-        cursor,
+        urls: false,
     }
 }
 
@@ -780,10 +780,9 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_options_compact_and_cursor() {
+    fn snapshot_options_compact() {
         let opts = build_snapshot_options(false, None, true, None, true);
         assert!(opts.compact);
-        assert!(opts.cursor);
     }
 
     #[test]
@@ -793,7 +792,6 @@ mod tests {
         assert_eq!(opts.selector.as_deref(), Some("#app"));
         assert!(opts.compact);
         assert_eq!(opts.depth, Some(3));
-        assert!(opts.cursor);
     }
 
     // ── build_screenshot_options field mapping ─────────────────────
