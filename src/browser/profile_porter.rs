@@ -603,7 +603,7 @@ fn decrypt_cookie(
     host_key: &str,
     meta_version: i64,
     algorithm: CryptoAlgorithm,
-) -> Option<String> {
+) -> Option<Vec<u8>> {
     if encrypted_value.len() < 3 {
         return None;
     }
@@ -650,19 +650,19 @@ fn decrypt_cookie(
     }
 }
 
-fn strip_domain_hash(plaintext: &[u8], host_key: &str, meta_version: i64) -> Option<String> {
+fn strip_domain_hash(plaintext: &[u8], host_key: &str, meta_version: i64) -> Option<Vec<u8>> {
     if meta_version >= 24 && plaintext.len() >= 32 {
         use sha2::{Digest, Sha256};
         let expected_hash = Sha256::digest(host_key.as_bytes());
         if expected_hash.as_slice() != &plaintext[..32] {
             return None; // hash mismatch — decryption failure
         }
-        return Some(String::from_utf8_lossy(&plaintext[32..]).to_string());
+        return Some(plaintext[32..].to_vec());
     }
-    Some(String::from_utf8_lossy(plaintext).to_string())
+    Some(plaintext.to_vec())
 }
 
-fn encrypt_cookie(value: &str, key: &[u8; 16], host_key: &str, meta_version: i64) -> Vec<u8> {
+fn encrypt_cookie(value: &[u8], key: &[u8; 16], host_key: &str, meta_version: i64) -> Vec<u8> {
     use aes::Aes128;
     use cbc::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
 
@@ -673,7 +673,7 @@ fn encrypt_cookie(value: &str, key: &[u8; 16], host_key: &str, meta_version: i64
         let domain_hash = Sha256::digest(host_key.as_bytes());
         plaintext.extend_from_slice(&domain_hash);
     }
-    plaintext.extend_from_slice(value.as_bytes());
+    plaintext.extend_from_slice(value);
 
     type Aes128CbcEnc = cbc::Encryptor<Aes128>;
 
@@ -779,7 +779,7 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
                     )
                 })
             } else {
-                String::from_utf8(encrypted_value.clone()).ok()
+                Some(encrypted_value.clone())
             };
 
             let Some(plaintext) = plaintext else {
@@ -1056,31 +1056,31 @@ mod tests {
     #[test]
     fn encrypt_decrypt_roundtrip() {
         let key = derive_key("testkey", 1);
-        let value = "hello world";
+        let value = b"hello world";
         let host_key = ".example.com";
 
         let encrypted = encrypt_cookie(value, &key, host_key, 20);
         assert_eq!(&encrypted[..3], b"v10");
         let decrypted = decrypt_cookie(&encrypted, &key, host_key, 20, CryptoAlgorithm::Aes128Cbc);
-        assert_eq!(decrypted.as_deref(), Some(value));
+        assert_eq!(decrypted.as_deref(), Some(value.as_slice()));
     }
 
     #[test]
     fn encrypt_decrypt_roundtrip_v24() {
         let key = derive_key("testkey", 1);
-        let value = "secret cookie";
+        let value = b"secret cookie";
         let host_key = ".google.com";
 
         let encrypted = encrypt_cookie(value, &key, host_key, 24);
         let decrypted = decrypt_cookie(&encrypted, &key, host_key, 24, CryptoAlgorithm::Aes128Cbc);
-        assert_eq!(decrypted.as_deref(), Some(value));
+        assert_eq!(decrypted.as_deref(), Some(value.as_slice()));
     }
 
     #[test]
     fn decrypt_wrong_key_returns_none() {
         let key1 = derive_key("key1", 1);
         let key2 = derive_key("key2", 1);
-        let encrypted = encrypt_cookie("data", &key1, ".test.com", 20);
+        let encrypted = encrypt_cookie(b"data", &key1, ".test.com", 20);
         let result = decrypt_cookie(
             &encrypted,
             &key2,
@@ -1113,7 +1113,7 @@ mod tests {
         let encrypted_value: &[u8] = b"v10\xccW%\xcd\xe6\xe6\x9fM\x22\x20\xa7\xb0\xca\xe4\x07\xd6";
         let result =
             decrypt_cookie(encrypted_value, &key, "", 0, CryptoAlgorithm::Aes128Cbc).unwrap();
-        assert_eq!(result, "USD");
+        assert_eq!(result, b"USD");
     }
 
     #[test]
@@ -1123,7 +1123,7 @@ mod tests {
         let encrypted_value: &[u8] = b"v11#\x81\x10>`w\x8f)\xc0\xb2\xc1\r\xf4\x1al\xdd\x93\xfd\xf8\xf8N\xf2\xa9\x83\xf1\xe9o\x0elVQd";
         let result =
             decrypt_cookie(encrypted_value, &key, "", 0, CryptoAlgorithm::Aes128Cbc).unwrap();
-        assert_eq!(result, "tz=Europe.London");
+        assert_eq!(result, b"tz=Europe.London");
     }
 
     #[test]
@@ -1132,7 +1132,7 @@ mod tests {
         let encrypted_value: &[u8] = b"v10\xb3\xbe\xad\xa1[\x9fC\xa1\x98\xe0\x9a\x01\xd9\xcf\xbfc";
         let result =
             decrypt_cookie(encrypted_value, &key, "", 0, CryptoAlgorithm::Aes128Cbc).unwrap();
-        assert_eq!(result, "2021-06-01-22");
+        assert_eq!(result, b"2021-06-01-22");
     }
 
     #[test]
@@ -1141,7 +1141,7 @@ mod tests {
         let encrypted_value: &[u8] = b"v10\x54\xb8\xf3\xb8\x01\xa7\x54\x74\x63\x56\xfc\x88\xb8\xb8\xef\x05\xb5\xfd\x18\xc9\x30\x00\x39\xab\xb1\x89\x33\x85\x29\x87\xe1\xa9\x2d\xa3\xad\x3d";
         let result =
             decrypt_cookie(encrypted_value, key, "", 0, CryptoAlgorithm::Aes256Gcm).unwrap();
-        assert_eq!(result, "32101439");
+        assert_eq!(result, b"32101439");
     }
 
     #[test]
@@ -1356,7 +1356,7 @@ mod tests {
             );
             assert_eq!(
                 decrypted.as_deref(),
-                Some(*exp_value),
+                Some(exp_value.as_bytes()),
                 "Cookie {name} on {host_key} not decryptable with peanuts key"
             );
         }
@@ -1666,7 +1666,7 @@ mod tests {
         let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
             .iter()
             .map(|c| {
-                let enc = encrypt_cookie(c.value, &source_key, c.host_key, meta_version);
+                let enc = encrypt_cookie(c.value.as_bytes(), &source_key, c.host_key, meta_version);
                 (c.host_key, c.name, enc)
             })
             .collect();
@@ -1724,7 +1724,7 @@ mod tests {
         let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
             .iter()
             .map(|c| {
-                let enc = encrypt_cookie(c.value, &source_key, c.host_key, meta_version);
+                let enc = encrypt_cookie(c.value.as_bytes(), &source_key, c.host_key, meta_version);
                 (c.host_key, c.name, enc)
             })
             .collect();
@@ -1765,7 +1765,7 @@ mod tests {
         let source_key = derive_key("testpass", 1);
         let meta_version = 20;
 
-        let valid_enc = encrypt_cookie("good_value", &source_key, ".example.com", meta_version);
+        let valid_enc = encrypt_cookie(b"good_value", &source_key, ".example.com", meta_version);
         let corrupt1 = b"v10garbage_not_valid_ciphertext".to_vec();
         let corrupt2 = b"v10\x00\x01\x02\x03".to_vec();
 
@@ -1945,7 +1945,7 @@ mod tests {
         let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
             .iter()
             .map(|c| {
-                let enc = encrypt_cookie(c.value, &source_key_16, c.host_key, meta_version);
+                let enc = encrypt_cookie(c.value.as_bytes(), &source_key_16, c.host_key, meta_version);
                 (c.host_key, c.name, enc)
             })
             .collect();
