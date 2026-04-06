@@ -99,7 +99,7 @@ pub enum DaemonCommand {
         selector: Option<String>,
         compact: bool,
         max_depth: Option<usize>,
-        cursor: bool,
+        urls: bool,
     },
     Screenshot {
         full_page: bool,
@@ -358,7 +358,7 @@ mod tests {
             selector: None,
             compact: false,
             max_depth: None,
-            cursor: false,
+            urls: false,
         };
         let v = serde_json::to_value(&cmd).unwrap();
         assert!(v["selector"].is_null());
@@ -411,7 +411,7 @@ mod tests {
             selector: Some("div".into()),
             compact: true,
             max_depth: None,
-            cursor: true,
+            urls: true,
         };
         let json = serde_json::to_string(&cmd).unwrap();
         let back: DaemonCommand = serde_json::from_str(&json).unwrap();

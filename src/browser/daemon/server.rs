@@ -321,14 +321,14 @@ const fn build_snapshot_options(
     selector: Option<String>,
     compact: bool,
     max_depth: Option<usize>,
-    _cursor: bool,
+    urls: bool,
 ) -> SnapshotOptions {
     SnapshotOptions {
         selector,
         interactive: interactive_only,
         compact,
         depth: max_depth,
-        urls: false,
+        urls,
     }
 }
 
@@ -401,10 +401,10 @@ async fn dispatch_inner(
             selector,
             compact,
             max_depth,
-            cursor,
+            urls,
         } => {
             let options =
-                build_snapshot_options(interactive_only, selector, compact, max_depth, cursor);
+                build_snapshot_options(interactive_only, selector, compact, max_depth, urls);
             let text = engine.snapshot(options).await?;
             Ok(Value::String(text))
         }
@@ -781,7 +781,7 @@ mod tests {
 
     #[test]
     fn snapshot_options_compact() {
-        let opts = build_snapshot_options(false, None, true, None, true);
+        let opts = build_snapshot_options(false, None, true, None, false);
         assert!(opts.compact);
     }
 

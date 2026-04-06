@@ -137,6 +137,11 @@ const SKIPPED_HANDLERS: &[&str] = &[
     "handle_cookies_get",
     // HTTP credentials not wrapped
     "handle_http_credentials",
+    // Streaming not wrapped
+    "handle_stream_disable",
+    "handle_stream_enable",
+    "handle_stream_status",
+    "handle_request_detail",
 ];
 
 const OUTPUT_PARITY: &[OutputParity] = &[

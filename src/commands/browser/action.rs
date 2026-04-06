@@ -415,9 +415,9 @@ pub struct SnapshotArgs {
     /// Maximum nesting depth
     #[arg(short = 'd', long, alias = "depth")]
     pub max_depth: Option<usize>,
-    /// Include cursor position
-    #[arg(short = 'C', long)]
-    pub cursor: bool,
+    /// Include URLs in the snapshot
+    #[arg(short = 'u', long)]
+    pub urls: bool,
 }
 
 #[derive(Parser)]
@@ -869,7 +869,7 @@ impl ActionCommand {
                     selector: a.selector,
                     compact: a.compact,
                     max_depth: a.max_depth,
-                    cursor: a.cursor,
+                    urls: a.urls,
                 },
                 O::Text,
             ),

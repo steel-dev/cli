@@ -161,6 +161,10 @@ const SKIPPED: &[&str] = &[
     // Policy
     "confirm",
     "deny",
+    "request_detail",
+    "stream_disable",
+    "stream_enable",
+    "stream_status",
 ];
 
 /// Actions that don't apply to Steel's remote session architecture.
@@ -261,7 +265,7 @@ const PARAM_COVERAGE: &[ParamCoverage] = &[
     },
     ParamCoverage {
         handler: "handle_snapshot",
-        covered: &["interactive", "selector", "compact", "maxDepth", "cursor"],
+        covered: &["interactive", "selector", "compact", "maxDepth", "urls"],
         skipped: &[],
     },
     ParamCoverage {
@@ -310,15 +314,7 @@ const PARAM_COVERAGE: &[ParamCoverage] = &[
     },
     ParamCoverage {
         handler: "handle_wait",
-        covered: &[
-            "timeout",
-            "text",
-            "selector",
-            "state",
-            "url",
-            "function",
-            "loadState",
-        ],
+        covered: &["text", "selector", "state", "url", "function", "loadState"],
         skipped: &[],
     },
     // url, title, back, forward, reload, close: no cmd params

@@ -212,10 +212,7 @@ mod tests {
 
     #[test]
     fn split_multiple_spaces() {
-        assert_eq!(
-            split_command_str("  click   @e3  "),
-            vec!["click", "@e3"]
-        );
+        assert_eq!(split_command_str("  click   @e3  "), vec!["click", "@e3"]);
     }
 
     #[test]

@@ -1945,7 +1945,8 @@ mod tests {
         let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
             .iter()
             .map(|c| {
-                let enc = encrypt_cookie(c.value.as_bytes(), &source_key_16, c.host_key, meta_version);
+                let enc =
+                    encrypt_cookie(c.value.as_bytes(), &source_key_16, c.host_key, meta_version);
                 (c.host_key, c.name, enc)
             })
             .collect();

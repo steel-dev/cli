@@ -40,6 +40,7 @@ const INTERACTION: ModuleCoverage = ModuleCoverage {
         "dispatch_event",
         "highlight",
         "tap_touch",
+        "type_text_into_active_context",
     ],
 };
 
@@ -73,7 +74,7 @@ const ELEMENT: ModuleCoverage = ModuleCoverage {
         "get_element_bounding_box",
         "get_element_styles",
     ],
-    skipped: &["resolve_element_center", "add_with_frame"],
+    skipped: &["resolve_element_center", "add_with_frame", "remove"],
 };
 
 // ── cookies.rs ──────────────────────────────────────────────────────
@@ -81,7 +82,12 @@ const ELEMENT: ModuleCoverage = ModuleCoverage {
 const COOKIES: ModuleCoverage = ModuleCoverage {
     file: "cookies.rs",
     covered: &[],
-    skipped: &["get_cookies", "set_cookies", "clear_cookies"],
+    skipped: &[
+        "get_cookies",
+        "get_all_cookies",
+        "set_cookies",
+        "clear_cookies",
+    ],
 };
 
 // ── storage.rs ──────────────────────────────────────────────────────
@@ -120,6 +126,9 @@ const NETWORK: ModuleCoverage = ModuleCoverage {
         "add_error",
         "get_console_json",
         "get_errors_json",
+        "clear_console",
+        "format_console_arg",
+        "format_console_args",
         // DomainFilter methods
         "is_allowed",
         "check_url",
@@ -190,18 +199,24 @@ const BROWSER: ModuleCoverage = ModuleCoverage {
         // Launch / connect
         "launch",
         "connect_auto",
+        "connect_cdp_direct",
+        "connect_cdp_with_headers",
         "validate_launch_options",
         "to_ai_friendly_error",
         // Page internals
         "enable_domains_pub",
         "ensure_page",
         "update_active_page_if_needed",
+        "update_page_target_info",
         "add_page",
         "remove_page_by_target_id",
         "has_target",
         "has_pages",
+        "has_exited",
+        "has_process_exited",
         "page_count",
         "pages_list",
+        "visited_origins",
         // Getters
         "get_cdp_url",
         "chrome_host_port",
