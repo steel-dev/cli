@@ -445,7 +445,7 @@ fn get_macos_key_provider(browser: BrowserId) -> Result<KeyProvider> {
 
 /// KWallet keyring name for a browser, matching Chromium's convention.
 /// Ref: https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/os_crypt/sync/key_storage_kwallet.cc
-fn kwallet_keyring_name(browser: BrowserId) -> &'static str {
+const fn kwallet_keyring_name(browser: BrowserId) -> &'static str {
     match browser {
         BrowserId::Chrome => "Chrome",
         BrowserId::Brave => "Brave",
