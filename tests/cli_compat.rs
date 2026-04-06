@@ -494,12 +494,7 @@ fn profile_import_flags() {
     let cmd = get_subcommand(&root_cmd(), &["profile", "import"]);
     assert_flags(
         &cmd,
-        &[
-            flag_val_required("name"),
-            flag_val("from"),
-            flag_val("browser"),
-            flag("full"),
-        ],
+        &[flag_val("from"), flag_val("browser"), flag("full")],
         "profile import",
     );
 }
@@ -509,12 +504,7 @@ fn profile_sync_flags() {
     let cmd = get_subcommand(&root_cmd(), &["profile", "sync"]);
     assert_flags(
         &cmd,
-        &[
-            flag_val_required("name"),
-            flag_val("from"),
-            flag_val("browser"),
-            flag("full"),
-        ],
+        &[flag_val("from"), flag_val("browser"), flag("full")],
         "profile sync",
     );
 }
@@ -522,5 +512,5 @@ fn profile_sync_flags() {
 #[test]
 fn profile_delete_flags() {
     let cmd = get_subcommand(&root_cmd(), &["profile", "delete"]);
-    assert_flags(&cmd, &[flag_val_required("name")], "profile delete");
+    assert_flags(&cmd, &[], "profile delete");
 }

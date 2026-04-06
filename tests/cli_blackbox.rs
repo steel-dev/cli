@@ -487,10 +487,10 @@ fn profile_import_help_shows_expected_flags() {
         "steel profile import --help should exit 0"
     );
     let out = stdout(&output);
-    for flag in &["--name", "--from"] {
+    for expected in &["[NAME]", "--from"] {
         assert!(
-            out.contains(flag),
-            "profile import help should mention '{flag}', got: {out}"
+            out.contains(expected),
+            "profile import help should mention '{expected}', got: {out}"
         );
     }
 }
@@ -503,10 +503,10 @@ fn profile_sync_help_shows_expected_flags() {
         "steel profile sync --help should exit 0"
     );
     let out = stdout(&output);
-    for flag in &["--name", "--from"] {
+    for expected in &["[NAME]", "--from"] {
         assert!(
-            out.contains(flag),
-            "profile sync help should mention '{flag}', got: {out}"
+            out.contains(expected),
+            "profile sync help should mention '{expected}', got: {out}"
         );
     }
 }
@@ -520,8 +520,8 @@ fn profile_delete_help_shows_expected_flags() {
     );
     let out = stdout(&output);
     assert!(
-        out.contains("--name"),
-        "profile delete help should mention '--name', got: {out}"
+        out.contains("[NAME]"),
+        "profile delete help should mention '[NAME]', got: {out}"
     );
 }
 
