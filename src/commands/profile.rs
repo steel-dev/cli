@@ -143,7 +143,7 @@ fn resolve_api() -> anyhow::Result<(String, String)> {
 }
 
 fn parse_browser(name: &str) -> anyhow::Result<profile_porter::BrowserId> {
-    profile_porter::BrowserId::from_str(name).ok_or_else(|| {
+    name.parse().map_err(|_| {
         anyhow::anyhow!(
             "Unknown browser: \"{name}\". Supported: chrome, edge, brave, arc, opera, vivaldi"
         )
@@ -349,7 +349,8 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
     let browser_id = if let Some(ref b) = args.browser {
         parse_browser(b)?
     } else if let Some(ref stored_browser) = stored.browser {
-        profile_porter::BrowserId::from_str(stored_browser)
+        stored_browser
+            .parse()
             .unwrap_or(profile_porter::BrowserId::Chrome)
     } else {
         profile_porter::BrowserId::Chrome

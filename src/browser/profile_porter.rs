@@ -28,19 +28,6 @@ impl BrowserId {
         ]
     }
 
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "chrome" => Some(Self::Chrome),
-            "edge" => Some(Self::Edge),
-            "brave" => Some(Self::Brave),
-            "arc" => Some(Self::Arc),
-            "opera" => Some(Self::Opera),
-            "vivaldi" => Some(Self::Vivaldi),
-            _ => None,
-        }
-    }
-
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Chrome => "chrome",
@@ -175,6 +162,22 @@ impl BrowserId {
                     linux: Some("chrome"),
                 },
             },
+        }
+    }
+}
+
+impl std::str::FromStr for BrowserId {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "chrome" => Ok(Self::Chrome),
+            "edge" => Ok(Self::Edge),
+            "brave" => Ok(Self::Brave),
+            "arc" => Ok(Self::Arc),
+            "opera" => Ok(Self::Opera),
+            "vivaldi" => Ok(Self::Vivaldi),
+            _ => Err(format!("unknown browser: {s}")),
         }
     }
 }
@@ -1201,13 +1204,13 @@ mod tests {
     #[test]
     fn browser_id_roundtrip() {
         for id in BrowserId::all() {
-            assert_eq!(BrowserId::from_str(id.as_str()), Some(*id));
+            assert_eq!(id.as_str().parse::<BrowserId>(), Ok(*id));
         }
     }
 
     #[test]
     fn browser_id_from_str_unknown() {
-        assert!(BrowserId::from_str("firefox").is_none());
+        assert!("firefox".parse::<BrowserId>().is_err());
     }
 
     #[test]
