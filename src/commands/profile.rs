@@ -158,14 +158,10 @@ struct BrowserProfileChoice {
 fn discover_all_profiles(
     browser_filter: Option<&str>,
 ) -> anyhow::Result<Vec<BrowserProfileChoice>> {
-    let browsers = if let Some(name) = browser_filter {
+    let browsers: Vec<profile_porter::BrowserId> = if let Some(name) = browser_filter {
         vec![parse_browser(name)?]
     } else {
-        let installed = profile_porter::detect_installed_browsers();
-        if installed.is_empty() {
-            anyhow::bail!("No supported browsers found.");
-        }
-        installed
+        profile_porter::BrowserId::all().to_vec()
     };
 
     let mut choices = Vec::new();
@@ -174,6 +170,11 @@ fn discover_all_profiles(
             choices.push(BrowserProfileChoice { browser, profile });
         }
     }
+
+    if choices.is_empty() && browser_filter.is_none() {
+        anyhow::bail!("No supported browsers found.");
+    }
+
     Ok(choices)
 }
 

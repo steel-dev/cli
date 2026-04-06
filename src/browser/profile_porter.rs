@@ -314,13 +314,6 @@ pub fn find_browser_profiles(browser: BrowserId) -> Vec<BrowserProfile> {
     profiles
 }
 
-pub fn detect_installed_browsers() -> Vec<BrowserId> {
-    BrowserId::all()
-        .iter()
-        .copied()
-        .filter(|b| !find_browser_profiles(*b).is_empty())
-        .collect()
-}
 
 fn get_profile_metadata(base: &Path, dir_name: &str) -> (String, Option<String>) {
     let prefs_path = base.join(dir_name).join("Preferences");
