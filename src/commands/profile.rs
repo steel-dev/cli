@@ -356,9 +356,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
 
     // Read existing profile
     let stored = profile_store::read_profile(&name)?.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Profile \"{name}\" not found. Run `steel profile import {name}` first.",
-        )
+        anyhow::anyhow!("Profile \"{name}\" not found. Run `steel profile import {name}` first.")
     })?;
 
     // Resolve browser: CLI flag → stored → default to chrome

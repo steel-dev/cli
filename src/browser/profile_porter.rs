@@ -317,7 +317,6 @@ pub fn find_browser_profiles(browser: BrowserId) -> Vec<BrowserProfile> {
     profiles
 }
 
-
 fn get_profile_metadata(base: &Path, dir_name: &str) -> (String, Option<String>) {
     let prefs_path = base.join(dir_name).join("Preferences");
     if let Ok(contents) = std::fs::read_to_string(&prefs_path)
