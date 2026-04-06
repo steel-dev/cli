@@ -26,8 +26,11 @@ pub struct ListArgs {}
 #[derive(Parser)]
 pub struct ImportArgs {
     /// Steel profile name to save as
-    #[arg(long)]
-    pub name: String,
+    pub name: Option<String>,
+
+    // COMPAT: `--name` kept as hidden alias for scripts using the old flag form.
+    #[arg(long = "name", id = "name_flag", hide = true)]
+    pub name_flag: Option<String>,
 
     /// Browser profile directory to import from (e.g. "Default", "Profile 1")
     #[arg(long)]
@@ -45,8 +48,11 @@ pub struct ImportArgs {
 #[derive(Parser)]
 pub struct SyncArgs {
     /// Steel profile name to sync
-    #[arg(long)]
-    pub name: String,
+    pub name: Option<String>,
+
+    // COMPAT: `--name` kept as hidden alias for scripts using the old flag form.
+    #[arg(long = "name", id = "name_flag", hide = true)]
+    pub name_flag: Option<String>,
 
     /// Browser profile directory to sync from (overrides stored source)
     #[arg(long)]
@@ -64,8 +70,11 @@ pub struct SyncArgs {
 #[derive(Parser)]
 pub struct DeleteArgs {
     /// Name of the profile to delete
-    #[arg(long)]
-    pub name: String,
+    pub name: Option<String>,
+
+    // COMPAT: `--name` kept as hidden alias for scripts using the old flag form.
+    #[arg(long = "name", id = "name_flag", hide = true)]
+    pub name_flag: Option<String>,
 }
 
 pub async fn run(command: Command) -> anyhow::Result<()> {
@@ -115,23 +124,30 @@ async fn run_list(_args: ListArgs) -> anyhow::Result<()> {
 }
 
 async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
-    if let Some(err) = profile_store::validate_profile_name(&args.name) {
+    let name = resolve_name(args.name, args.name_flag)?;
+    if let Some(err) = profile_store::validate_profile_name(&name) {
         anyhow::bail!("{err}");
     }
 
-    if profile_store::delete_profile(&args.name)? {
+    if profile_store::delete_profile(&name)? {
         output::success(
-            json!({"name": args.name, "deleted": true}),
+            json!({"name": name, "deleted": true}),
             &format!(
-                "Deleted profile \"{}\". Note: Browser state on Steel servers is not affected.\n",
-                args.name
+                "Deleted profile \"{name}\". Note: Browser state on Steel servers is not affected.\n",
             ),
         );
     } else {
-        anyhow::bail!("Profile \"{}\" not found.", args.name);
+        anyhow::bail!("Profile \"{name}\" not found.");
     }
 
     Ok(())
+}
+
+/// Resolve profile name from positional arg or `--name` flag.
+fn resolve_name(positional: Option<String>, flag: Option<String>) -> anyhow::Result<String> {
+    positional
+        .or(flag)
+        .ok_or_else(|| anyhow::anyhow!("Profile name is required."))
 }
 
 fn resolve_api() -> anyhow::Result<(String, String)> {
@@ -179,17 +195,18 @@ fn discover_all_profiles(
 }
 
 async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
+    let name = resolve_name(args.name, args.name_flag)?;
     // Validate
-    if let Some(err) = profile_store::validate_profile_name(&args.name) {
+    if let Some(err) = profile_store::validate_profile_name(&name) {
         anyhow::bail!("{err}");
     }
 
     // Check for existing profile
-    let existing = profile_store::read_profile(&args.name)?;
+    let existing = profile_store::read_profile(&name)?;
     if let Some(ref existing) = existing {
         status!(
             "Profile \"{}\" already exists (id: {}). Overwriting.",
-            args.name,
+            name,
             existing.profile_id
         );
     }
@@ -273,7 +290,7 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         "Importing {} ({}) → {}...",
         selected.dir_name,
         browser_id.display_name(),
-        args.name
+        name
     );
     let result =
         profile_porter::package_profile(browser_id, &selected.dir_name, args.full, &|msg| {
@@ -299,14 +316,14 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
 
     // Save metadata
     profile_store::write_profile(
-        &args.name,
+        &name,
         &profile_id,
         Some(&selected.dir_name),
         Some(browser_id.as_str()),
     )?;
 
     status!();
-    status!("  {}", args.name);
+    status!("  {}", name);
     status!("  id: {profile_id}");
     if result.cookies_skipped > 0 {
         status!(
@@ -323,25 +340,24 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         );
     }
     status!();
-    status!("  steel browser start --profile {}", args.name);
+    status!("  steel browser start --profile {}", name);
 
     Ok(())
 }
 
 async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
+    let name = resolve_name(args.name, args.name_flag)?;
     // Validate
-    if let Some(err) = profile_store::validate_profile_name(&args.name) {
+    if let Some(err) = profile_store::validate_profile_name(&name) {
         anyhow::bail!("{err}");
     }
 
     let (api_key, api_base) = resolve_api()?;
 
     // Read existing profile
-    let stored = profile_store::read_profile(&args.name)?.ok_or_else(|| {
+    let stored = profile_store::read_profile(&name)?.ok_or_else(|| {
         anyhow::anyhow!(
-            "Profile \"{}\" not found. Run `steel profile import --name {}` first.",
-            args.name,
-            args.name,
+            "Profile \"{name}\" not found. Run `steel profile import {name}` first.",
         )
     })?;
 
@@ -391,7 +407,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         "Syncing {} ({}) → {}...",
         profile_source,
         browser_id.display_name(),
-        args.name
+        name
     );
     let result = profile_porter::package_profile(browser_id, &profile_source, args.full, &|msg| {
         status!("  {msg}");
@@ -416,7 +432,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         args.browser.is_some() && args.browser.as_deref() != stored.browser.as_deref();
     if source_changed || browser_changed {
         profile_store::write_profile(
-            &args.name,
+            &name,
             &stored.profile_id,
             Some(&profile_source),
             Some(browser_id.as_str()),
@@ -424,7 +440,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
     }
 
     status!();
-    status!("  Synced {}", args.name);
+    status!("  Synced {}", name);
     if result.cookies_skipped > 0 {
         status!(
             "  {} cookies re-encrypted, {} skipped · {:.1} MB",
