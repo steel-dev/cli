@@ -6,6 +6,7 @@ pub mod describe;
 pub mod dev;
 pub mod doctor;
 pub mod forge;
+pub mod init;
 pub mod login;
 pub mod logout;
 pub mod pdf;
@@ -21,6 +22,10 @@ Global Flags:
   --json                                 Structured JSON output for automation
   -l, --local                            Use local Steel runtime
   --api-url <url>                        Explicit self-hosted API endpoint URL
+
+Getting Started:
+  steel init                           Log in, verify, and install Steel skills into detected agents
+    --agent                              Print the agent onboarding guide to stdout and exit
 
 Quick Actions:
   steel scrape <url>                   Scrape webpage content (markdown by default)
@@ -165,15 +170,13 @@ Development:
     -d, --docker-check                   Only verify Docker, then exit
   steel dev stop                       Stop local runtime
 
-Project Scaffolding:
-  steel forge [template] [-n <name>]   Create a new project from a template
-
 Other:
   steel login                          Login to Steel (alias: auth)
   steel logout                         Logout from Steel
   steel config                         Show current configuration
   steel doctor                         Check environment, auth, and connectivity
     --preflight                          Only check auth and API (fast, for agents)
+  steel forge [template] [-n <name>]   Scaffold a new project from a template
   steel update                         Update to latest version
   steel cache [-c]                     Manage CLI cache (-c to clean)
 
@@ -187,6 +190,8 @@ Environment:
   NO_COLOR                             Disable colored output
 
 Examples:
+  steel init
+  steel init --agent
   steel scrape https://example.com
   steel scrape https://example.com --format html,markdown
   steel screenshot https://example.com -f
@@ -255,6 +260,9 @@ pub enum Command {
     /// Browser session management and automation
     Browser(browser::BrowserArgs),
 
+    /// One-command onboarding: login + verify + install agent skills
+    Init(init::Args),
+
     /// Login to Steel CLI
     #[command(alias = "auth")]
     Login(login::Args),
@@ -316,6 +324,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Screenshot(args) => screenshot::run(args).await,
         Command::Pdf(args) => pdf::run(args).await,
         Command::Browser(args) => browser::run(args).await,
+        Command::Init(args) => init::run(args).await,
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,
         Command::Credentials { command } => credentials::run(command).await,

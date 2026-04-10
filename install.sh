@@ -3,23 +3,43 @@
 Steel CLI — browser automation for AI agents
 https://github.com/steel-dev/cli
 
-This script installs the Steel CLI binary. After installation, agents should
-install the steel-browser skill to unlock full browser automation capabilities.
+Installs the Steel CLI binary and, in an interactive terminal, runs
+`steel init` to log in, verify connectivity, and install coding-agent skills.
+
+Flags:
+  --non-interactive    Skip the interactive `steel init` step (install only)
+  --agent              Run `steel init --agent` (print the onboarding guide
+                       to stdout — intended for AI coding agents)
 
 REQUIRES: curl
 INSTALLS TO: ~/.steel/bin
 
-After install, PATH is NOT updated in the current process.
-Fix: export PATH="$HOME/.steel/bin:$PATH"
-
-POST-INSTALL:
-  steel login            # authenticate
-  steel browser start    # start automation session
-
-SKILL SETUP (recommended for agents):
-  npx skills add https://github.com/steel-dev/cli --skill steel-browser
+After install, PATH is NOT updated in the current shell. Restart your shell
+or run: export PATH="$HOME/.steel/bin:$PATH"
 DOCSTRING
 set -eu
+
+STEEL_NON_INTERACTIVE="no"
+STEEL_AGENT_MODE="no"
+
+for arg in "$@"; do
+    case "$arg" in
+        --non-interactive) STEEL_NON_INTERACTIVE="yes" ;;
+        --agent) STEEL_AGENT_MODE="yes" ;;
+        *) ;;
+    esac
+done
+
+# Detect non-interactive / CI environments and skip interactive setup.
+# Mirrors the Atuin installer pattern: probe for a controlling TTY, fall
+# back to non-interactive if none is available.
+if [ "$STEEL_NON_INTERACTIVE" != "yes" ]; then
+    if [ -t 0 ] || { true </dev/tty; } 2>/dev/null; then
+        STEEL_NON_INTERACTIVE="no"
+    else
+        STEEL_NON_INTERACTIVE="yes"
+    fi
+fi
 
 echo "Steel CLI — browser automation for AI agents"
 echo "https://github.com/steel-dev/cli"
@@ -101,24 +121,33 @@ if [ -n "${SHELL:-}" ]; then
     fi
 fi
 
+STEEL_BIN="$INSTALL_DIR/steel"
+
 echo ""
-echo "Setup complete!"
+echo "Installed steel to $STEEL_BIN"
 if [ "$_added" = true ]; then
     echo "Added $INSTALL_DIR to PATH in $_rc"
-    echo ""
-    echo "Restart your shell or run:"
-    echo "  source $_rc"
-else
-    echo "Add this to your shell config:"
-    echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
 fi
 echo ""
-echo "Then try it out:"
-echo ""
-echo "  steel --help"
-echo "  steel login"
-echo "  steel browser start"
-echo ""
-echo "SKILL SETUP (recommended for agents):"
-echo "  npx skills add https://github.com/steel-dev/cli --skill steel-browser"
-echo ""
+
+# Run `steel init` interactively so the user finishes install + login + verify
+# in a single command. Stdin is redirected from /dev/tty because the surrounding
+# `curl | sh` pipe owns stdin, and `dialoguer` prompts (and any future TUIs)
+# need the real terminal.
+if [ "$STEEL_NON_INTERACTIVE" != "yes" ]; then
+    if [ "$STEEL_AGENT_MODE" = "yes" ]; then
+        "$STEEL_BIN" init --agent
+    else
+        "$STEEL_BIN" init </dev/tty
+    fi
+fi
+
+cat << 'EOF'
+
+===============================================================================
+
+  Restart your shell or open a new terminal so `steel` is on PATH.
+  Or run: export PATH="$HOME/.steel/bin:$PATH"
+
+===============================================================================
+EOF
