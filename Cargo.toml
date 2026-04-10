@@ -35,7 +35,7 @@ cbc = "0.1"
 pbkdf2 = "0.12"
 sha1 = "0.10"
 sha2 = "0.10"
-hmac = "0.12"
+hmac = "0.13"
 
 # Browser engine
 browser-engine = { git = "https://github.com/steel-dev/agent-browser", branch = "as-lib", package = "agent-browser" }
