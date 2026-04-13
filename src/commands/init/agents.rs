@@ -14,6 +14,9 @@ use crate::status;
 
 const SKILL_CONTENT: &str = include_str!("../../../skills/steel-browser/SKILL.md");
 
+const CURSOR_DESCRIPTION: &str =
+    "Steel browser automation CLI for web tasks (scrape, screenshot, interactive browser sessions)";
+
 pub struct DetectedAgent {
     pub name: &'static str,
     pub install_path: PathBuf,
@@ -70,9 +73,7 @@ pub fn detect_agents() -> Vec<DetectedAgent> {
 /// stripping its YAML frontmatter and prepending Cursor-specific frontmatter.
 fn cursor_rule_content() -> String {
     let body = strip_frontmatter(SKILL_CONTENT);
-    format!(
-        "---\ndescription: Steel browser automation CLI for web tasks (scrape, screenshot, interactive browser sessions)\nalwaysApply: false\n---\n\n{body}"
-    )
+    format!("---\ndescription: {CURSOR_DESCRIPTION}\nalwaysApply: false\n---\n\n{body}")
 }
 
 fn strip_frontmatter(s: &str) -> &str {

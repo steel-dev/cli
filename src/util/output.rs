@@ -69,6 +69,19 @@ pub mod exit_code {
     pub const API_SERVER: i32 = 6;
 }
 
+/// Sentinel error: the command already printed its own output and reported
+/// failure; the process should exit with `code` without printing anything else.
+#[derive(Debug)]
+pub struct SilentExit(pub i32);
+
+impl std::fmt::Display for SilentExit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "exit {}", self.0)
+    }
+}
+
+impl std::error::Error for SilentExit {}
+
 // --- Pure formatting functions (no I/O) ---
 
 fn format_success(json_mode: bool, data: &Value, text: &str) -> Option<String> {
@@ -172,6 +185,10 @@ pub fn success_text(data: Value) {
 
 /// Format a top-level error for output, then exit. Called from main.
 pub fn handle_error(err: &anyhow::Error) -> ! {
+    if let Some(SilentExit(code)) = err.downcast_ref::<SilentExit>() {
+        std::process::exit(*code);
+    }
+
     let (code, error_code, hint) = classify_error(err);
     let msg = format!("{err:#}");
 

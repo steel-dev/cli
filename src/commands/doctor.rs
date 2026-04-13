@@ -79,7 +79,9 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     }
 
     if has_fail {
-        std::process::exit(1);
+        return Err(
+            crate::util::output::SilentExit(crate::util::output::exit_code::GENERAL).into(),
+        );
     }
 
     Ok(())

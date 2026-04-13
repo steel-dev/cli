@@ -29,7 +29,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     // Step 1: login (no-ops if already logged in).
     login::run(login::Args {}).await?;
 
-    // Step 2: preflight check (calls process::exit on failure).
+    // Step 2: preflight check.
     status!("");
     doctor::run(doctor::Args { preflight: true }).await?;
 
