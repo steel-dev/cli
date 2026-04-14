@@ -97,7 +97,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     };
 
     let download_url = format!(
-        "https://raw.githubusercontent.com/steel-dev/steel-cookbook/{}/{}",
+        "https://registry.steel-edge.net/versions/{}/{}",
         manifest.version, template_path
     );
 

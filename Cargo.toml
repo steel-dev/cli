@@ -30,12 +30,12 @@ urlencoding = "2"
 url = "2"
 rusqlite = { version = "0.39", features = ["bundled"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
-aes = "0.9"
-cbc = "0.2"
+aes = "0.8"
+cbc = "0.1"
 pbkdf2 = "0.12"
 sha1 = "0.10"
 sha2 = "0.10"
-hmac = "0.13"
+hmac = "0.12"
 
 # Browser engine
 browser-engine = { git = "https://github.com/steel-dev/agent-browser", branch = "as-lib", package = "agent-browser" }
