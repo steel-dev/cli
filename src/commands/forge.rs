@@ -128,7 +128,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     }
 
     let status = std::process::Command::new("tar")
-        .args(["xzf", &tmp.to_string_lossy(), "--strip-components=1"])
+        .args(["xzf", &tmp.to_string_lossy()])
         .current_dir(&target_dir)
         .status()?;
 
