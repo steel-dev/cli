@@ -130,19 +130,25 @@ if [ "$_added" = true ]; then
 fi
 echo ""
 
-# Run `steel init` interactively so the user finishes install + login + verify
-# in a single command. Stdin is redirected from /dev/tty because the surrounding
-# `curl | sh` pipe owns stdin, and `dialoguer` prompts (and any future TUIs)
-# need the real terminal.
-if [ "$STEEL_NON_INTERACTIVE" != "yes" ]; then
-    if [ "$STEEL_AGENT_MODE" = "yes" ]; then
-        "$STEEL_BIN" init --agent
-    else
-        "$STEEL_BIN" init </dev/tty
-    fi
+# Agent mode just prints the onboarding guide to stdout, which needs no TTY,
+# so it runs regardless of whether the surrounding shell is interactive.
+# Human mode drives `dialoguer` prompts, so we only run it when /dev/tty
+# exists.
+if [ "$STEEL_AGENT_MODE" = "yes" ]; then
+    "$STEEL_BIN" init --agent
+elif [ "$STEEL_NON_INTERACTIVE" != "yes" ]; then
+    "$STEEL_BIN" init </dev/tty
 fi
 
-cat << 'EOF'
+if [ "$STEEL_AGENT_MODE" = "yes" ]; then
+    cat << 'EOF'
+
+Add the Steel binary to PATH for this session:
+  export PATH="$HOME/.steel/bin:$PATH"
+
+EOF
+else
+    cat << 'EOF'
 
 ===============================================================================
 
@@ -151,3 +157,4 @@ cat << 'EOF'
 
 ===============================================================================
 EOF
+fi
