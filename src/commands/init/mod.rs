@@ -7,22 +7,13 @@ use crate::status;
 
 #[derive(Parser)]
 pub struct Args {
-    /// Print the agent onboarding guide to stdout and exit.
-    ///
-    /// Use this when you want an AI coding agent (Claude Code, Cursor, etc.)
-    /// to read the authoritative setup instructions before running `steel init`.
+    /// Run in agent mode: auto-accept interactive prompts and print
+    /// agent-friendly output. Designed for AI coding agents
     #[arg(long)]
     pub agent: bool,
 }
 
-const AGENT_GUIDE: &str = include_str!("init_agent_guide.md");
-
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    if args.agent {
-        print!("{AGENT_GUIDE}");
-        return Ok(());
-    }
-
     status!("Steel CLI setup");
     status!("");
 
@@ -35,14 +26,21 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     // Step 3: auto-install the Steel skill into any detected coding agents.
     status!("");
-    agents::install_skills_interactive()?;
+    agents::install_skills(args.agent)?;
 
     // Next steps.
     status!("");
-    status!("Setup complete. Try one of these:");
-    status!("  steel scrape https://example.com");
-    status!("  steel browser start --session hello");
-    status!("  steel --help");
+    if args.agent {
+        status!("Steel is ready. Suggest one of these to the user:");
+        status!("  • Scrape a webpage to markdown. Ask for a URL, then run: steel scrape <url>");
+        status!("  • Take a screenshot. Ask for a URL, then run: steel screenshot <url>");
+        status!("  • Start an interactive browser session: steel browser start --session demo");
+    } else {
+        status!("Setup complete. Try one of these:");
+        status!("  steel scrape https://example.com");
+        status!("  steel browser start --session hello");
+        status!("  steel --help");
+    }
 
     Ok(())
 }

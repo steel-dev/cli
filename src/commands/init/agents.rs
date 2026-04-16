@@ -86,7 +86,7 @@ fn strip_frontmatter(s: &str) -> &str {
     &rest[end_idx + "\n---\n".len()..]
 }
 
-pub fn install_skills_interactive() -> anyhow::Result<()> {
+pub fn install_skills(auto_accept: bool) -> anyhow::Result<()> {
     let agents = detect_agents();
 
     if agents.is_empty() {
@@ -116,24 +116,26 @@ pub fn install_skills_interactive() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Skip the interactive prompt when stdout is not a TTY (piped, sandboxed,
-    // scripted invocations). The user can re-run `steel init` from a terminal
-    // later to pick up skills.
-    if !crate::util::output::is_tty() {
-        status!(
-            "Non-interactive session — skipping skill install. Re-run `steel init` from a terminal to install."
-        );
-        return Ok(());
-    }
+    if !auto_accept {
+        // Skip the interactive prompt when stdout is not a TTY (piped, sandboxed,
+        // scripted invocations). The user can re-run `steel init` from a terminal
+        // later to pick up skills.
+        if !crate::util::output::is_tty() {
+            status!(
+                "Non-interactive session — skipping skill install. Re-run `steel init` from a terminal to install."
+            );
+            return Ok(());
+        }
 
-    let proceed = Confirm::new()
-        .with_prompt("Install the Steel skill into these agents?")
-        .default(true)
-        .interact()?;
+        let proceed = Confirm::new()
+            .with_prompt("Install the Steel skill into these agents?")
+            .default(true)
+            .interact()?;
 
-    if !proceed {
-        status!("Skipped.");
-        return Ok(());
+        if !proceed {
+            status!("Skipped.");
+            return Ok(());
+        }
     }
 
     for agent in &agents {
