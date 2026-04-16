@@ -5,9 +5,9 @@ All notable changes to this project will be documented in this file.\n
 """
 body = """
 {% if version %}\
-    ## [{{ version }}]
+    ## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}
 {% else %}\
-    ## [unreleased]
+    ## [Unreleased]
 {% endif %}\
 {% for group, commits in commits | group_by(attribute="group") %}
     ### {{ group | upper_first }}
@@ -38,6 +38,11 @@ commit_parsers = [
   { message = "^test", group = "Testing" },
   { message = "^chore\\(release\\)", skip = true },
   { message = "^chore\\(deps\\)", skip = true },
+  { message = "^chore: bump", skip = true },
+  { message = "^chore: fix build", skip = true },
+  { message = "^chore: fix lint", skip = true },
+  { message = "^chore: fix deps", skip = true },
+  { message = "^chore: remove dead code", skip = true },
   { message = "^chore|ci", group = "Miscellaneous" },
 ]
 protect_breaking_commits = true
