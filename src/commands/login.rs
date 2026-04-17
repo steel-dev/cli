@@ -53,26 +53,23 @@ async fn device_code_flow() -> anyhow::Result<(String, String)> {
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing device_code in response"))?
         .to_string();
-    let user_code = data["user_code"]
+    let pairing_code = data["pairing_code"]
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing user_code in response"))?;
-    let verification_uri = data["verification_uri"]
+        .ok_or_else(|| anyhow::anyhow!("Missing pairing_code in response"))?;
+    let verification_uri_complete = data["verification_uri_complete"]
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Missing verification_uri in response"))?;
-    let verification_uri_complete = data["verification_uri_complete"].as_str();
+        .ok_or_else(|| anyhow::anyhow!("Missing verification_uri_complete in response"))?;
     let expires_in = data["expires_in"].as_u64().unwrap_or(900);
     let interval = data["interval"].as_u64().unwrap_or(5);
 
     // Step 2: Display instructions
-    status!("Visit: {verification_uri}");
-    status!("Enter code: {user_code}");
+    status!("Please visit: {verification_uri_complete}");
+    status!("Your pairing code is: {pairing_code}");
 
-    // Try to open browser to the pre-filled URL
-    if let Some(uri) = verification_uri_complete {
-        if let Err(e) = open::that(uri) {
-            status!("Warning: could not open browser automatically: {e}");
-            status!("Please open the URL above manually.");
-        }
+    // Try to open browser to the URL (browser confirms the pairing code out of band)
+    if let Err(e) = open::that(verification_uri_complete) {
+        status!("Warning: could not open browser automatically: {e}");
+        status!("Please open the URL above manually.");
     }
 
     // Step 3: Poll for token
@@ -112,10 +109,7 @@ async fn device_code_flow() -> anyhow::Result<(String, String)> {
 
         // Success: api_key present
         if let Some(api_key) = body.get("api_key").and_then(|v| v.as_str()) {
-            let name = body
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("CLI");
+            let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("CLI");
             return Ok((api_key.to_string(), name.to_string()));
         }
 
