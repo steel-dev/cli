@@ -19,6 +19,17 @@ pub enum Command {
     Delete(DeleteArgs),
 }
 
+impl Command {
+    pub const fn telemetry_name(&self) -> &'static str {
+        match self {
+            Self::List(_) => "list",
+            Self::Create(_) => "create",
+            Self::Update(_) => "update",
+            Self::Delete(_) => "delete",
+        }
+    }
+}
+
 #[derive(Parser)]
 pub struct ListArgs {
     /// Filter by namespace

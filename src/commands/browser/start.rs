@@ -73,6 +73,8 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     }
 
     let persist_profile = args.profile.is_some() && args.update_profile;
+    let proxy_enabled = args.proxy.is_some();
+    let namespace_set = args.namespace.is_some();
 
     // If a daemon is already running for this session name, stop it first.
     // `start` always creates a fresh session — use `steel browser sessions`
@@ -121,6 +123,19 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
             stored_browser.as_deref(),
         )?;
     }
+
+    let mut properties = serde_json::Map::new();
+    properties.insert("stealth".into(), json!(args.stealth));
+    properties.insert("proxy_enabled".into(), json!(proxy_enabled));
+    properties.insert("has_profile".into(), json!(args.profile.is_some()));
+    properties.insert("persist_profile".into(), json!(persist_profile));
+    properties.insert("credentials".into(), json!(args.credentials));
+    properties.insert("namespace_set".into(), json!(namespace_set));
+    properties.insert(
+        "session_timeout_set".into(),
+        json!(args.session_timeout.is_some()),
+    );
+    crate::telemetry::track_event("browser_session_started", properties);
 
     display_session_info(&info);
 
