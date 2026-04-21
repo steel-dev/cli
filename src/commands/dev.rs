@@ -17,6 +17,16 @@ pub enum Command {
     Stop(StopArgs),
 }
 
+impl Command {
+    pub const fn telemetry_name(&self) -> &'static str {
+        match self {
+            Self::Install(_) => "install",
+            Self::Start(_) => "start",
+            Self::Stop(_) => "stop",
+        }
+    }
+}
+
 #[derive(Parser)]
 pub struct InstallArgs {
     /// Git repository URL for local Steel Browser runtime

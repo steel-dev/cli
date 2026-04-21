@@ -46,6 +46,20 @@ pub enum Command {
     Action(action::ActionCommand),
 }
 
+impl Command {
+    pub fn telemetry_name(&self) -> String {
+        match self {
+            Self::Start(_) => "start".to_string(),
+            Self::Stop(_) => "stop".to_string(),
+            Self::Sessions(_) => "sessions".to_string(),
+            Self::Live(_) => "live".to_string(),
+            Self::Captcha { command } => format!("captcha.{}", command.telemetry_name()),
+            Self::Batch(_) => "batch".to_string(),
+            Self::Action(action) => action.telemetry_name().to_string(),
+        }
+    }
+}
+
 pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
     let session = args.session;
     if let Some(ref name) = session

@@ -20,6 +20,17 @@ pub enum Command {
     Delete(DeleteArgs),
 }
 
+impl Command {
+    pub const fn telemetry_name(&self) -> &'static str {
+        match self {
+            Self::List(_) => "list",
+            Self::Import(_) => "import",
+            Self::Sync(_) => "sync",
+            Self::Delete(_) => "delete",
+        }
+    }
+}
+
 #[derive(Parser)]
 pub struct ListArgs {}
 

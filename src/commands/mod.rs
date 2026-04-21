@@ -188,6 +188,8 @@ Environment:
   STEEL_BROWSER_API_URL                Steel Browser API endpoint
   STEEL_LOCAL_API_URL                  Local runtime API endpoint
   STEEL_CONFIG_DIR                     Custom config directory
+  STEEL_TELEMETRY_HOST                 PostHog ingest host override
+  STEEL_TELEMETRY_DISABLED             Disable built-in telemetry for this machine/session
   STEEL_FORCE_TTY                      Force text output when piped (disable auto-JSON)
   NO_COLOR                             Disable colored output
 
@@ -312,11 +314,46 @@ pub enum Command {
     Completion(completion::Args),
 }
 
+fn telemetry_command_path(command: &Command) -> Option<String> {
+    match command {
+        Command::Daemon { .. } => None,
+        Command::Scrape(_) => Some("scrape".to_string()),
+        Command::Screenshot(_) => Some("screenshot".to_string()),
+        Command::Pdf(_) => Some("pdf".to_string()),
+        Command::Browser(args) => Some(format!("browser.{}", args.command.telemetry_name())),
+        Command::Init(_) => Some("init".to_string()),
+        Command::Login(_) => Some("login".to_string()),
+        Command::Logout(_) => Some("logout".to_string()),
+        Command::Credentials { command } => {
+            Some(format!("credentials.{}", command.telemetry_name()))
+        }
+        Command::Dev { command } => Some(format!("dev.{}", command.telemetry_name())),
+        Command::Forge(_) => Some("forge".to_string()),
+        Command::Config(_) => Some("config".to_string()),
+        Command::Update(_) => Some("update".to_string()),
+        Command::Cache(_) => Some("cache".to_string()),
+        Command::Profile { command } => Some(format!("profile.{}", command.telemetry_name())),
+        Command::Describe(_) => Some("describe".to_string()),
+        Command::Doctor(_) => Some("doctor".to_string()),
+        Command::Completion(_) => Some("completion".to_string()),
+    }
+}
+
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
+    let telemetry_context =
+        telemetry_command_path(&cli.command).map(|path| crate::telemetry::command_context(&path));
+
     crate::util::output::init(cli.json);
     crate::util::api::init(cli.local, cli.api_url);
+    crate::telemetry::init_from_env();
 
-    match cli.command {
+    if let Some(ref context) = telemetry_context {
+        crate::telemetry::track_command_started(context);
+    }
+
+    let started_at = std::time::Instant::now();
+
+    let result = match cli.command {
         Command::Daemon { session_name } => {
             let params_json = std::env::var("STEEL_DAEMON_PARAMS")
                 .map_err(|_| anyhow::anyhow!("Missing STEEL_DAEMON_PARAMS"))?;
@@ -342,5 +379,214 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Describe(args) => describe::run(args).await,
         Command::Doctor(args) => doctor::run(args).await,
         Command::Completion(args) => completion::run(args).await,
+    };
+
+    if let Some(ref context) = telemetry_context {
+        let duration = started_at.elapsed();
+        match &result {
+            Ok(()) => crate::telemetry::track_command_completed(context, duration),
+            Err(err) => crate::telemetry::track_command_failed(context, duration, err),
+        }
+    }
+
+    crate::telemetry::flush_best_effort().await;
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Mutex, OnceLock};
+
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    async fn capture_events(server: &MockServer) -> Vec<serde_json::Value> {
+        server
+            .received_requests()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|request| serde_json::from_slice(&request.body).unwrap())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn successful_command_emits_started_and_completed_events() {
+        let _guard = env_lock().lock().unwrap();
+        crate::telemetry::reset_for_test();
+
+        let temp = tempfile::TempDir::new().unwrap();
+        let server = MockServer::start().await;
+        crate::telemetry::set_test_override(temp.path(), &server.uri());
+
+        Mock::given(method("POST"))
+            .and(path("/i/v0/e/"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let result = run(Cli {
+            command: Command::Cache(cache::Args { clean: false }),
+            json: false,
+            no_update_check: true,
+            local: false,
+            api_url: None,
+        })
+        .await;
+
+        assert!(result.is_ok());
+
+        let events = capture_events(&server).await;
+        crate::telemetry::reset_for_test();
+
+        assert_eq!(events.len(), 3);
+        assert!(
+            events
+                .iter()
+                .any(|event| event["event"] == "install_created")
+        );
+        assert!(events.iter().any(|event| {
+            event["event"] == "command_started" && event["properties"]["command_path"] == "cache"
+        }));
+        assert!(events.iter().any(|event| {
+            event["event"] == "command_completed"
+                && event["properties"]["command_path"] == "cache"
+                && event["properties"]["success"] == true
+                && event["properties"]["mode"] == "cloud"
+        }));
+    }
+
+    #[tokio::test]
+    async fn failing_command_emits_started_and_failed_events() {
+        let _guard = env_lock().lock().unwrap();
+        crate::telemetry::reset_for_test();
+
+        let temp = tempfile::TempDir::new().unwrap();
+        let server = MockServer::start().await;
+        crate::telemetry::set_test_override(temp.path(), &server.uri());
+
+        Mock::given(method("POST"))
+            .and(path("/i/v0/e/"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let result = run(Cli {
+            command: Command::Browser(browser::BrowserArgs {
+                session: Some("named-session".into()),
+                command: browser::Command::Stop(browser::stop::Args { all: true }),
+            }),
+            json: false,
+            no_update_check: true,
+            local: false,
+            api_url: None,
+        })
+        .await;
+
+        assert!(result.is_err());
+
+        let events = capture_events(&server).await;
+        crate::telemetry::reset_for_test();
+
+        assert_eq!(events.len(), 3);
+        assert!(
+            events
+                .iter()
+                .any(|event| event["event"] == "install_created")
+        );
+        assert!(events.iter().any(|event| {
+            event["event"] == "command_started"
+                && event["properties"]["command_path"] == "browser.stop"
+        }));
+        assert!(events.iter().any(|event| {
+            event["event"] == "command_failed"
+                && event["properties"]["command_path"] == "browser.stop"
+                && event["properties"]["success"] == false
+                && event["properties"]["error_class"] == "internal_error"
+        }));
+    }
+
+    #[tokio::test]
+    async fn telemetry_delivery_failure_does_not_fail_command() {
+        let _guard = env_lock().lock().unwrap();
+        crate::telemetry::reset_for_test();
+
+        let temp = tempfile::TempDir::new().unwrap();
+        crate::telemetry::set_test_override(temp.path(), "http://127.0.0.1:1");
+
+        let result = run(Cli {
+            command: Command::Cache(cache::Args { clean: false }),
+            json: false,
+            no_update_check: true,
+            local: false,
+            api_url: None,
+        })
+        .await;
+
+        crate::telemetry::reset_for_test();
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn install_created_emits_only_once_per_config_dir() {
+        let _guard = env_lock().lock().unwrap();
+        crate::telemetry::reset_for_test();
+
+        let temp = tempfile::TempDir::new().unwrap();
+        let server = MockServer::start().await;
+        crate::telemetry::set_test_override(temp.path(), &server.uri());
+
+        Mock::given(method("POST"))
+            .and(path("/i/v0/e/"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let first = run(Cli {
+            command: Command::Cache(cache::Args { clean: false }),
+            json: false,
+            no_update_check: true,
+            local: false,
+            api_url: None,
+        })
+        .await;
+        assert!(first.is_ok());
+
+        crate::telemetry::reset_for_test();
+        crate::telemetry::set_test_override(temp.path(), &server.uri());
+
+        let second = run(Cli {
+            command: Command::Cache(cache::Args { clean: false }),
+            json: false,
+            no_update_check: true,
+            local: false,
+            api_url: None,
+        })
+        .await;
+        assert!(second.is_ok());
+
+        let events = capture_events(&server).await;
+        crate::telemetry::reset_for_test();
+
+        let install_created_count = events
+            .iter()
+            .filter(|event| event["event"] == "install_created")
+            .count();
+        let command_completed_count = events
+            .iter()
+            .filter(|event| event["event"] == "command_completed")
+            .count();
+
+        assert_eq!(install_created_count, 1);
+        assert_eq!(command_completed_count, 2);
     }
 }
