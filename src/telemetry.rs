@@ -1,17 +1,20 @@
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
+use tokio::sync::Notify;
 
 use crate::config;
 use crate::config::settings::ApiMode;
 
 const DEFAULT_POSTHOG_HOST: &str = "https://us.i.posthog.com";
 const PROJECT_TOKEN: &str = "phc_yhxgGFVDmaCpccF38yspn4pAkVLFnHsGaWmYUyijuuRS";
-const CAPTURE_PATH: &str = "/i/v0/e/";
-const FLUSH_TIMEOUT: Duration = Duration::from_millis(150);
+const BATCH_PATH: &str = "/batch/";
+const FLUSH_INTERVAL: Duration = Duration::from_secs(10);
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 
 static GLOBAL: OnceLock<Mutex<GlobalTelemetry>> = OnceLock::new();
@@ -26,7 +29,20 @@ fn global() -> &'static Mutex<GlobalTelemetry> {
 #[derive(Default)]
 struct GlobalTelemetry {
     client: Option<Arc<TelemetryClient>>,
-    pending: Vec<tokio::task::JoinHandle<()>>,
+    queue: Vec<QueuedEvent>,
+    flusher: Option<FlusherHandle>,
+}
+
+struct FlusherHandle {
+    shutdown: Arc<Notify>,
+    join: tokio::task::JoinHandle<()>,
+}
+
+#[derive(Clone)]
+struct QueuedEvent {
+    event: String,
+    properties: Map<String, Value>,
+    timestamp_ms: u64,
 }
 
 #[cfg(test)]
@@ -39,7 +55,7 @@ struct TestTelemetryOverride {
 #[derive(Clone)]
 struct TelemetryClient {
     http: reqwest::Client,
-    capture_url: String,
+    batch_url: String,
     api_key: String,
     distinct_id: String,
 }
@@ -109,7 +125,7 @@ impl TelemetryClient {
         Some(TelemetryBootstrap {
             client: Arc::new(Self {
                 http,
-                capture_url: format!("{host}{CAPTURE_PATH}"),
+                batch_url: format!("{host}{BATCH_PATH}"),
                 api_key: PROJECT_TOKEN.to_string(),
                 distinct_id: identity.distinct_id,
             }),
@@ -125,7 +141,6 @@ pub fn init_from_env() {
         let override_state = TEST_OVERRIDE
             .get_or_init(|| Mutex::new(None))
             .lock()
-            .unwrap()
             .clone();
         override_state
             .and_then(|state| {
@@ -150,19 +165,50 @@ pub fn init_from_env() {
         )
     };
 
-    let mut state = global().lock().unwrap();
-    state.client = bootstrap
-        .as_ref()
-        .map(|bootstrap| Arc::clone(&bootstrap.client));
-    state.pending.clear();
+    let previous_flusher = {
+        let mut state = global().lock();
+        state.client = bootstrap
+            .as_ref()
+            .map(|bootstrap| Arc::clone(&bootstrap.client));
+        state.queue.clear();
+        state.flusher.take()
+    };
+
+    if let Some(previous) = previous_flusher {
+        previous.join.abort();
+    }
+
+    if let Some(bootstrap) = bootstrap.as_ref()
+        && let Ok(handle) = tokio::runtime::Handle::try_current()
+    {
+        let shutdown = Arc::new(Notify::new());
+        let client = Arc::clone(&bootstrap.client);
+        let shutdown_clone = Arc::clone(&shutdown);
+        let join = handle.spawn(run_flusher(client, shutdown_clone));
+        global().lock().flusher = Some(FlusherHandle { shutdown, join });
+    }
+
     let install_created = bootstrap
         .as_ref()
         .is_some_and(|bootstrap| bootstrap.install_created);
-    drop(state);
 
     if install_created {
+        emit_first_run_notice();
         track_event("install_created", Map::new());
     }
+}
+
+fn emit_first_run_notice() {
+    if crate::util::output::is_json() {
+        return;
+    }
+    eprintln!();
+    eprintln!("Steel CLI collects anonymous usage data to help improve the product.");
+    eprintln!("No URLs, selectors, credentials, or command arguments are sent.");
+    eprintln!(
+        "Opt out: set STEEL_TELEMETRY_DISABLED=1, or add `\"telemetry\": {{\"disabled\": true}}` to ~/.config/steel/config.json"
+    );
+    eprintln!();
 }
 
 pub fn command_context(command_path: &str) -> CommandContext {
@@ -203,69 +249,93 @@ pub fn track_event(event: &str, mut properties: Map<String, Value>) {
 }
 
 pub async fn flush_best_effort() {
-    let handles = {
-        let mut state = global().lock().unwrap();
-        state.pending.drain(..).collect::<Vec<_>>()
+    let flusher = {
+        let mut state = global().lock();
+        state.flusher.take()
     };
 
-    if handles.is_empty() {
+    let Some(flusher) = flusher else {
         return;
-    }
+    };
 
-    let _ = tokio::time::timeout(FLUSH_TIMEOUT, async move {
-        for handle in handles {
-            let _ = handle.await;
-        }
-    })
-    .await;
+    flusher.shutdown.notify_one();
+    let _ = tokio::time::timeout(SHUTDOWN_TIMEOUT, flusher.join).await;
 }
 
 fn track(event: &str, properties: Map<String, Value>) {
-    let client = {
-        let state = global().lock().unwrap();
-        state.client.clone()
-    };
-
-    let Some(client) = client else {
+    let mut state = global().lock();
+    if state.client.is_none() {
         return;
-    };
-
-    let Ok(handle) = tokio::runtime::Handle::try_current() else {
-        return;
-    };
-
-    let event = event.to_string();
-    let join = handle.spawn(async move {
-        let payload =
-            build_capture_payload(&client.api_key, &client.distinct_id, &event, properties);
-        let _ = client
-            .http
-            .post(&client.capture_url)
-            .json(&payload)
-            .send()
-            .await;
+    }
+    state.queue.push(QueuedEvent {
+        event: event.to_string(),
+        properties,
+        timestamp_ms: now_unix_ms(),
     });
-
-    let mut state = global().lock().unwrap();
-    state.pending.push(join);
 }
 
-fn build_capture_payload(
-    api_key: &str,
-    distinct_id: &str,
-    event: &str,
-    mut properties: Map<String, Value>,
-) -> Value {
-    properties.insert("$process_person_profile".into(), json!(false));
-    properties.insert("$lib".into(), json!("steel-cli"));
-    properties.insert("$lib_version".into(), json!(env!("CARGO_PKG_VERSION")));
+async fn run_flusher(client: Arc<TelemetryClient>, shutdown: Arc<Notify>) {
+    let mut interval = tokio::time::interval(FLUSH_INTERVAL);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    interval.tick().await;
+
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                flush_once(&client).await;
+            }
+            () = shutdown.notified() => {
+                flush_once(&client).await;
+                break;
+            }
+        }
+    }
+}
+
+async fn flush_once(client: &TelemetryClient) {
+    let events = {
+        let mut state = global().lock();
+        std::mem::take(&mut state.queue)
+    };
+    if events.is_empty() {
+        return;
+    }
+    let payload = build_batch_payload(&client.api_key, &client.distinct_id, &events);
+    let _ = client
+        .http
+        .post(&client.batch_url)
+        .json(&payload)
+        .send()
+        .await;
+}
+
+fn build_batch_payload(api_key: &str, distinct_id: &str, events: &[QueuedEvent]) -> Value {
+    let batch: Vec<Value> = events
+        .iter()
+        .map(|e| {
+            let mut properties = e.properties.clone();
+            properties.insert("$process_person_profile".into(), json!(false));
+            properties.insert("$lib".into(), json!("steel-cli"));
+            properties.insert("$lib_version".into(), json!(env!("CARGO_PKG_VERSION")));
+            json!({
+                "event": e.event,
+                "distinct_id": distinct_id,
+                "properties": properties,
+                "timestamp": format_timestamp(e.timestamp_ms),
+            })
+        })
+        .collect();
 
     json!({
         "api_key": api_key,
-        "event": event,
-        "distinct_id": distinct_id,
-        "properties": properties,
+        "batch": batch,
     })
+}
+
+fn format_timestamp(ms: u64) -> String {
+    jiff::Timestamp::from_millisecond(ms as i64)
+        .map(|ts| ts.to_string())
+        .unwrap_or_else(|_| ms.to_string())
 }
 
 fn default_properties() -> Map<String, Value> {
@@ -399,14 +469,19 @@ fn now_unix_ms() -> u64 {
 
 #[cfg(test)]
 pub fn reset_for_test() {
-    let mut state = global().lock().unwrap();
-    for handle in state.pending.drain(..) {
-        handle.abort();
+    let flusher = {
+        let mut state = global().lock();
+        state.queue.clear();
+        state.client = None;
+        state.flusher.take()
+    };
+
+    if let Some(flusher) = flusher {
+        flusher.join.abort();
     }
-    state.client = None;
 
     if let Some(lock) = TEST_OVERRIDE.get() {
-        *lock.lock().unwrap() = None;
+        *lock.lock() = None;
     }
 }
 
@@ -421,7 +496,7 @@ pub fn set_test_override(config_dir: &Path, host: &str) {
     };
 
     let lock = TEST_OVERRIDE.get_or_init(|| Mutex::new(None));
-    *lock.lock().unwrap() = Some(override_state);
+    *lock.lock() = Some(override_state);
 }
 
 #[cfg(test)]
@@ -461,7 +536,7 @@ mod tests {
 
         let client = TelemetryClient::from_parts(dir.path(), &env, None).unwrap();
 
-        assert_eq!(client.client.capture_url, "http://127.0.0.1:9999/i/v0/e/");
+        assert_eq!(client.client.batch_url, "http://127.0.0.1:9999/batch/");
     }
 
     #[test]
@@ -519,16 +594,25 @@ mod tests {
     }
 
     #[test]
-    fn capture_payload_includes_distinct_id_and_properties() {
+    fn batch_payload_includes_events_with_distinct_id_and_timestamp() {
         let mut properties = Map::new();
         properties.insert("command_path".into(), json!("config"));
 
-        let payload = build_capture_payload("phc_test", "anon-123", "command_started", properties);
+        let events = vec![QueuedEvent {
+            event: "command_started".into(),
+            properties,
+            timestamp_ms: 1_700_000_000_000,
+        }];
+
+        let payload = build_batch_payload("phc_test", "anon-123", &events);
 
         assert_eq!(payload["api_key"], "phc_test");
-        assert_eq!(payload["event"], "command_started");
-        assert_eq!(payload["distinct_id"], "anon-123");
-        assert_eq!(payload["properties"]["command_path"], "config");
-        assert_eq!(payload["properties"]["$process_person_profile"], false);
+        let batch = payload["batch"].as_array().unwrap();
+        assert_eq!(batch.len(), 1);
+        assert_eq!(batch[0]["event"], "command_started");
+        assert_eq!(batch[0]["distinct_id"], "anon-123");
+        assert_eq!(batch[0]["properties"]["command_path"], "config");
+        assert_eq!(batch[0]["properties"]["$process_person_profile"], false);
+        assert_eq!(batch[0]["timestamp"], "2023-11-14T22:13:20Z");
     }
 }

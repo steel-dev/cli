@@ -77,6 +77,8 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - Browser session state: `~/.config/steel/browser-session-state.json`
 - Profile metadata: `~/.config/steel/profiles/<name>.json`
 
+On the first run where telemetry is enabled, the CLI prints a one-time notice to stderr describing what is collected and how to opt out. The notice is suppressed in JSON/non-TTY output.
+
 Telemetry can be disabled persistently in `config.json` with:
 
 ```json

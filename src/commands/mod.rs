@@ -409,13 +409,14 @@ mod tests {
     }
 
     async fn capture_events(server: &MockServer) -> Vec<serde_json::Value> {
-        server
-            .received_requests()
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .map(|request| serde_json::from_slice(&request.body).unwrap())
-            .collect()
+        let mut out = Vec::new();
+        for request in server.received_requests().await.unwrap_or_default() {
+            let payload: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+            if let Some(batch) = payload.get("batch").and_then(|v| v.as_array()) {
+                out.extend(batch.iter().cloned());
+            }
+        }
+        out
     }
 
     #[tokio::test]
@@ -428,7 +429,7 @@ mod tests {
         crate::telemetry::set_test_override(temp.path(), &server.uri());
 
         Mock::given(method("POST"))
-            .and(path("/i/v0/e/"))
+            .and(path("/batch/"))
             .respond_with(ResponseTemplate::new(200))
             .mount(&server)
             .await;
@@ -474,7 +475,7 @@ mod tests {
         crate::telemetry::set_test_override(temp.path(), &server.uri());
 
         Mock::given(method("POST"))
-            .and(path("/i/v0/e/"))
+            .and(path("/batch/"))
             .respond_with(ResponseTemplate::new(200))
             .mount(&server)
             .await;
@@ -546,7 +547,7 @@ mod tests {
         crate::telemetry::set_test_override(temp.path(), &server.uri());
 
         Mock::given(method("POST"))
-            .and(path("/i/v0/e/"))
+            .and(path("/batch/"))
             .respond_with(ResponseTemplate::new(200))
             .mount(&server)
             .await;
