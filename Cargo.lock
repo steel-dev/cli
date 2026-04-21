@@ -2698,6 +2698,7 @@ dependencies = [
  "jiff",
  "libc",
  "open",
+ "parking_lot",
  "pbkdf2",
  "proptest",
  "proptest-derive",

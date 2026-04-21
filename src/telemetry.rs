@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -125,7 +126,6 @@ pub fn init_from_env() {
         let override_state = TEST_OVERRIDE
             .get_or_init(|| Mutex::new(None))
             .lock()
-            .unwrap()
             .clone();
         override_state
             .and_then(|state| {
@@ -150,7 +150,7 @@ pub fn init_from_env() {
         )
     };
 
-    let mut state = global().lock().unwrap();
+    let mut state = global().lock();
     state.client = bootstrap
         .as_ref()
         .map(|bootstrap| Arc::clone(&bootstrap.client));
@@ -218,7 +218,7 @@ pub fn track_event(event: &str, mut properties: Map<String, Value>) {
 
 pub async fn flush_best_effort() {
     let handles = {
-        let mut state = global().lock().unwrap();
+        let mut state = global().lock();
         state.pending.drain(..).collect::<Vec<_>>()
     };
 
@@ -236,7 +236,7 @@ pub async fn flush_best_effort() {
 
 fn track(event: &str, properties: Map<String, Value>) {
     let client = {
-        let state = global().lock().unwrap();
+        let state = global().lock();
         state.client.clone()
     };
 
@@ -260,7 +260,7 @@ fn track(event: &str, properties: Map<String, Value>) {
             .await;
     });
 
-    let mut state = global().lock().unwrap();
+    let mut state = global().lock();
     state.pending.push(join);
 }
 
@@ -413,14 +413,14 @@ fn now_unix_ms() -> u64 {
 
 #[cfg(test)]
 pub fn reset_for_test() {
-    let mut state = global().lock().unwrap();
+    let mut state = global().lock();
     for handle in state.pending.drain(..) {
         handle.abort();
     }
     state.client = None;
 
     if let Some(lock) = TEST_OVERRIDE.get() {
-        *lock.lock().unwrap() = None;
+        *lock.lock() = None;
     }
 }
 
@@ -435,7 +435,7 @@ pub fn set_test_override(config_dir: &Path, host: &str) {
     };
 
     let lock = TEST_OVERRIDE.get_or_init(|| Mutex::new(None));
-    *lock.lock().unwrap() = Some(override_state);
+    *lock.lock() = Some(override_state);
 }
 
 #[cfg(test)]
