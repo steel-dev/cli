@@ -161,8 +161,22 @@ pub fn init_from_env() {
     drop(state);
 
     if install_created {
+        emit_first_run_notice();
         track_event("install_created", Map::new());
     }
+}
+
+fn emit_first_run_notice() {
+    if crate::util::output::is_json() {
+        return;
+    }
+    eprintln!();
+    eprintln!("Steel CLI collects anonymous usage data to help improve the product.");
+    eprintln!("No URLs, selectors, credentials, or command arguments are sent.");
+    eprintln!(
+        "Opt out: set STEEL_TELEMETRY_DISABLED=1, or add `\"telemetry\": {{\"disabled\": true}}` to ~/.config/steel/config.json"
+    );
+    eprintln!();
 }
 
 pub fn command_context(command_path: &str) -> CommandContext {
