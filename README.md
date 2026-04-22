@@ -71,15 +71,16 @@ Read more:
 
 ## Command Overview
 
-| Group               | Commands                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------- |
-| Quickstart          | `forge`, `run`                                                                        |
-| Browser lifecycle   | `browser start`, `browser stop`, `browser sessions`, `browser live`                   |
-| Browser passthrough | `steel browser <inherited-command>`                                                   |
-| Browser profiles    | `profile import`, `profile sync`, `profile list`, `profile delete`                    |
-| API tools           | `scrape`, `screenshot`, `pdf`                                                         |
-| Local runtime       | `dev install`, `dev start`, `dev stop`                                                |
-| Account and utility | `login`, `logout`, `config`, `settings`, `cache`, `docs`, `support`, `star`, `update` |
+| Group               | Commands                                                                 |
+| ------------------- | ------------------------------------------------------------------------ |
+| Onboarding          | `init`, `forge`                                                          |
+| Browser lifecycle   | `browser start`, `browser stop`, `browser sessions`, `browser live`      |
+| Browser passthrough | `steel browser <inherited-command>`                                      |
+| Browser profiles    | `profile import`, `profile sync`, `profile list`, `profile delete`       |
+| API tools           | `scrape`, `screenshot`, `pdf`                                            |
+| Local runtime       | `dev install`, `dev start`, `dev stop`                                   |
+| Credentials         | `credentials list`, `credentials create`, `credentials update`, `credentials delete` |
+| Account and utility | `login`, `logout`, `config`, `doctor`, `cache`, `update`                 |
 
 For full flags and argument schemas, use the generated reference:
 
