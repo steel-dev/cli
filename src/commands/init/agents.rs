@@ -6,6 +6,9 @@
 //! - OpenCode   (`~/.config/opencode/agents/<name>.md`, subagent format)
 //! - Codex      (detected via `~/.codex/`, installed to the shared
 //!               `~/.agents/skills/<name>/SKILL.md` location Codex scans)
+//! - Pi         (detected via `~/.pi/`, installed to the same shared
+//!               `~/.agents/skills/<name>/SKILL.md` location Pi scans as a
+//!               fallback — see https://github.com/badlogic/pi-mono)
 //!
 //! The Steel skill content is embedded from `skills/steel-browser/SKILL.md`
 //! so a single source of truth ships with the CLI binary.
@@ -112,6 +115,32 @@ pub fn detect_agents() -> Vec<DetectedAgent> {
         });
     }
 
+    // Pi — detected via ~/.pi/ and installed to the shared skills path
+    // ~/.agents/skills/<name>/SKILL.md that Pi scans as a fallback (see
+    // https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent).
+    // Pi follows the same Agent Skills standard as Claude Code and Codex,
+    // so the raw SKILL_CONTENT is reused verbatim. When Codex is also
+    // detected, both entries resolve to the same path; the install loop
+    // is idempotent so this is safe.
+    let pi_dir = home.join(".pi");
+    if pi_dir.is_dir() {
+        let install_path = home
+            .join(".agents")
+            .join("skills")
+            .join("steel-browser")
+            .join("SKILL.md");
+        let content = SKILL_CONTENT.to_string();
+        let already_up_to_date = fs::read_to_string(&install_path)
+            .map(|existing| existing == content)
+            .unwrap_or(false);
+        agents.push(DetectedAgent {
+            name: "Pi",
+            install_path,
+            content,
+            already_up_to_date,
+        });
+    }
+
     agents
 }
 
@@ -147,7 +176,7 @@ pub fn install_skills(auto_accept: bool) -> anyhow::Result<()> {
 
     if agents.is_empty() {
         status!(
-            "No coding agents detected (looked for ~/.claude, ~/.cursor, ~/.config/opencode, ~/.codex). Skipping skill install."
+            "No coding agents detected (looked for ~/.claude, ~/.cursor, ~/.config/opencode, ~/.codex, ~/.pi). Skipping skill install."
         );
         return Ok(());
     }
@@ -257,6 +286,14 @@ mod tests {
         // Codex's SKILL.md schema (name + description frontmatter) matches
         // Claude Code's, so we ship the same bytes. Guard against anyone
         // introducing a divergent Codex-specific transform.
+        assert!(SKILL_CONTENT.starts_with("---\nname: steel-browser"));
+    }
+
+    #[test]
+    fn pi_reuses_skill_content_verbatim() {
+        // Pi follows the same Agent Skills standard as Claude Code and Codex,
+        // so we ship the same bytes. Guard against anyone introducing a
+        // divergent Pi-specific transform.
         assert!(SKILL_CONTENT.starts_with("---\nname: steel-browser"));
     }
 }
