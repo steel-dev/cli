@@ -16,7 +16,7 @@ This package now integrates `agent-browser` directly into `steel browser`, so yo
 ## Install
 
 ```bash
-curl -sSf https://setup.steel.dev | sh
+curl -fsS https://setup.steel.dev | sh
 ```
 
 Or download directly from [GitHub Releases](https://github.com/steel-dev/cli/releases).
@@ -71,16 +71,16 @@ Read more:
 
 ## Command Overview
 
-| Group               | Commands                                                                 |
-| ------------------- | ------------------------------------------------------------------------ |
-| Onboarding          | `init`, `forge`                                                          |
-| Browser lifecycle   | `browser start`, `browser stop`, `browser sessions`, `browser live`      |
-| Browser passthrough | `steel browser <inherited-command>`                                      |
-| Browser profiles    | `profile import`, `profile sync`, `profile list`, `profile delete`       |
-| API tools           | `scrape`, `screenshot`, `pdf`                                            |
-| Local runtime       | `dev install`, `dev start`, `dev stop`                                   |
+| Group               | Commands                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| Onboarding          | `init`, `forge`                                                                      |
+| Browser lifecycle   | `browser start`, `browser stop`, `browser sessions`, `browser live`                  |
+| Browser passthrough | `steel browser <inherited-command>`                                                  |
+| Browser profiles    | `profile import`, `profile sync`, `profile list`, `profile delete`                   |
+| API tools           | `scrape`, `screenshot`, `pdf`                                                        |
+| Local runtime       | `dev install`, `dev start`, `dev stop`                                               |
 | Credentials         | `credentials list`, `credentials create`, `credentials update`, `credentials delete` |
-| Account and utility | `login`, `logout`, `config`, `doctor`, `cache`, `update`                 |
+| Account and utility | `login`, `logout`, `config`, `doctor`, `cache`, `update`                             |
 
 For full flags and argument schemas, use the generated reference:
 
