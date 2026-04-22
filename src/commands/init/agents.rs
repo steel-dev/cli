@@ -1,6 +1,12 @@
 //! Detect installed coding agents and install the Steel skill into each.
 //!
-//! Currently supports Claude Code (`~/.claude/`) and Cursor (`~/.cursor/`).
+//! Supported agents:
+//! - Claude Code (`~/.claude/skills/<name>/SKILL.md`)
+//! - Cursor     (`~/.cursor/rules/<name>.mdc`)
+//! - OpenCode   (`~/.config/opencode/agents/<name>.md`, subagent format)
+//! - Codex      (detected via `~/.codex/`, installed to the shared
+//!               `~/.agents/skills/<name>/SKILL.md` location Codex scans)
+//!
 //! The Steel skill content is embedded from `skills/steel-browser/SKILL.md`
 //! so a single source of truth ships with the CLI binary.
 
@@ -14,7 +20,7 @@ use crate::status;
 
 const SKILL_CONTENT: &str = include_str!("../../../skills/steel-browser/SKILL.md");
 
-const CURSOR_DESCRIPTION: &str =
+const SHORT_DESCRIPTION: &str =
     "Steel browser automation CLI for web tasks (scrape, screenshot, interactive browser sessions)";
 
 pub struct DetectedAgent {
@@ -66,6 +72,46 @@ pub fn detect_agents() -> Vec<DetectedAgent> {
         });
     }
 
+    // OpenCode — user-level sub-agents at ~/.config/opencode/agents/<name>.md
+    let opencode_dir = home.join(".config").join("opencode");
+    if opencode_dir.is_dir() {
+        let install_path = opencode_dir.join("agents").join("steel-browser.md");
+        let content = opencode_agent_content();
+        let already_up_to_date = fs::read_to_string(&install_path)
+            .map(|existing| existing == content)
+            .unwrap_or(false);
+        agents.push(DetectedAgent {
+            name: "OpenCode",
+            install_path,
+            content,
+            already_up_to_date,
+        });
+    }
+
+    // Codex — detected via ~/.codex/ but installed to the shared skills path
+    // ~/.agents/skills/<name>/SKILL.md that Codex scans (see
+    // https://developers.openai.com/codex/skills). The SKILL.md format is
+    // compatible with Claude Code's, so the raw SKILL_CONTENT is reused
+    // verbatim.
+    let codex_dir = home.join(".codex");
+    if codex_dir.is_dir() {
+        let install_path = home
+            .join(".agents")
+            .join("skills")
+            .join("steel-browser")
+            .join("SKILL.md");
+        let content = SKILL_CONTENT.to_string();
+        let already_up_to_date = fs::read_to_string(&install_path)
+            .map(|existing| existing == content)
+            .unwrap_or(false);
+        agents.push(DetectedAgent {
+            name: "Codex",
+            install_path,
+            content,
+            already_up_to_date,
+        });
+    }
+
     agents
 }
 
@@ -73,7 +119,17 @@ pub fn detect_agents() -> Vec<DetectedAgent> {
 /// stripping its YAML frontmatter and prepending Cursor-specific frontmatter.
 fn cursor_rule_content() -> String {
     let body = strip_frontmatter(SKILL_CONTENT);
-    format!("---\ndescription: {CURSOR_DESCRIPTION}\nalwaysApply: false\n---\n\n{body}")
+    format!("---\ndescription: {SHORT_DESCRIPTION}\nalwaysApply: false\n---\n\n{body}")
+}
+
+/// Produce an OpenCode sub-agent file from the Claude Code SKILL.md by
+/// stripping its YAML frontmatter and prepending OpenCode sub-agent
+/// frontmatter (see https://opencode.ai/docs/agents).
+fn opencode_agent_content() -> String {
+    let body = strip_frontmatter(SKILL_CONTENT);
+    format!(
+        "---\ndescription: {SHORT_DESCRIPTION}\nmode: subagent\ntools:\n  bash: true\n  write: true\n  edit: true\n---\n\n{body}"
+    )
 }
 
 fn strip_frontmatter(s: &str) -> &str {
@@ -91,7 +147,7 @@ pub fn install_skills(auto_accept: bool) -> anyhow::Result<()> {
 
     if agents.is_empty() {
         status!(
-            "No coding agents detected (looked for ~/.claude and ~/.cursor). Skipping skill install."
+            "No coding agents detected (looked for ~/.claude, ~/.cursor, ~/.config/opencode, ~/.codex). Skipping skill install."
         );
         return Ok(());
     }
@@ -182,5 +238,25 @@ mod tests {
         assert!(rule.contains("alwaysApply: false"));
         // The body (stripped of SKILL.md's original frontmatter) should still be present.
         assert!(rule.contains("# Steel"));
+    }
+
+    #[test]
+    fn opencode_agent_content_has_subagent_frontmatter() {
+        let rule = opencode_agent_content();
+        assert!(rule.starts_with("---\ndescription:"));
+        assert!(rule.contains("mode: subagent"));
+        assert!(rule.contains("bash: true"));
+        // The body (stripped of SKILL.md's original frontmatter) should still be present.
+        assert!(rule.contains("# Steel"));
+        // The Cursor-specific key must not leak into the OpenCode frontmatter.
+        assert!(!rule.contains("alwaysApply"));
+    }
+
+    #[test]
+    fn codex_reuses_skill_content_verbatim() {
+        // Codex's SKILL.md schema (name + description frontmatter) matches
+        // Claude Code's, so we ship the same bytes. Guard against anyone
+        // introducing a divergent Codex-specific transform.
+        assert!(SKILL_CONTENT.starts_with("---\nname: steel-browser"));
     }
 }

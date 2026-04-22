@@ -15,6 +15,11 @@ pub struct Args {
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("Steel CLI setup");
+    if let Ok(from) = std::env::var("STEEL_ONBOARDING_FROM") {
+        if !from.is_empty() {
+            status!("Onboarding source: {from}");
+        }
+    }
     status!("");
 
     // Step 1: login (no-ops if already logged in).

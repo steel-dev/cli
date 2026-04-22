@@ -10,6 +10,9 @@ Flags:
   --non-interactive    Skip the interactive `steel init` step (install only)
   --agent              Run `steel init --agent` (print the onboarding guide
                        to stdout — intended for AI coding agents)
+  --from <name>        Tag the originating coding agent (claude-code, cursor,
+                       opencode, codex, …). Informational only — used for
+                       onboarding telemetry. Supports `--from=<name>` too.
 
 REQUIRES: curl
 INSTALLS TO: ~/.steel/bin
@@ -21,14 +24,38 @@ set -eu
 
 STEEL_NON_INTERACTIVE="no"
 STEEL_AGENT_MODE="no"
+STEEL_ONBOARDING_FROM=""
 
-for arg in "$@"; do
-    case "$arg" in
-        --non-interactive) STEEL_NON_INTERACTIVE="yes" ;;
-        --agent) STEEL_AGENT_MODE="yes" ;;
-        *) ;;
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --non-interactive)
+            STEEL_NON_INTERACTIVE="yes"
+            shift
+            ;;
+        --agent)
+            STEEL_AGENT_MODE="yes"
+            shift
+            ;;
+        --from)
+            STEEL_ONBOARDING_FROM="${2:-}"
+            # Shift past flag; shift past its value only if one was actually provided.
+            if [ $# -ge 2 ]; then
+                shift 2
+            else
+                shift
+            fi
+            ;;
+        --from=*)
+            STEEL_ONBOARDING_FROM="${1#--from=}"
+            shift
+            ;;
+        *)
+            shift
+            ;;
     esac
 done
+
+export STEEL_ONBOARDING_FROM
 
 # Detect non-interactive / CI environments and skip interactive setup.
 # Mirrors the Atuin installer pattern: probe for a controlling TTY, fall
