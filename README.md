@@ -1,18 +1,39 @@
-# @steel-dev/cli
+# Steel CLI
 
-Steel CLI for browser automation, API tools, and agent workflows.
+> Browser infrastructure for AI agents, from your terminal.
 
-This package now integrates `agent-browser` directly into `steel browser`, so you can keep familiar browser commands while using Steel-native session lifecycle, auth, and endpoint handling.
+<!-- [![crates.io](https://img.shields.io/crates/v/steel-cli?color=orange&logo=rust)](https://crates.io/crates/steel-cli) -->
 
-## Jump To
+[![npm](https://img.shields.io/npm/v/@steel-dev/cli?color=cb3837&logo=npm&label=npm)](https://www.npmjs.com/package/@steel-dev/cli)
+[![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/steel-dev)
 
-- [Install](#install)
-- [Quick Start](#quick-start)
-- [Shell Completions](#shell-completions)
-- [Agent-Browser Integration](#agent-browser-integration)
-- [Command Overview](#command-overview)
-- [Endpoint Resolution](#endpoint-resolution)
-- [Documentation Map](#documentation-map)
+The Steel CLI gives any AI agent (Claude, Cursor, Browser Use, or your own) a production-grade cloud browser: markdown-first scraping, long-running sessions, stealth, residential proxies, automatic CAPTCHA handling, and credential injection. One binary, cloud or self-hosted.
+
+```bash
+# Install, then interactively log in and install agent skills
+curl -fsS https://setup.steel.dev | sh
+
+# Scrape a page (agent-ready markdown)
+steel scrape https://example.com
+```
+
+<!-- TODO: replace with an asciicast of the quickstart -->
+
+## Why Steel CLI
+
+- **Agent-native.** Markdown-first output, `steel describe` for machine-readable command introspection, shell completions, and ready-to-install skills for Claude Code, Cursor, OpenCode, and Codex.
+- **Long-running sessions.** 24-hour browser sessions, reusable named profiles, persistent auth context. Built for agents that actually live: deep research, async workflows, overnight jobs.
+- **Framework-agnostic.** First-class support for Claude Computer Use, OpenAI Computer Use, Gemini Computer Use, Browser Use, Playwright, Puppeteer, Selenium, Stagehand, CrewAI, Magnitude, Notte, Agno, and AgentKit.
+- **Cloud or self-hosted.** Fully open source. Use managed infrastructure at [steel.dev](https://steel.dev), or run the [Steel Browser](https://github.com/steel-dev/steel-browser) stack yourself with `steel dev` or Docker.
+- **Pro browser features.** Managed residential proxies, stealth mode, automatic CAPTCHA solving, stored credential injection. Everything a real-world agent needs.
+
+## Links
+
+- 📖 [Docs](https://docs.steel.dev): guides, recipes, API reference
+- 🧪 [Cookbook](https://github.com/steel-dev/steel-cookbook): runnable examples across Python, Node, and every supported framework
+- 💬 [Discord](https://discord.gg/steel-dev): community, feedback, roadmap
+- 🐙 [GitHub](https://github.com/steel-dev/cli): source, issues, releases
 
 ## Install
 
@@ -20,34 +41,19 @@ This package now integrates `agent-browser` directly into `steel browser`, so yo
 curl -fsS https://setup.steel.dev | sh
 ```
 
-Or download directly from [GitHub Releases](https://github.com/steel-dev/cli/releases).
+The installer drops a single binary into `~/.steel/bin`, updates your shell's `PATH`, and auto-generates shell completions for bash, zsh, and fish.
 
-### Upgrading from npm
+Alternatives:
 
-If you previously installed via `npm i -g @steel-dev/cli`:
+- Download from [GitHub Releases](https://github.com/steel-dev/cli/releases)
+- `cargo install steel-cli`
+- `npm i -g @steel-dev/cli` (thin wrapper around the native binary)
 
-```bash
-npm update -g @steel-dev/cli   # auto-installs native binary
-# Then optionally:
-npm uninstall -g @steel-dev/cli
-export PATH="$HOME/.steel/bin:$PATH"
-```
-
-## Quick Start
-
-### Cloud mode (default)
-
-```bash
-steel login
-steel browser start --session my-job
-steel browser open https://example.com --session my-job
-steel browser snapshot -i --session my-job
-steel browser stop
-```
+After install, either restart your shell or run `export PATH="$HOME/.steel/bin:$PATH"`.
 
 ## Shell Completions
 
-Generate a completion script for your shell:
+Shell completions are installed automatically by `install.sh`. To regenerate or install manually:
 
 ```bash
 # Bash (user-local)
@@ -65,31 +71,6 @@ steel completion powershell | Out-String | Invoke-Expression
 
 Supported shells: `bash`, `zsh`, `fish`, `powershell`, `elvish`.
 
-## Agent-Browser Integration
-
-`steel browser` is directly backed by the vendored `agent-browser` runtime.
-
-Steel-owned lifecycle commands:
-
-- `steel browser start`
-- `steel browser stop`
-- `steel browser sessions`
-- `steel browser live`
-
-All other `steel browser <command>` calls are inherited from upstream runtime behavior and routed through Steel.
-
-Migration from upstream `agent-browser` is typically command-prefix only:
-
-- before: `agent-browser <command> ...`
-- after: `steel browser <command> ...`
-
-Read more:
-
-- [Migration guide](skills/steel-browser/references/migration-agent-browser.md)
-- [Compatibility matrix](docs/browser-compat.md)
-- [Steel browser reference](docs/references/steel-browser.md)
-- [Synced command catalog](docs/references/steel-browser-commands.md)
-
 ## Command Overview
 
 | Group               | Commands                                                                             |
@@ -103,9 +84,23 @@ Read more:
 | Credentials         | `credentials list`, `credentials create`, `credentials update`, `credentials delete` |
 | Account and utility | `login`, `logout`, `config`, `doctor`, `cache`, `update`, `completion`               |
 
-For full flags and argument schemas, use the generated reference:
+Full flags and schemas: [CLI reference](docs/cli-reference.md).
 
-- [CLI reference](docs/cli-reference.md)
+## Agent-Browser Integration
+
+`steel browser` is directly backed by the vendored [`agent-browser`](https://github.com/steel-dev/agent-browser) runtime. Steel-owned lifecycle commands:
+
+- `steel browser start`
+- `steel browser stop`
+- `steel browser sessions`
+- `steel browser live`
+
+All other `steel browser <command>` calls inherit upstream runtime behavior and route through Steel. Migration from upstream `agent-browser` is typically command-prefix only:
+
+- before: `agent-browser <command> ...`
+- after: `steel browser <command> ...`
+
+See the [migration guide](skills/steel-browser/references/migration-agent-browser.md), [compatibility matrix](docs/browser-compat.md), and [synced command catalog](docs/references/steel-browser-commands.md) for details.
 
 ## Endpoint Resolution
 
@@ -130,9 +125,10 @@ Attach-flag override rule:
 
 ## Output and Runtime Notes
 
-- `steel scrape` defaults to markdown-first output for token efficiency; use `--raw` for full JSON payload.
+- `steel scrape` defaults to markdown-first output for token efficiency; use `--raw` for the full JSON payload.
 - `steel browser start` and `steel browser sessions` emit display-safe connect URLs with sensitive query values redacted.
 - Browser command paths bypass auto-update checks for lower interactive latency.
+- Piped output auto-switches to JSON for machine-readable workflows. Use `--json` to force it, or `STEEL_FORCE_TTY=1` to disable.
 
 ## Documentation Map
 
@@ -156,3 +152,17 @@ Reference docs:
 Agent skill:
 
 - [Steel Browser skill package](skills/steel-browser/README.md)
+
+## Migrating from the Node CLI
+
+The Steel CLI is now a single native Rust binary. If you previously installed it via `npm i -g @steel-dev/cli`, the `install.sh` script auto-detects and removes the old Node-based install. You can also do it manually:
+
+```bash
+npm update -g @steel-dev/cli    # auto-installs native binary
+npm uninstall -g @steel-dev/cli # optional cleanup
+export PATH="$HOME/.steel/bin:$PATH"
+```
+
+---
+
+Licensed under [MIT](./LICENSE).

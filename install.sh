@@ -1,6 +1,6 @@
 #!/bin/sh
 : <<'DOCSTRING'
-Steel CLI — browser automation for AI agents
+Steel CLI: browser automation for AI agents
 https://github.com/steel-dev/cli
 
 Installs the Steel CLI binary and, in an interactive terminal, runs
@@ -9,15 +9,15 @@ Installs the Steel CLI binary and, in an interactive terminal, runs
 Flags:
   --non-interactive    Skip the interactive `steel init` step (install only)
   --agent              Run `steel init --agent` (print the onboarding guide
-                       to stdout — intended for AI coding agents)
+                       to stdout; intended for AI coding agents)
   --from <name>        Tag the originating coding agent (claude-code, cursor,
-                       opencode, codex, …). Informational only — used for
+                       opencode, codex, ...). Informational only; used for
                        onboarding telemetry. Supports `--from=<name>` too.
 
 REQUIRES: curl
 INSTALLS TO: ~/.steel/bin
 SHELL COMPLETIONS: auto-installed for bash/zsh/fish when $SHELL is set
-                   (silently skipped on failure — never blocks install)
+                   (silently skipped on failure; never blocks install)
 
 After install, PATH is NOT updated in the current shell. Restart your shell
 or run: export PATH="$HOME/.steel/bin:$PATH"
@@ -70,7 +70,7 @@ if [ "$STEEL_NON_INTERACTIVE" != "yes" ]; then
     fi
 fi
 
-echo "Steel CLI — browser automation for AI agents"
+echo "Steel CLI: browser automation for AI agents"
 echo "https://github.com/steel-dev/cli"
 echo ""
 
@@ -185,7 +185,7 @@ if [ -x "$STEEL_BIN" ] && [ -n "${SHELL:-}" ]; then
                 if [ -f "$HOME/.zshrc" ] && ! grep -qF '.zsh/completions' "$HOME/.zshrc" 2>/dev/null; then
                     {
                         printf '\n'
-                        printf '# Added by Steel CLI installer — shell completions\n'
+                        printf '# Added by Steel CLI installer: shell completions\n'
                         printf 'fpath=("$HOME/.zsh/completions" $fpath)\n'
                         printf 'autoload -Uz compinit && compinit\n'
                     } >> "$HOME/.zshrc"
