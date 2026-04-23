@@ -124,7 +124,7 @@ Wait:
     --state <state>                      visible, hidden, attached, detached
     -u, --url <substring>                Wait for URL to contain string
     -f, --function <js>                  Wait for JS function to return truthy
-    --load-state <state>                 load, domcontentloaded, networkidle (alias: --load)
+    -l, --load-state <state>             load, domcontentloaded, networkidle (alias: --load)
 
 Tabs:
   steel browser tab list               List open tabs
@@ -233,7 +233,7 @@ pub struct Cli {
     pub no_update_check: bool,
 
     /// Use local Steel runtime instead of cloud
-    #[arg(short, long, global = true)]
+    #[arg(long, global = true)]
     pub local: bool,
 
     /// Explicit self-hosted API endpoint URL

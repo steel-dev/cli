@@ -5,10 +5,10 @@
 //! - Cursor     (`~/.cursor/rules/<name>.mdc`)
 //! - OpenCode   (`~/.config/opencode/agents/<name>.md`, subagent format)
 //! - Codex      (detected via `~/.codex/`, installed to the shared
-//!               `~/.agents/skills/<name>/SKILL.md` location Codex scans)
+//!   `~/.agents/skills/<name>/SKILL.md` location Codex scans)
 //! - Pi         (detected via `~/.pi/`, installed to the same shared
-//!               `~/.agents/skills/<name>/SKILL.md` location Pi scans as a
-//!               fallback — see https://github.com/badlogic/pi-mono)
+//!   `~/.agents/skills/<name>/SKILL.md` location Pi scans as a
+//!   fallback — see https://github.com/badlogic/pi-mono)
 //!
 //! The Steel skill content is embedded from `skills/steel-browser/SKILL.md`
 //! so a single source of truth ships with the CLI binary.

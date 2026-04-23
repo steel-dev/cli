@@ -15,10 +15,10 @@ pub struct Args {
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("Steel CLI setup");
-    if let Ok(from) = std::env::var("STEEL_ONBOARDING_FROM") {
-        if !from.is_empty() {
-            status!("Onboarding source: {from}");
-        }
+    if let Ok(from) = std::env::var("STEEL_ONBOARDING_FROM")
+        && !from.is_empty()
+    {
+        status!("Onboarding source: {from}");
     }
     status!("");
 
