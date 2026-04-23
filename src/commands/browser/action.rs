@@ -486,7 +486,7 @@ pub struct WaitArgs {
     #[arg(short = 'f', long, alias = "fn")]
     pub function: Option<String>,
     /// Wait for load state: load, domcontentloaded, networkidle
-    #[arg(short = 'l', long, alias = "load")]
+    #[arg(long, alias = "load")]
     pub load_state: Option<String>,
 }
 

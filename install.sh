@@ -16,6 +16,8 @@ Flags:
 
 REQUIRES: curl
 INSTALLS TO: ~/.steel/bin
+SHELL COMPLETIONS: auto-installed for bash/zsh/fish when $SHELL is set
+                   (silently skipped on failure — never blocks install)
 
 After install, PATH is NOT updated in the current shell. Restart your shell
 or run: export PATH="$HOME/.steel/bin:$PATH"
@@ -150,10 +152,64 @@ fi
 
 STEEL_BIN="$INSTALL_DIR/steel"
 
+# --- Shell completions (best-effort; never fatal) ---------------------
+_install_completion_file() {
+    _shell="$1"
+    _path="$2"
+    if ! mkdir -p "$(dirname "$_path")" 2>/dev/null; then
+        return 1
+    fi
+    if ! "$STEEL_BIN" completion "$_shell" > "$_path" 2>/dev/null; then
+        rm -f "$_path" 2>/dev/null
+        return 1
+    fi
+    return 0
+}
+
+_completion_shell=""
+_completion_path=""
+if [ -x "$STEEL_BIN" ] && [ -n "${SHELL:-}" ]; then
+    case "$SHELL" in
+        */bash)
+            _comp_path="$HOME/.local/share/bash-completion/completions/steel"
+            if _install_completion_file bash "$_comp_path"; then
+                _completion_shell="bash"
+                _completion_path="$_comp_path"
+            fi
+            ;;
+        */zsh)
+            _comp_path="$HOME/.zsh/completions/_steel"
+            if _install_completion_file zsh "$_comp_path"; then
+                _completion_shell="zsh"
+                _completion_path="$_comp_path"
+                if [ -f "$HOME/.zshrc" ] && ! grep -qF '.zsh/completions' "$HOME/.zshrc" 2>/dev/null; then
+                    {
+                        printf '\n'
+                        printf '# Added by Steel CLI installer — shell completions\n'
+                        printf 'fpath=("$HOME/.zsh/completions" $fpath)\n'
+                        printf 'autoload -Uz compinit && compinit\n'
+                    } >> "$HOME/.zshrc"
+                fi
+            fi
+            ;;
+        */fish)
+            _comp_path="$HOME/.config/fish/completions/steel.fish"
+            if _install_completion_file fish "$_comp_path"; then
+                _completion_shell="fish"
+                _completion_path="$_comp_path"
+            fi
+            ;;
+    esac
+fi
+# ---------------------------------------------------------------------
+
 echo ""
 echo "Installed steel to $STEEL_BIN"
 if [ "$_added" = true ]; then
     echo "Added $INSTALL_DIR to PATH in $_rc"
+fi
+if [ -n "$_completion_shell" ]; then
+    echo "Installed $_completion_shell shell completion: $_completion_path"
 fi
 echo ""
 

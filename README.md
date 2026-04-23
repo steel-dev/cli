@@ -8,6 +8,7 @@ This package now integrates `agent-browser` directly into `steel browser`, so yo
 
 - [Install](#install)
 - [Quick Start](#quick-start)
+- [Shell Completions](#shell-completions)
 - [Agent-Browser Integration](#agent-browser-integration)
 - [Command Overview](#command-overview)
 - [Endpoint Resolution](#endpoint-resolution)
@@ -43,6 +44,26 @@ steel browser open https://example.com --session my-job
 steel browser snapshot -i --session my-job
 steel browser stop
 ```
+
+## Shell Completions
+
+Generate a completion script for your shell:
+
+```bash
+# Bash (user-local)
+steel completion bash > ~/.local/share/bash-completion/completions/steel
+
+# Zsh (ensure a writable dir is in $fpath, then reload)
+steel completion zsh > "${fpath[1]}/_steel"
+
+# Fish
+steel completion fish > ~/.config/fish/completions/steel.fish
+
+# PowerShell (append to $PROFILE)
+steel completion powershell | Out-String | Invoke-Expression
+```
+
+Supported shells: `bash`, `zsh`, `fish`, `powershell`, `elvish`.
 
 ## Agent-Browser Integration
 
@@ -80,7 +101,7 @@ Read more:
 | API tools           | `scrape`, `screenshot`, `pdf`                                                        |
 | Local runtime       | `dev install`, `dev start`, `dev stop`                                               |
 | Credentials         | `credentials list`, `credentials create`, `credentials update`, `credentials delete` |
-| Account and utility | `login`, `logout`, `config`, `doctor`, `cache`, `update`                             |
+| Account and utility | `login`, `logout`, `config`, `doctor`, `cache`, `update`, `completion`               |
 
 For full flags and argument schemas, use the generated reference:
 

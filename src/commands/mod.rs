@@ -1,5 +1,6 @@
 pub mod browser;
 pub mod cache;
+pub mod completion;
 pub mod config;
 pub mod credentials;
 pub mod describe;
@@ -123,7 +124,7 @@ Wait:
     --state <state>                      visible, hidden, attached, detached
     -u, --url <substring>                Wait for URL to contain string
     -f, --function <js>                  Wait for JS function to return truthy
-    -l, --load-state <state>             load, domcontentloaded, networkidle
+    --load-state <state>                 load, domcontentloaded, networkidle (alias: --load)
 
 Tabs:
   steel browser tab list               List open tabs
@@ -179,6 +180,7 @@ Other:
   steel forge [template] [-n <name>]   Scaffold a new project from a template
   steel update                         Update to latest version
   steel cache [-c]                     Manage CLI cache (-c to clean)
+  steel completion <shell>             Generate shell completion script (bash, zsh, fish, powershell, elvish)
 
 Environment:
   STEEL_API_KEY                        API key for Steel (overrides login)
@@ -305,6 +307,9 @@ pub enum Command {
 
     /// Check environment, auth, and connectivity
     Doctor(doctor::Args),
+
+    /// Generate a shell completion script
+    Completion(completion::Args),
 }
 
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
@@ -336,5 +341,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Profile { command } => profile::run(command).await,
         Command::Describe(args) => describe::run(args).await,
         Command::Doctor(args) => doctor::run(args).await,
+        Command::Completion(args) => completion::run(args).await,
     }
 }

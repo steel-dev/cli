@@ -112,7 +112,7 @@ steel browser wait --load networkidle
 steel browser wait --timeout 5000 -t "Done"
 ```
 
-Short flags: `-t` text, `-u` url, `-f` function, `-l` load state.
+Short flags: `-t` text, `-u` url, `-f` function.
 Long aliases: `--fn` = `--function`, `--load` = `--load-state`.
 All wait conditions default to 30 second timeout. Override with `--timeout <ms>`.
 
