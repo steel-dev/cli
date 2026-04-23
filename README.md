@@ -18,7 +18,9 @@ curl -fsS https://setup.steel.dev | sh
 steel scrape https://example.com
 ```
 
-<!-- TODO: replace with an asciicast of the quickstart -->
+<p align="center">
+  <img src="./assets/demo.gif" alt="Steel CLI demo">
+</p>
 
 ## Why Steel CLI
 
