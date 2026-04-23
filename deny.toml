@@ -10,6 +10,7 @@ targets = [
 # Transitive deps from agent-browser; we can't upgrade them directly.
 ignore = [
     "RUSTSEC-2024-0436", # paste unmaintained
+    "RUSTSEC-2026-0105", # core2 unmaintained (all versions yanked); pulled via image/ravif/rav1e/bitstream-io, no safe upgrade available
 ]
 
 [licenses]
