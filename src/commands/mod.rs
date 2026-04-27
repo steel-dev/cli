@@ -396,8 +396,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::OnceLock;
 
+    use tokio::sync::Mutex;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -421,7 +422,7 @@ mod tests {
 
     #[tokio::test]
     async fn successful_command_emits_started_and_completed_events() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         crate::telemetry::reset_for_test();
 
         let temp = tempfile::TempDir::new().unwrap();
@@ -467,7 +468,7 @@ mod tests {
 
     #[tokio::test]
     async fn failing_command_emits_started_and_failed_events() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         crate::telemetry::reset_for_test();
 
         let temp = tempfile::TempDir::new().unwrap();
@@ -517,7 +518,7 @@ mod tests {
 
     #[tokio::test]
     async fn telemetry_delivery_failure_does_not_fail_command() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         crate::telemetry::reset_for_test();
 
         let temp = tempfile::TempDir::new().unwrap();
@@ -539,7 +540,7 @@ mod tests {
 
     #[tokio::test]
     async fn install_created_emits_only_once_per_config_dir() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         crate::telemetry::reset_for_test();
 
         let temp = tempfile::TempDir::new().unwrap();
