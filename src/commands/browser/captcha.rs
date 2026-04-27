@@ -16,6 +16,15 @@ pub enum Command {
     Status(StatusArgs),
 }
 
+impl Command {
+    pub const fn telemetry_name(&self) -> &'static str {
+        match self {
+            Self::Solve(_) => "solve",
+            Self::Status(_) => "status",
+        }
+    }
+}
+
 #[derive(Parser)]
 pub struct SolveArgs {
     /// Explicit session ID (overrides --session name lookup)

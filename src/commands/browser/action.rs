@@ -161,6 +161,50 @@ pub enum ActionCommand {
     Close,
 }
 
+impl ActionCommand {
+    pub const fn telemetry_name(&self) -> &'static str {
+        match self {
+            Self::Navigate(_) => "navigate",
+            Self::Back => "back",
+            Self::Forward => "forward",
+            Self::Reload => "reload",
+            Self::Click(_) => "click",
+            Self::DblClick(_) => "dblclick",
+            Self::Fill(_) => "fill",
+            Self::Type(_) => "type",
+            Self::Press(_) => "press",
+            Self::Hover(_) => "hover",
+            Self::Focus(_) => "focus",
+            Self::Check(_) => "check",
+            Self::Uncheck(_) => "uncheck",
+            Self::Select(_) => "select",
+            Self::Clear(_) => "clear",
+            Self::SelectAll(_) => "selectall",
+            Self::Scroll(_) => "scroll",
+            Self::ScrollIntoView(_) => "scrollintoview",
+            Self::SetValue(_) => "setvalue",
+            Self::Snapshot(_) => "snapshot",
+            Self::Screenshot(_) => "screenshot",
+            Self::Eval(_) => "eval",
+            Self::Find(_) => "find",
+            Self::Content => "content",
+            Self::Get { .. } => "get",
+            Self::Is { .. } => "is",
+            Self::Wait(_) => "wait",
+            Self::Tab { .. } => "tab",
+            Self::Cookies { .. } => "cookies",
+            Self::Storage { .. } => "storage",
+            Self::Drag(_) => "drag",
+            Self::Upload(_) => "upload",
+            Self::Highlight(_) => "highlight",
+            Self::Set { .. } => "set",
+            Self::BringToFront => "bringtofront",
+            Self::Diff { .. } => "diff",
+            Self::Close => "close",
+        }
+    }
+}
+
 // ── Get subcommands ─────────────────────────────────────────────────
 
 #[derive(Subcommand)]

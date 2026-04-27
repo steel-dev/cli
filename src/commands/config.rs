@@ -32,5 +32,9 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         println!("browser.apiUrl: {url}");
     }
 
+    if let Some(ref cfg) = config {
+        println!("telemetry.disabled: {}", cfg.telemetry_disabled());
+    }
+
     Ok(())
 }

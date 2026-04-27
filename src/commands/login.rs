@@ -27,6 +27,8 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
 
     save_api_key(&api_key, &name)?;
 
+    crate::telemetry::track_event("login_completed", serde_json::Map::new());
+
     status!("Authentication successful! Your API key has been saved.");
 
     Ok(())

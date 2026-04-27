@@ -110,6 +110,8 @@ pub struct Config {
     pub instance: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub browser: Option<BrowserConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub telemetry: Option<TelemetryConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -119,6 +121,13 @@ pub struct BrowserConfig {
     pub api_url: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TelemetryConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+}
+
 impl Config {
     /// Extract the local API URL from config.browser.apiUrl
     pub fn local_api_url(&self) -> Option<&str> {
@@ -126,6 +135,13 @@ impl Config {
             .as_ref()
             .and_then(|b| b.api_url.as_deref())
             .filter(|s| !s.trim().is_empty())
+    }
+
+    pub fn telemetry_disabled(&self) -> bool {
+        self.telemetry
+            .as_ref()
+            .and_then(|t| t.disabled)
+            .unwrap_or(false)
     }
 }
 
@@ -181,6 +197,9 @@ mod tests {
             browser: Some(BrowserConfig {
                 api_url: Some("http://localhost:4000/v1".into()),
             }),
+            telemetry: Some(TelemetryConfig {
+                disabled: Some(true),
+            }),
         };
 
         write_config_to(&path, &config).unwrap();
@@ -190,6 +209,7 @@ mod tests {
         assert_eq!(loaded.name.as_deref(), Some("CLI"));
         assert_eq!(loaded.instance.as_deref(), Some("cloud"));
         assert_eq!(loaded.local_api_url(), Some("http://localhost:4000/v1"));
+        assert!(loaded.telemetry_disabled());
     }
 
     #[test]
@@ -209,13 +229,14 @@ mod tests {
         let path = dir.path().join("config.json");
         std::fs::write(
             &path,
-            r#"{"apiKey":"k","name":"n","instance":"cloud","browser":{"apiUrl":"http://x"}}"#,
+            r#"{"apiKey":"k","name":"n","instance":"cloud","browser":{"apiUrl":"http://x"},"telemetry":{"disabled":true}}"#,
         )
         .unwrap();
 
         let config = read_config_from(&path).unwrap();
         assert_eq!(config.api_key.as_deref(), Some("k"));
         assert_eq!(config.local_api_url(), Some("http://x"));
+        assert!(config.telemetry_disabled());
     }
 
     #[test]
@@ -240,6 +261,12 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(config.local_api_url(), None);
+    }
+
+    #[test]
+    fn telemetry_disabled_defaults_false() {
+        let config = Config::default();
+        assert!(!config.telemetry_disabled());
     }
 
     // --- ApiMode tests ---

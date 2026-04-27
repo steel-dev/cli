@@ -73,8 +73,21 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 
 - Config directory: `~/.config/steel`
 - Main config: `~/.config/steel/config.json`
+- Telemetry state: `~/.config/steel/telemetry.json`
 - Browser session state: `~/.config/steel/browser-session-state.json`
 - Profile metadata: `~/.config/steel/profiles/<name>.json`
+
+On the first run where telemetry is enabled, the CLI prints a one-time notice to stderr describing what is collected and how to opt out. The notice is suppressed in JSON/non-TTY output.
+
+Telemetry can be disabled persistently in `config.json` with:
+
+```json
+{
+  "telemetry": {
+    "disabled": true
+  }
+}
+```
 
 ## Environment Variables (Common)
 
@@ -83,6 +96,8 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - `STEEL_BROWSER_API_URL`: canonical self-hosted local endpoint override.
 - `STEEL_LOCAL_API_URL`: backward-compatible self-hosted alias.
 - `STEEL_CONFIG_DIR`: override config directory root.
+- `STEEL_TELEMETRY_HOST`: override the PostHog ingest host.
+- `STEEL_TELEMETRY_DISABLED`: force telemetry off.
 - `STEEL_PROFILE`: default profile name for browser sessions.
 
 ## Key References
