@@ -4,8 +4,10 @@ use clap::Parser;
 use dialoguer::{Input, Select};
 use include_dir::{Dir, include_dir};
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::status;
+use crate::util::output;
 
 static EXAMPLES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/external/cookbook/examples");
 static REGISTRY_YAML: &str = include_str!("../../external/cookbook/registry.yaml");
@@ -18,6 +20,10 @@ pub struct Args {
     /// Project name
     #[arg(short, long)]
     pub name: Option<String>,
+
+    /// List available templates and exit (respects --json)
+    #[arg(long, conflicts_with_all = ["template", "name"])]
+    pub list: bool,
 }
 
 // Mirror of cookbook's registry.yaml entry shape. Cookbook owns the
@@ -28,6 +34,66 @@ struct Recipe {
     title: String,
     path: String,
     language: String,
+}
+
+// Renames carried over from the pre-cookbook-rework registry. Covers
+// both the old `steel-*-starter` slugs and the shorthand aliases that
+// shipped in the embedded manifest.json. JS-only variants (playwright-js,
+// puppeteer-js) were retired in favor of the TS cousins.
+//
+// This table only lives in the CLI — cookbook stays unaware of CLI
+// concerns. Plan: keep one major-version cycle, then drop.
+const ALIASES: &[(&str, &str)] = &[
+    // Old `steel-*-starter` slugs
+    ("steel-auth-context-starter", "auth-context"),
+    ("steel-browser-use-starter", "browser-use"),
+    (
+        "steel-claude-computer-use-node-starter",
+        "claude-computer-use-ts",
+    ),
+    (
+        "steel-claude-computer-use-python-starter",
+        "claude-computer-use-py",
+    ),
+    ("steel-credentials-starter", "credentials"),
+    ("steel-files-api-starter", "files-api"),
+    ("steel-magnitude-starter", "magnitude"),
+    (
+        "steel-oai-computer-use-node-starter",
+        "openai-computer-use-ts",
+    ),
+    (
+        "steel-oai-computer-use-python-starter",
+        "openai-computer-use-py",
+    ),
+    ("steel-playwright-python-starter", "playwright-py"),
+    ("steel-playwright-starter", "playwright-ts"),
+    ("steel-playwright-starter-js", "playwright-ts"),
+    ("steel-puppeteer-starter", "puppeteer-ts"),
+    ("steel-puppeteer-starter-js", "puppeteer-ts"),
+    ("steel-selenium-starter", "selenium"),
+    ("steel-stagehand-node-starter", "stagehand-ts"),
+    ("steel-stagehand-python-starter", "stagehand-py"),
+    // Old shorthands
+    ("auth", "auth-context"),
+    ("claude-cua", "claude-computer-use-ts"),
+    ("claude-cua-py", "claude-computer-use-py"),
+    ("creds", "credentials"),
+    ("files", "files-api"),
+    ("oai-cua", "openai-computer-use-ts"),
+    ("oai-cua-py", "openai-computer-use-py"),
+    ("playwright", "playwright-ts"),
+    ("playwright-js", "playwright-ts"),
+    ("puppeteer", "puppeteer-ts"),
+    ("puppeteer-js", "puppeteer-ts"),
+    ("stagehand", "stagehand-ts"),
+];
+
+fn resolve_alias(input: &str) -> Option<&'static str> {
+    ALIASES
+        .iter()
+        .find(|(old, _)| *old == input)
+        .map(|(_, new)| *new)
 }
 
 // `examples/playwright-ts` -> `playwright-ts`. The basename is unique
@@ -52,10 +118,21 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         anyhow::bail!("No templates available.");
     }
 
+    if args.list {
+        print_list(&recipes);
+        return Ok(());
+    }
+
     let recipe = if let Some(ref template_arg) = args.template {
+        let resolved = resolve_alias(template_arg).unwrap_or(template_arg.as_str());
+        if resolved != template_arg {
+            eprintln!(
+                "warning: '{template_arg}' was renamed to '{resolved}'. Continuing with '{resolved}'."
+            );
+        }
         recipes
             .iter()
-            .find(|r| cli_slug(r) == template_arg)
+            .find(|r| cli_slug(r) == resolved)
             .ok_or_else(|| anyhow::anyhow!("Template not found: {template_arg}"))?
     } else {
         let items: Vec<String> = recipes
@@ -116,6 +193,50 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     Ok(())
 }
 
+// Plain stdout — `--list` is a discovery action, not a status update,
+// so it goes to stdout (pipeable into grep/jq) rather than the status!
+// macro that targets stderr. JSON mode emits the same shape as other
+// list commands (profile list, credentials list).
+fn print_list(recipes: &[Recipe]) {
+    if output::is_json() {
+        let data: Vec<serde_json::Value> = recipes
+            .iter()
+            .map(|r| {
+                json!({
+                    "slug": cli_slug(r),
+                    "title": r.title,
+                    "language": r.language,
+                })
+            })
+            .collect();
+        output::success_data(json!(data));
+        return;
+    }
+
+    let max_slug = recipes
+        .iter()
+        .map(|r| cli_slug(r).len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+    let max_lang = recipes
+        .iter()
+        .map(|r| r.language.len())
+        .max()
+        .unwrap_or(8)
+        .max(8);
+
+    println!("{:<max_slug$}  {:<max_lang$}  TITLE", "SLUG", "LANGUAGE");
+    for r in recipes {
+        println!(
+            "{:<max_slug$}  {:<max_lang$}  {}",
+            cli_slug(r),
+            r.language,
+            r.title,
+        );
+    }
+}
+
 // Walk an include_dir Dir and copy every file out to disk, rooting paths
 // at `target` (so `playwright-ts/index.ts` becomes `<target>/index.ts`).
 // `strip_prefix` is the slug we mounted at; include_dir paths are
@@ -168,6 +289,32 @@ mod tests {
             assert!(
                 seen.insert(slug.to_string()),
                 "duplicate cli slug '{slug}' (cookbook verify_registry.py should prevent this)"
+            );
+        }
+    }
+
+    #[test]
+    fn every_alias_resolves_to_a_real_slug() {
+        let recipes = load_recipes().unwrap();
+        let live: std::collections::HashSet<&str> = recipes.iter().map(cli_slug).collect();
+
+        for (old, new) in ALIASES {
+            assert!(
+                live.contains(new),
+                "alias '{old}' -> '{new}' but '{new}' is not in the current registry",
+            );
+        }
+    }
+
+    #[test]
+    fn aliases_do_not_shadow_live_slugs() {
+        let recipes = load_recipes().unwrap();
+        let live: std::collections::HashSet<&str> = recipes.iter().map(cli_slug).collect();
+
+        for (old, _) in ALIASES {
+            assert!(
+                !live.contains(old),
+                "alias key '{old}' collides with a live slug — drop the alias",
             );
         }
     }
