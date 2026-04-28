@@ -11,6 +11,7 @@ use crate::status;
 use crate::util::output;
 
 const COOKBOOK_REPO: &str = "steel-dev/steel-cookbook";
+// To bump: paste a new SHA. Diff via https://github.com/steel-dev/steel-cookbook/compare/<old>...<new>
 const COOKBOOK_REF: &str = "8fc2b7202e3adada392342d5f089c50c847358ce";
 
 #[derive(Parser)]
