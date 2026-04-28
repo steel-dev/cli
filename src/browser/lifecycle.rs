@@ -93,18 +93,24 @@ fn get_session_status(session: &Value) -> Option<String> {
 
 /// Extract session timeout (milliseconds) from API response.
 /// The API may return it as `timeout`, `sessionTimeout`, or `timeoutMs`.
+/// Self-hosted servers may encode "no timeout" as 0, which we normalize to `None`.
 pub fn get_session_timeout(session: &Value) -> Option<u64> {
     let keys = ["timeout", "sessionTimeout", "timeoutMs"];
     for key in &keys {
         if let Some(v) = session.get(key) {
             if let Some(n) = v.as_u64() {
-                return Some(n);
+                if n > 0 {
+                    return Some(n);
+                }
+                continue;
             }
             // Handle string numbers
             if let Some(s) = v.as_str()
                 && let Ok(n) = s.trim().parse::<u64>()
             {
-                return Some(n);
+                if n > 0 {
+                    return Some(n);
+                }
             }
         }
     }
@@ -510,6 +516,12 @@ mod tests {
             get_session_timeout(&json!({"timeout": "300000"})),
             Some(300000)
         );
+    }
+
+    #[test]
+    fn session_timeout_zero_means_unset() {
+        assert_eq!(get_session_timeout(&json!({"timeout": 0})), None);
+        assert_eq!(get_session_timeout(&json!({"timeoutMs": "0"})), None);
     }
 
     #[test]
