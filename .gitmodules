@@ -1,0 +1,4 @@
+[submodule "external/cookbook"]
+	path = external/cookbook
+	url = https://github.com/steel-dev/steel-cookbook.git
+	branch = rework

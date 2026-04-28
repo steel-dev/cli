@@ -1,10 +1,14 @@
-use std::io::Write;
+use std::path::Path;
 
 use clap::Parser;
 use dialoguer::{Input, Select};
+use include_dir::{Dir, include_dir};
 use serde::Deserialize;
 
 use crate::status;
+
+static EXAMPLES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/external/cookbook/examples");
+static REGISTRY_YAML: &str = include_str!("../../external/cookbook/registry.yaml");
 
 #[derive(Parser)]
 pub struct Args {
@@ -16,60 +20,47 @@ pub struct Args {
     pub name: Option<String>,
 }
 
+// Mirror of cookbook's registry.yaml entry shape. Cookbook owns the
+// schema; only fields the CLI needs are pulled in. Extra fields
+// (description, topics, authors, ...) are ignored.
 #[derive(Deserialize)]
-struct Manifest {
-    examples: Vec<ManifestExample>,
-    version: String,
-}
-
-#[derive(Deserialize)]
-struct ManifestExample {
-    slug: String,
+struct Recipe {
     title: String,
-    #[serde(default)]
-    shorthand: Option<String>,
-    #[serde(default)]
-    template: Option<String>,
-    #[serde(default)]
-    language: Option<String>,
-    #[serde(default)]
-    flags: Vec<String>,
+    path: String,
+    language: String,
 }
 
-fn load_manifest() -> anyhow::Result<Manifest> {
-    let manifest_bytes = include_bytes!("../../manifest.json");
-    let manifest: Manifest = serde_json::from_slice(manifest_bytes)?;
-    Ok(manifest)
+// `examples/playwright-ts` -> `playwright-ts`. The basename is unique
+// across the registry (cookbook's verify_registry.py enforces this) so
+// we use it as the CLI-facing identifier.
+fn cli_slug(recipe: &Recipe) -> &str {
+    Path::new(&recipe.path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(recipe.path.as_str())
+}
+
+fn load_recipes() -> anyhow::Result<Vec<Recipe>> {
+    let recipes: Vec<Recipe> = serde_yaml::from_str(REGISTRY_YAML)?;
+    Ok(recipes)
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    let manifest = load_manifest()?;
+    let recipes = load_recipes()?;
 
-    // Filter to CLI-available templates
-    let cli_examples: Vec<&ManifestExample> = manifest
-        .examples
-        .iter()
-        .filter(|e| e.flags.contains(&"cli".to_string()))
-        .collect();
-
-    if cli_examples.is_empty() {
+    if recipes.is_empty() {
         anyhow::bail!("No templates available.");
     }
 
-    // Select template
-    let example = if let Some(ref template_arg) = args.template {
-        cli_examples
+    let recipe = if let Some(ref template_arg) = args.template {
+        recipes
             .iter()
-            .find(|e| e.slug == *template_arg || e.shorthand.as_deref() == Some(template_arg))
-            .copied()
+            .find(|r| cli_slug(r) == template_arg)
             .ok_or_else(|| anyhow::anyhow!("Template not found: {template_arg}"))?
     } else {
-        let items: Vec<String> = cli_examples
+        let items: Vec<String> = recipes
             .iter()
-            .map(|e| {
-                let lang = e.language.as_deref().unwrap_or("unknown");
-                format!("{} [{}]", e.title, lang)
-            })
+            .map(|r| format!("{} [{}]", r.title, r.language))
             .collect();
 
         let selection = Select::new()
@@ -78,65 +69,36 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             .default(0)
             .interact()?;
 
-        cli_examples[selection]
+        &recipes[selection]
     };
 
-    // Get project name
+    let slug = cli_slug(recipe);
+
     let project_name = if let Some(ref name) = args.name {
         name.clone()
     } else {
         Input::new()
             .with_prompt("Project name")
-            .default(example.slug.clone())
+            .default(slug.to_string())
             .interact_text()?
     };
 
-    // Download template
-    let Some(ref template_path) = example.template else {
-        anyhow::bail!("Template '{}' has no download path.", example.slug);
-    };
+    let template_dir = EXAMPLES
+        .get_dir(slug)
+        .ok_or_else(|| anyhow::anyhow!("Embedded template not found: {slug}"))?;
 
-    let download_url = format!(
-        "https://registry.steel-edge.net/versions/{}/{}",
-        manifest.version, template_path
-    );
-
-    status!("Downloading template '{}'...", example.title);
-
-    let client = reqwest::Client::new();
-    let response = client.get(&download_url).send().await?;
-
-    if !response.status().is_success() {
-        anyhow::bail!("Failed to download template: HTTP {}", response.status());
-    }
-
-    let bytes = response.bytes().await?;
-
-    // Extract tarball using system tar
     let target_dir = std::env::current_dir()?.join(&project_name);
     if target_dir.exists() {
         anyhow::bail!("Directory '{}' already exists.", project_name);
     }
 
-    std::fs::create_dir_all(&target_dir)?;
+    status!(
+        "Creating '{}' from template '{}'...",
+        project_name,
+        recipe.title
+    );
 
-    // Write to temp file then extract
-    let tmp = target_dir.join(".template.tar.gz");
-    {
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(&bytes)?;
-    }
-
-    let status = std::process::Command::new("tar")
-        .args(["xzf", &tmp.to_string_lossy()])
-        .current_dir(&target_dir)
-        .status()?;
-
-    let _ = std::fs::remove_file(&tmp);
-
-    if !status.success() {
-        anyhow::bail!("Failed to extract template archive.");
-    }
+    extract_dir(template_dir, &target_dir, slug)?;
 
     status!(
         "Project '{}' created at {}",
@@ -146,14 +108,67 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("\nNext steps:");
     status!("  cd {project_name}");
 
-    match example.language.as_deref() {
-        Some("python") => {
-            status!("  pip install -r requirements.txt");
-        }
-        _ => {
-            status!("  npm install");
-        }
+    match recipe.language.to_lowercase().as_str() {
+        "python" => status!("  pip install -r requirements.txt"),
+        _ => status!("  npm install"),
     }
 
     Ok(())
+}
+
+// Walk an include_dir Dir and copy every file out to disk, rooting paths
+// at `target` (so `playwright-ts/index.ts` becomes `<target>/index.ts`).
+// `strip_prefix` is the slug we mounted at; include_dir paths are
+// relative to EXAMPLES, so the slug always sits at the front.
+fn extract_dir(dir: &Dir<'_>, target: &Path, strip_prefix: &str) -> anyhow::Result<()> {
+    std::fs::create_dir_all(target)?;
+
+    for file in dir.files() {
+        let rel = file.path().strip_prefix(strip_prefix)?;
+        let dst = target.join(rel);
+        if let Some(parent) = dst.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&dst, file.contents())?;
+    }
+
+    for subdir in dir.dirs() {
+        extract_dir(subdir, target, strip_prefix)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_parses_and_every_recipe_is_embedded() {
+        let recipes = load_recipes().expect("registry.yaml parses");
+        assert!(!recipes.is_empty(), "registry.yaml has at least one recipe");
+
+        for recipe in &recipes {
+            let slug = cli_slug(recipe);
+            assert!(
+                EXAMPLES.get_dir(slug).is_some(),
+                "registry entry '{}' has no embedded directory at examples/{}",
+                recipe.path,
+                slug,
+            );
+        }
+    }
+
+    #[test]
+    fn cli_slugs_are_unique() {
+        let recipes = load_recipes().unwrap();
+        let mut seen = std::collections::HashSet::new();
+        for recipe in &recipes {
+            let slug = cli_slug(recipe);
+            assert!(
+                seen.insert(slug.to_string()),
+                "duplicate cli slug '{slug}' (cookbook verify_registry.py should prevent this)"
+            );
+        }
+    }
 }
