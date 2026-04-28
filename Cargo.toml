@@ -50,6 +50,12 @@ jiff = "0.2"
 include_dir = "0.7"
 serde_yaml = "0.9"
 
+[build-dependencies]
+# Walks the cookbook submodule with full gitignore semantics so build.rs
+# can refuse to ship gitignored paths (npm-installed node_modules,
+# python __pycache__, etc.) inside the binary.
+ignore = "0.4"
+
 [dev-dependencies]
 wiremock = "0.6"
 proptest = "1"

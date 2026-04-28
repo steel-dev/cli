@@ -83,27 +83,7 @@ Start a new project using the Steel CLI
 steel forge [template] [options]
 ```
 
-### Available Templates
-
-| Alias | Label | Language | Description |
-|-------|-------|----------|-------------|
-| `steel-auth-context-starter` | Reusing Authentication Context | TS | Template for Reusing Authentication Context automation |
-| `steel-browser-use-starter` | Using Steel with Browser Use | PY | Template for Using Steel with Browser Use automation |
-| `steel-claude-computer-use-node-starter` | Using Steel with Claude's Computer Use | TS | Template for Using Steel with Claude's Computer Use automation |
-| `steel-claude-computer-use-python-starter` | Using Steel with Claude's Computer Use | PY | Template for Using Steel with Claude's Computer Use automation |
-| `steel-credentials-starter` | Using Steel Credentials with Playwright | TS | Template for Using Steel Credentials with Playwright automation |
-| `steel-files-api-starter` | Using the Steel Files API | TS | Template for Using the Steel Files API automation |
-| `steel-magnitude-starter` | Using Steel with Magnitude | TS | Template for Using Steel with Magnitude automation |
-| `steel-oai-computer-use-node-starter` | Using Steel with OpenAI's Computer Use | TS | Template for Using Steel with OpenAI's Computer Use automation |
-| `steel-oai-computer-use-python-starter` | Using Steel with OpenAI's Computer Use | PY | Template for Using Steel with OpenAI's Computer Use automation |
-| `steel-playwright-python-starter` | Drive a Steel Session with Playwright | PY | Template for Drive a Steel Session with Playwright automation |
-| `steel-playwright-starter-js` | Using Playwright with Steel | JS | Template for Using Playwright with Steel automation |
-| `steel-playwright-starter` | Drive a Steel Session with Playwright | TS | Template for Drive a Steel Session with Playwright automation |
-| `steel-puppeteer-starter-js` | Using Puppeteer with Steel | JS | Template for Using Puppeteer with Steel automation |
-| `steel-puppeteer-starter` | Drive a Steel Session with Puppeteer | TS | Template for Drive a Steel Session with Puppeteer automation |
-| `steel-selenium-starter` | Using Selenium with Steel | PY | Template for Using Selenium with Steel automation |
-| `steel-stagehand-node-starter` | Using Steel with Stagehand | TS | Template for Using Steel with Stagehand automation |
-| `steel-stagehand-python-starter` | Using Steel with Stagehand | PY | Template for Using Steel with Stagehand automation |
+Run `steel forge` with no arguments to see the current template list interactively. The catalog is sourced from the [Steel Cookbook](https://github.com/steel-dev/steel-cookbook) registry.
 
 ### Arguments
 
@@ -171,27 +151,7 @@ Run a Steel Cookbook automation instantly from the CLI — no setup, no files.
 steel run [template] [options]
 ```
 
-### Available Templates
-
-| Alias | Label | Language | Description |
-|-------|-------|----------|-------------|
-| `steel-auth-context-starter` | Reusing Authentication Context | TS | Template for Reusing Authentication Context automation |
-| `steel-browser-use-starter` | Using Steel with Browser Use | PY | Template for Using Steel with Browser Use automation |
-| `steel-claude-computer-use-node-starter` | Using Steel with Claude's Computer Use | TS | Template for Using Steel with Claude's Computer Use automation |
-| `steel-claude-computer-use-python-starter` | Using Steel with Claude's Computer Use | PY | Template for Using Steel with Claude's Computer Use automation |
-| `steel-credentials-starter` | Using Steel Credentials with Playwright | TS | Template for Using Steel Credentials with Playwright automation |
-| `steel-files-api-starter` | Using the Steel Files API | TS | Template for Using the Steel Files API automation |
-| `steel-magnitude-starter` | Using Steel with Magnitude | TS | Template for Using Steel with Magnitude automation |
-| `steel-oai-computer-use-node-starter` | Using Steel with OpenAI's Computer Use | TS | Template for Using Steel with OpenAI's Computer Use automation |
-| `steel-oai-computer-use-python-starter` | Using Steel with OpenAI's Computer Use | PY | Template for Using Steel with OpenAI's Computer Use automation |
-| `steel-playwright-python-starter` | Drive a Steel Session with Playwright | PY | Template for Drive a Steel Session with Playwright automation |
-| `steel-playwright-starter-js` | Using Playwright with Steel | JS | Template for Using Playwright with Steel automation |
-| `steel-playwright-starter` | Drive a Steel Session with Playwright | TS | Template for Drive a Steel Session with Playwright automation |
-| `steel-puppeteer-starter-js` | Using Puppeteer with Steel | JS | Template for Using Puppeteer with Steel automation |
-| `steel-puppeteer-starter` | Drive a Steel Session with Puppeteer | TS | Template for Drive a Steel Session with Puppeteer automation |
-| `steel-selenium-starter` | Using Selenium with Steel | PY | Template for Using Selenium with Steel automation |
-| `steel-stagehand-node-starter` | Using Steel with Stagehand | TS | Template for Using Steel with Stagehand automation |
-| `steel-stagehand-python-starter` | Using Steel with Stagehand | PY | Template for Using Steel with Stagehand automation |
+Run `steel run` with no arguments to see the current template list interactively. The catalog is sourced from the [Steel Cookbook](https://github.com/steel-dev/steel-cookbook) registry.
 
 ### Arguments
 
@@ -536,4 +496,4 @@ steel dev stop [options]
 
 ---
 
-*This documentation was auto-generated from the Steel CLI source code.*
+_This documentation was auto-generated from the Steel CLI source code._
