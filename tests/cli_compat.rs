@@ -440,11 +440,7 @@ fn dev_stop_flags() {
 #[test]
 fn forge_flags() {
     let cmd = get_subcommand(&root_cmd(), &["forge"]);
-    assert_flags(
-        &cmd,
-        &[flag_val_short("name", 'n'), flag("list")],
-        "forge",
-    );
+    assert_flags(&cmd, &[flag_val_short("name", 'n'), flag("list")], "forge");
 }
 
 #[test]

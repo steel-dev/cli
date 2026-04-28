@@ -3,10 +3,9 @@ use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use dialoguer::{Input, Select};
-use flate2::read::GzDecoder;
 use serde::Deserialize;
 use serde_json::json;
-use tar::Archive;
+use zip::ZipArchive;
 
 use crate::status;
 use crate::util::output;
@@ -132,7 +131,7 @@ async fn ensure_cookbook() -> anyhow::Result<PathBuf> {
         &COOKBOOK_REF[..12]
     );
 
-    let url = format!("https://codeload.github.com/{COOKBOOK_REPO}/tar.gz/{COOKBOOK_REF}");
+    let url = format!("https://codeload.github.com/{COOKBOOK_REPO}/zip/{COOKBOOK_REF}");
     let bytes = reqwest::get(&url)
         .await?
         .error_for_status()?
@@ -140,7 +139,8 @@ async fn ensure_cookbook() -> anyhow::Result<PathBuf> {
         .await?;
 
     let staging = tempfile::tempdir()?;
-    Archive::new(GzDecoder::new(Cursor::new(&bytes))).unpack(staging.path())?;
+    let mut archive = ZipArchive::new(Cursor::new(&bytes))?;
+    archive.extract(staging.path())?;
 
     // GitHub wraps everything in `<repo>-<ref>/`. There should be exactly
     // one entry at the top level — find it and use it as our cookbook

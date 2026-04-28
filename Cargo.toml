@@ -48,8 +48,6 @@ tempfile = "3"
 jiff = "0.2"
 
 serde_yaml = "0.9"
-flate2 = "1"
-tar = "0.4"
 
 [dev-dependencies]
 wiremock = "0.6"
