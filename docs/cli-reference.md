@@ -11,7 +11,6 @@ This is an auto-generated reference for the Steel CLI. The Steel CLI helps you c
 - [steel login](#steel-login)
 - [steel logout](#steel-logout)
 - [steel pdf](#steel-pdf)
-- [steel run](#steel-run)
 - [steel scrape](#steel-scrape)
 - [steel screenshot](#steel-screenshot)
 - [steel settings](#steel-settings)
@@ -140,34 +139,6 @@ steel pdf [url] [options]
 - -r, **--region**: Region identifier for request execution
 - -l, **--local**: Send request to local Steel runtime mode
 - **--api-url**: Explicit self-hosted API endpoint URL
-
-## steel run
-
-Run a Steel Cookbook automation instantly from the CLI — no setup, no files.
-
-### Usage
-
-```
-steel run [template] [options]
-```
-
-Run `steel run` with no arguments to see the current template list interactively. The catalog is sourced from the [Steel Cookbook](https://github.com/steel-dev/steel-cookbook) registry.
-
-### Arguments
-
-- **template** (optional): Example template to run
-
-### Options
-
-- -a, **--api_url**: API URL for Steel API
-- -o, **--view**: Open live session viewer
-- -t, **--task**: Task to run
-- **--api_key**: API Key for Steel API
-- **--openai_key**: API Key for OpenAI
-- **--anthropic_key**: API Key for Anthropic
-- **--gemini_key**: API Key for Gemini
-- **--skip_auth**: Skip authentication
-- -h, **--help**: Show help
 
 ## steel scrape
 

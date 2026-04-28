@@ -1,16 +1,18 @@
-use std::path::Path;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use dialoguer::{Input, Select};
-use include_dir::{Dir, include_dir};
+use flate2::read::GzDecoder;
 use serde::Deserialize;
 use serde_json::json;
+use tar::Archive;
 
 use crate::status;
 use crate::util::output;
 
-static EXAMPLES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/external/cookbook/examples");
-static REGISTRY_YAML: &str = include_str!("../../external/cookbook/registry.yaml");
+const COOKBOOK_REPO: &str = "steel-dev/steel-cookbook";
+const COOKBOOK_REF: &str = "8fc2b7202e3adada392342d5f089c50c847358ce";
 
 #[derive(Parser)]
 pub struct Args {
@@ -42,7 +44,7 @@ struct Recipe {
 // puppeteer-js) were retired in favor of the TS cousins.
 //
 // This table only lives in the CLI — cookbook stays unaware of CLI
-// concerns. Plan: keep one major-version cycle, then drop.
+// concerns.
 const ALIASES: &[(&str, &str)] = &[
     // Old `steel-*-starter` slugs
     ("steel-auth-context-starter", "auth-context"),
@@ -103,16 +105,76 @@ fn cli_slug(recipe: &Recipe) -> &str {
     Path::new(&recipe.path)
         .file_name()
         .and_then(|s| s.to_str())
-        .unwrap_or(recipe.path.as_str())
+        .expect("registry path must have a basename — verify_registry.py invariant")
 }
 
-fn load_recipes() -> anyhow::Result<Vec<Recipe>> {
-    let recipes: Vec<Recipe> = serde_yaml::from_str(REGISTRY_YAML)?;
+fn cookbook_cache_dir() -> anyhow::Result<PathBuf> {
+    let base =
+        dirs::cache_dir().ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?;
+    Ok(base.join("steel/cookbook").join(&COOKBOOK_REF[..12]))
+}
+
+// Fetch + extract the cookbook tarball at COOKBOOK_REF, cached under
+// the user's cache dir. Returns the path that contains `registry.yaml`
+// and `examples/`.
+//
+// Concurrency: two parallel runs may both download. They each unpack
+// to their own tempdir and race to rename it into place; the loser's
+// rename fails benignly and we use whichever copy won.
+async fn ensure_cookbook() -> anyhow::Result<PathBuf> {
+    let cache = cookbook_cache_dir()?;
+    if cache.join("registry.yaml").exists() {
+        return Ok(cache);
+    }
+
+    status!(
+        "Fetching templates from {COOKBOOK_REPO}@{}...",
+        &COOKBOOK_REF[..12]
+    );
+
+    let url = format!("https://codeload.github.com/{COOKBOOK_REPO}/tar.gz/{COOKBOOK_REF}");
+    let bytes = reqwest::get(&url)
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
+
+    let staging = tempfile::tempdir()?;
+    Archive::new(GzDecoder::new(Cursor::new(&bytes))).unpack(staging.path())?;
+
+    // GitHub wraps everything in `<repo>-<ref>/`. There should be exactly
+    // one entry at the top level — find it and use it as our cookbook
+    // root.
+    let inner = std::fs::read_dir(staging.path())?
+        .filter_map(Result::ok)
+        .find(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .ok_or_else(|| anyhow::anyhow!("Unexpected tarball layout from {url}"))?
+        .path();
+
+    if let Some(parent) = cache.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // Atomic-ish promotion. If a parallel process beat us, just use
+    // theirs — both copies have the same SHA-pinned content.
+    match std::fs::rename(&inner, &cache) {
+        Ok(()) => {}
+        Err(_) if cache.join("registry.yaml").exists() => {}
+        Err(e) => return Err(e.into()),
+    }
+
+    Ok(cache)
+}
+
+fn load_recipes(cookbook: &Path) -> anyhow::Result<Vec<Recipe>> {
+    let yaml = std::fs::read_to_string(cookbook.join("registry.yaml"))?;
+    let recipes: Vec<Recipe> = serde_yaml::from_str(&yaml)?;
     Ok(recipes)
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    let recipes = load_recipes()?;
+    let cookbook = ensure_cookbook().await?;
+    let recipes = load_recipes(&cookbook)?;
 
     if recipes.is_empty() {
         anyhow::bail!("No templates available.");
@@ -160,9 +222,13 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             .interact_text()?
     };
 
-    let template_dir = EXAMPLES
-        .get_dir(slug)
-        .ok_or_else(|| anyhow::anyhow!("Embedded template not found: {slug}"))?;
+    let template_src = cookbook.join(&recipe.path);
+    if !template_src.exists() {
+        anyhow::bail!(
+            "Template directory not found in cookbook: {}",
+            template_src.display()
+        );
+    }
 
     let target_dir = std::env::current_dir()?.join(&project_name);
     if target_dir.exists() {
@@ -175,7 +241,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         recipe.title
     );
 
-    extract_dir(template_dir, &target_dir, slug)?;
+    copy_dir(&template_src, &target_dir)?;
 
     status!(
         "Project '{}' created at {}",
@@ -237,26 +303,17 @@ fn print_list(recipes: &[Recipe]) {
     }
 }
 
-// Walk an include_dir Dir and copy every file out to disk, rooting paths
-// at `target` (so `playwright-ts/index.ts` becomes `<target>/index.ts`).
-// `strip_prefix` is the slug we mounted at; include_dir paths are
-// relative to EXAMPLES, so the slug always sits at the front.
-fn extract_dir(dir: &Dir<'_>, target: &Path, strip_prefix: &str) -> anyhow::Result<()> {
-    std::fs::create_dir_all(target)?;
-
-    for file in dir.files() {
-        let rel = file.path().strip_prefix(strip_prefix)?;
-        let dst = target.join(rel);
-        if let Some(parent) = dst.parent() {
-            std::fs::create_dir_all(parent)?;
+fn copy_dir(src: &Path, dst: &Path) -> anyhow::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let dst_path = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &dst_path)?;
+        } else {
+            std::fs::copy(entry.path(), &dst_path)?;
         }
-        std::fs::write(&dst, file.contents())?;
     }
-
-    for subdir in dir.dirs() {
-        extract_dir(subdir, target, strip_prefix)?;
-    }
-
     Ok(())
 }
 
@@ -265,56 +322,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_parses_and_every_recipe_is_embedded() {
-        let recipes = load_recipes().expect("registry.yaml parses");
-        assert!(!recipes.is_empty(), "registry.yaml has at least one recipe");
-
-        for recipe in &recipes {
-            let slug = cli_slug(recipe);
-            assert!(
-                EXAMPLES.get_dir(slug).is_some(),
-                "registry entry '{}' has no embedded directory at examples/{}",
-                recipe.path,
-                slug,
-            );
-        }
+    fn resolve_alias_maps_old_slugs() {
+        assert_eq!(resolve_alias("playwright"), Some("playwright-ts"));
+        assert_eq!(
+            resolve_alias("steel-puppeteer-starter"),
+            Some("puppeteer-ts")
+        );
+        assert_eq!(resolve_alias("creds"), Some("credentials"));
+        assert_eq!(resolve_alias("does-not-exist"), None);
     }
 
     #[test]
-    fn cli_slugs_are_unique() {
-        let recipes = load_recipes().unwrap();
+    fn alias_keys_are_unique() {
         let mut seen = std::collections::HashSet::new();
-        for recipe in &recipes {
-            let slug = cli_slug(recipe);
-            assert!(
-                seen.insert(slug.to_string()),
-                "duplicate cli slug '{slug}' (cookbook verify_registry.py should prevent this)"
-            );
-        }
-    }
-
-    #[test]
-    fn every_alias_resolves_to_a_real_slug() {
-        let recipes = load_recipes().unwrap();
-        let live: std::collections::HashSet<&str> = recipes.iter().map(cli_slug).collect();
-
-        for (old, new) in ALIASES {
-            assert!(
-                live.contains(new),
-                "alias '{old}' -> '{new}' but '{new}' is not in the current registry",
-            );
-        }
-    }
-
-    #[test]
-    fn aliases_do_not_shadow_live_slugs() {
-        let recipes = load_recipes().unwrap();
-        let live: std::collections::HashSet<&str> = recipes.iter().map(cli_slug).collect();
-
         for (old, _) in ALIASES {
             assert!(
-                !live.contains(old),
-                "alias key '{old}' collides with a live slug — drop the alias",
+                seen.insert(*old),
+                "duplicate alias key '{old}' — second entry shadows first",
+            );
+        }
+    }
+
+    #[test]
+    fn alias_targets_look_like_live_slugs() {
+        // Lightweight sanity: every alias target follows the
+        // `<thing>[-lang]` shape that cookbook example dirs use.
+        // Validation against the actual registry happens at runtime when
+        // the user picks a template (and at CI-time when COOKBOOK_REF
+        // is bumped).
+        for (_, new) in ALIASES {
+            assert!(
+                new.chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()),
+                "alias target '{new}' has unexpected characters",
+            );
+            assert!(
+                !new.starts_with('-') && !new.ends_with('-'),
+                "alias target '{new}' has leading/trailing dash",
             );
         }
     }
