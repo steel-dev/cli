@@ -48,6 +48,8 @@ tempfile = "3"
 jiff = "0.2"
 parking_lot = "0.12"
 
+serde_yaml = "0.9"
+
 [dev-dependencies]
 wiremock = "0.6"
 proptest = "1"
