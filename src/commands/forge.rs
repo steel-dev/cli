@@ -14,6 +14,9 @@ use crate::util::output;
 const COOKBOOK_REPO: &str = "steel-dev/steel-cookbook";
 // To bump: run scripts/bump-cookbook.sh [<ref>] (defaults to upstream main).
 const COOKBOOK_REF: &str = "b3036903e51723219a8da56e3894f198717ca379";
+// Branch resolved by the fallback path when a slug isn't in the pinned
+// cookbook. Kept as a constant so behavior is predictable across builds.
+const COOKBOOK_HEAD_REF: &str = "main";
 
 #[derive(Parser)]
 pub struct Args {
@@ -32,7 +35,11 @@ pub struct Args {
 // Mirror of cookbook's registry.yaml entry shape. Cookbook owns the
 // schema; only fields the CLI needs are pulled in. Extra fields
 // (description, topics, authors, ...) are ignored.
-#[derive(Deserialize)]
+//
+// Clone is here so `run` can hold a single owned Recipe regardless of
+// whether it came from the pinned cookbook or the HEAD fallback (the
+// two live in different `Vec<Recipe>`s with non-overlapping lifetimes).
+#[derive(Deserialize, Clone)]
 struct Recipe {
     title: String,
     path: String,
@@ -60,6 +67,75 @@ async fn ensure_cookbook() -> anyhow::Result<PathBuf> {
     let cache = cookbook_cache_dir()?;
     ensure_cookbook_at(&cache, COOKBOOK_REPO, COOKBOOK_REF).await?;
     Ok(cache)
+}
+
+// Resolve the latest commit SHA for `branch` in `repo` via GitHub's
+// commits API. Used by the HEAD fallback so a slug that landed in
+// cookbook after the CLI was built can still scaffold without forcing
+// the user to upgrade.
+async fn resolve_head_sha(repo: &str, branch: &str) -> anyhow::Result<String> {
+    let url = format!("https://api.github.com/repos/{repo}/commits/{branch}");
+    // Bounded timeout: this sits on the error path of `forge <slug>`,
+    // so a hanging request would turn a typo into a long stall.
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent(concat!("steel-cli/", env!("CARGO_PKG_VERSION")))
+        .build()?;
+    let json: serde_json::Value = client
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    json.get("sha")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| anyhow::anyhow!("no sha in response from {url}"))
+}
+
+// Fetch HEAD into a separate cache namespace (`cookbook-head/<sha12>`)
+// so the pinned cache's prune logic doesn't churn it and vice versa.
+// Returns (cache_dir, full_sha).
+async fn ensure_cookbook_head() -> anyhow::Result<(PathBuf, String)> {
+    let sha = resolve_head_sha(COOKBOOK_REPO, COOKBOOK_HEAD_REF).await?;
+    let base =
+        dirs::cache_dir().ok_or_else(|| anyhow::anyhow!("Could not determine cache directory"))?;
+    let cache = base.join("steel/cookbook-head").join(&sha[..12]);
+    ensure_cookbook_at(&cache, COOKBOOK_REPO, &sha).await?;
+    Ok((cache, sha))
+}
+
+// Slug not in the pinned cookbook. Try cookbook HEAD before giving up.
+//
+// - Ok(Some(...)): HEAD has it. Caller scaffolds from the HEAD cache.
+//   A stderr note is emitted so the user knows they're outside the pin.
+// - Ok(None):      HEAD doesn't have it (or HEAD == pin, meaning the
+//   pinned snapshot is already up-to-date). Caller surfaces the normal
+//   "Template not found" error.
+// - Err(...):      The lookup itself failed (network, rate limit, bad
+//   archive). Caller folds this into the "not found" error so the user
+//   sees one coherent message instead of a network-error wall.
+async fn try_head_fallback(
+    template: &str,
+    pin_sha: &str,
+) -> anyhow::Result<Option<(Recipe, PathBuf)>> {
+    let (cache, head_sha) = ensure_cookbook_head().await?;
+    if head_sha == pin_sha {
+        return Ok(None);
+    }
+    let recipes = load_recipes(&cache)?;
+    let Some(recipe) = recipes.into_iter().find(|r| cli_slug(r) == template) else {
+        return Ok(None);
+    };
+    let pin_short = &pin_sha[..12];
+    let head_short = &head_sha[..12];
+    status!(
+        "note: '{template}' not in your CLI's pinned cookbook ({pin_short}). \
+         Using HEAD ({head_short}). Update steel-cli to pin this version."
+    );
+    Ok(Some((recipe, cache)))
 }
 
 // Fetch + extract the cookbook zip at `git_ref`, materializing it at
@@ -188,11 +264,28 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let recipe = if let Some(ref template_arg) = args.template {
-        recipes
+    // `--list` and the interactive picker only surface the pinned
+    // cookbook — they're discovery actions where deterministic output
+    // and zero network matters more than freshness. Explicit slug
+    // lookups, however, fall back to cookbook HEAD when the pinned
+    // snapshot doesn't have it: covers the case where docs already
+    // advertises a recipe the user's CLI build doesn't know about yet.
+    let (recipe, cookbook_root) = if let Some(ref template_arg) = args.template {
+        if let Some(r) = recipes
             .iter()
             .find(|r| cli_slug(r) == template_arg)
-            .ok_or_else(|| anyhow::anyhow!("Template not found: {template_arg}"))?
+            .cloned()
+        {
+            (r, cookbook)
+        } else {
+            match try_head_fallback(template_arg, COOKBOOK_REF).await {
+                Ok(Some(found)) => found,
+                Ok(None) => anyhow::bail!("Template not found: {template_arg}"),
+                Err(e) => anyhow::bail!(
+                    "Template not found: {template_arg}\n  (also tried cookbook HEAD: {e})"
+                ),
+            }
+        }
     } else {
         let items: Vec<String> = recipes
             .iter()
@@ -205,10 +298,10 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             .default(0)
             .interact()?;
 
-        &recipes[selection]
+        (recipes[selection].clone(), cookbook)
     };
 
-    let slug = cli_slug(recipe);
+    let slug = cli_slug(&recipe);
 
     let project_name = if let Some(ref name) = args.name {
         name.clone()
@@ -219,7 +312,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             .interact_text()?
     };
 
-    let template_src = cookbook.join(&recipe.path);
+    let template_src = cookbook_root.join(&recipe.path);
     if !template_src.exists() {
         anyhow::bail!(
             "Template directory not found in cookbook: {}",
@@ -417,5 +510,22 @@ mod tests {
                 cli_slug(r)
             );
         }
+    }
+
+    // Online: hits api.github.com. Validates that the HEAD fallback
+    // path's first hop — resolving a branch to a SHA — actually returns
+    // a 40-char hex SHA. Catches API shape changes (e.g., GitHub
+    // renaming the field) before users do.
+    #[tokio::test]
+    #[ignore = "online: hits api.github.com"]
+    async fn head_sha_resolves() {
+        let sha = resolve_head_sha(COOKBOOK_REPO, COOKBOOK_HEAD_REF)
+            .await
+            .expect("HEAD sha resolves");
+        assert_eq!(sha.len(), 40, "GitHub returns the full 40-char SHA");
+        assert!(
+            sha.chars().all(|c| c.is_ascii_hexdigit()),
+            "sha is hex: {sha}"
+        );
     }
 }
