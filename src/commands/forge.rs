@@ -13,7 +13,7 @@ use crate::util::output;
 
 const COOKBOOK_REPO: &str = "steel-dev/steel-cookbook";
 // To bump: run scripts/bump-cookbook.sh [<ref>] (defaults to upstream main).
-const COOKBOOK_REF: &str = "8fc2b7202e3adada392342d5f089c50c847358ce";
+const COOKBOOK_REF: &str = "7ac7c6f07cfc564a4f3d41fd79abbbb8837b820c";
 
 #[derive(Parser)]
 pub struct Args {
