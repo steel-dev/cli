@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
@@ -11,7 +12,7 @@ use crate::status;
 use crate::util::output;
 
 const COOKBOOK_REPO: &str = "steel-dev/steel-cookbook";
-// To bump: paste a new SHA. Diff via https://github.com/steel-dev/steel-cookbook/compare/<old>...<new>
+// To bump: run scripts/bump-cookbook.sh [<ref>] (defaults to upstream main).
 const COOKBOOK_REF: &str = "8fc2b7202e3adada392342d5f089c50c847358ce";
 
 #[derive(Parser)]
@@ -38,74 +39,15 @@ struct Recipe {
     language: String,
 }
 
-// Renames carried over from the pre-cookbook-rework registry. Covers
-// both the old `steel-*-starter` slugs and the shorthand aliases that
-// shipped in the embedded manifest.json. JS-only variants (playwright-js,
-// puppeteer-js) were retired in favor of the TS cousins.
-//
-// This table only lives in the CLI — cookbook stays unaware of CLI
-// concerns.
-const ALIASES: &[(&str, &str)] = &[
-    // Old `steel-*-starter` slugs
-    ("steel-auth-context-starter", "auth-context"),
-    ("steel-browser-use-starter", "browser-use"),
-    (
-        "steel-claude-computer-use-node-starter",
-        "claude-computer-use-ts",
-    ),
-    (
-        "steel-claude-computer-use-python-starter",
-        "claude-computer-use-py",
-    ),
-    ("steel-credentials-starter", "credentials"),
-    ("steel-files-api-starter", "files-api"),
-    ("steel-magnitude-starter", "magnitude"),
-    (
-        "steel-oai-computer-use-node-starter",
-        "openai-computer-use-ts",
-    ),
-    (
-        "steel-oai-computer-use-python-starter",
-        "openai-computer-use-py",
-    ),
-    ("steel-playwright-python-starter", "playwright-py"),
-    ("steel-playwright-starter", "playwright-ts"),
-    ("steel-playwright-starter-js", "playwright-ts"),
-    ("steel-puppeteer-starter", "puppeteer-ts"),
-    ("steel-puppeteer-starter-js", "puppeteer-ts"),
-    ("steel-selenium-starter", "selenium"),
-    ("steel-stagehand-node-starter", "stagehand-ts"),
-    ("steel-stagehand-python-starter", "stagehand-py"),
-    // Old shorthands
-    ("auth", "auth-context"),
-    ("claude-cua", "claude-computer-use-ts"),
-    ("claude-cua-py", "claude-computer-use-py"),
-    ("creds", "credentials"),
-    ("files", "files-api"),
-    ("oai-cua", "openai-computer-use-ts"),
-    ("oai-cua-py", "openai-computer-use-py"),
-    ("playwright", "playwright-ts"),
-    ("playwright-js", "playwright-ts"),
-    ("puppeteer", "puppeteer-ts"),
-    ("puppeteer-js", "puppeteer-ts"),
-    ("stagehand", "stagehand-ts"),
-];
-
-fn resolve_alias(input: &str) -> Option<&'static str> {
-    ALIASES
-        .iter()
-        .find(|(old, _)| *old == input)
-        .map(|(_, new)| *new)
-}
-
-// `examples/playwright-ts` -> `playwright-ts`. The basename is unique
-// across the registry (cookbook's verify_registry.py enforces this) so
-// we use it as the CLI-facing identifier.
+// `examples/playwright-ts` -> `playwright-ts`. Cookbook's verify_registry.py
+// enforces basename uniqueness, so we use it as the CLI-facing identifier.
+// Falls back to the full path on the (unexpected) case where a registry
+// entry has no basename — better than panicking on data we don't own.
 fn cli_slug(recipe: &Recipe) -> &str {
     Path::new(&recipe.path)
         .file_name()
         .and_then(|s| s.to_str())
-        .expect("registry path must have a basename — verify_registry.py invariant")
+        .unwrap_or(recipe.path.as_str())
 }
 
 fn cookbook_cache_dir() -> anyhow::Result<PathBuf> {
@@ -114,57 +56,117 @@ fn cookbook_cache_dir() -> anyhow::Result<PathBuf> {
     Ok(base.join("steel/cookbook").join(&COOKBOOK_REF[..12]))
 }
 
-// Fetch + extract the cookbook tarball at COOKBOOK_REF, cached under
-// the user's cache dir. Returns the path that contains `registry.yaml`
-// and `examples/`.
-//
-// Concurrency: two parallel runs may both download. They each unpack
-// to their own tempdir and race to rename it into place; the loser's
-// rename fails benignly and we use whichever copy won.
 async fn ensure_cookbook() -> anyhow::Result<PathBuf> {
     let cache = cookbook_cache_dir()?;
+    ensure_cookbook_at(&cache, COOKBOOK_REPO, COOKBOOK_REF).await?;
+    Ok(cache)
+}
+
+// Fetch + extract the cookbook zip at `git_ref`, materializing it at
+// `cache`. Idempotent: if `cache/registry.yaml` already exists, returns
+// immediately.
+//
+// Concurrency: two parallel runs may both download. They each unpack
+// into a sibling tempdir and race to rename their copy into place. The
+// loser's rename fails benignly because the winner's directory is
+// non-empty; the loser's tempdir is dropped and we use the winner's
+// (byte-identical) copy.
+//
+// After a successful promotion, sibling SHA-shaped directories are
+// pruned. This bounds cache growth across CLI upgrades without needing
+// the user to run `steel cache --clean`.
+async fn ensure_cookbook_at(cache: &Path, repo: &str, git_ref: &str) -> anyhow::Result<()> {
     if cache.join("registry.yaml").exists() {
-        return Ok(cache);
+        return Ok(());
     }
 
-    status!(
-        "Fetching templates from {COOKBOOK_REPO}@{}...",
-        &COOKBOOK_REF[..12]
-    );
+    let short = &git_ref[..12.min(git_ref.len())];
+    status!("Fetching templates from {repo}@{short}...");
 
-    let url = format!("https://codeload.github.com/{COOKBOOK_REPO}/zip/{COOKBOOK_REF}");
+    let url = format!("https://codeload.github.com/{repo}/zip/{git_ref}");
     let bytes = reqwest::get(&url)
         .await?
         .error_for_status()?
         .bytes()
         .await?;
 
-    let staging = tempfile::tempdir()?;
-    let mut archive = ZipArchive::new(Cursor::new(&bytes))?;
-    archive.extract(staging.path())?;
+    let parent = cache
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("cache dir has no parent: {}", cache.display()))?;
+    std::fs::create_dir_all(parent)?;
+
+    // Stage in a sibling of `cache` so the final rename is on the same
+    // filesystem (avoids EXDEV when the system temp dir is on a
+    // different mount).
+    let staging = tempfile::tempdir_in(parent)?;
+    let staging_path = staging.path().to_path_buf();
+
+    // Unzip is CPU-bound and synchronous; keep it off the tokio worker
+    // pool so we don't stall other futures (negligible here, but the
+    // habit is cheap to keep).
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let mut archive = ZipArchive::new(Cursor::new(&bytes))?;
+        archive.extract(&staging_path)?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("unzip task failed: {e}"))??;
 
     // GitHub wraps everything in `<repo>-<ref>/`. There should be exactly
-    // one entry at the top level — find it and use it as our cookbook
-    // root.
+    // one directory at the top level — find it and use it as the source
+    // of our move.
     let inner = std::fs::read_dir(staging.path())?
         .filter_map(Result::ok)
         .find(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-        .ok_or_else(|| anyhow::anyhow!("Unexpected tarball layout from {url}"))?
+        .ok_or_else(|| anyhow::anyhow!("Unexpected archive layout from {url}"))?
         .path();
 
-    if let Some(parent) = cache.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    // Atomic-ish promotion. If a parallel process beat us, just use
-    // theirs — both copies have the same SHA-pinned content.
-    match std::fs::rename(&inner, &cache) {
+    match std::fs::rename(&inner, cache) {
         Ok(()) => {}
+        // Race lost (winner's non-empty dir blocks our rename) or any
+        // other transient failure that left a usable cache behind: trust
+        // the SHA pin and reuse what's there.
         Err(_) if cache.join("registry.yaml").exists() => {}
         Err(e) => return Err(e.into()),
     }
 
-    Ok(cache)
+    prune_old_cache_siblings(cache);
+
+    Ok(())
+}
+
+// Delete sibling cache dirs whose names look like a 12-char hex pin and
+// don't match the current one. Restricting to the SHA shape avoids
+// stomping on other processes' in-flight `tempdir_in` staging dirs.
+fn prune_old_cache_siblings(current: &Path) {
+    let (Some(parent), Some(current_name)) = (current.parent(), current.file_name()) else {
+        return;
+    };
+
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if name == current_name || !looks_like_cookbook_pin(&name) {
+            continue;
+        }
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+// Lowercase-only on purpose: the cache key we produce is always
+// lowercase (`&COOKBOOK_REF[..12]`), so any uppercase-hex sibling is
+// not ours to touch.
+fn looks_like_cookbook_pin(name: &OsStr) -> bool {
+    name.to_str().is_some_and(|s| {
+        s.len() == 12
+            && s.chars()
+                .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+    })
 }
 
 fn load_recipes(cookbook: &Path) -> anyhow::Result<Vec<Recipe>> {
@@ -187,15 +189,9 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     }
 
     let recipe = if let Some(ref template_arg) = args.template {
-        let resolved = resolve_alias(template_arg).unwrap_or(template_arg.as_str());
-        if resolved != template_arg {
-            eprintln!(
-                "warning: '{template_arg}' was renamed to '{resolved}'. Continuing with '{resolved}'."
-            );
-        }
         recipes
             .iter()
-            .find(|r| cli_slug(r) == resolved)
+            .find(|r| cli_slug(r) == template_arg)
             .ok_or_else(|| anyhow::anyhow!("Template not found: {template_arg}"))?
     } else {
         let items: Vec<String> = recipes
@@ -323,43 +319,102 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resolve_alias_maps_old_slugs() {
-        assert_eq!(resolve_alias("playwright"), Some("playwright-ts"));
-        assert_eq!(
-            resolve_alias("steel-puppeteer-starter"),
-            Some("puppeteer-ts")
+    fn cli_slug_falls_back_to_full_path() {
+        // Pathological registry entry: a path with no basename. We don't
+        // expect this in practice (cookbook's verify_registry.py rejects
+        // it) but the CLI should not panic on data it doesn't own.
+        let recipe = Recipe {
+            title: "x".into(),
+            path: String::new(),
+            language: "ts".into(),
+        };
+        assert_eq!(cli_slug(&recipe), "");
+
+        let recipe = Recipe {
+            title: "x".into(),
+            path: "examples/playwright-ts".into(),
+            language: "ts".into(),
+        };
+        assert_eq!(cli_slug(&recipe), "playwright-ts");
+    }
+
+    #[test]
+    fn cookbook_pin_is_12_hex_chars() {
+        // The cache key uses the first 12 chars of COOKBOOK_REF and the
+        // prune logic only deletes directories matching that shape.
+        // Catches a malformed pin (e.g. truncated paste) at compile/test
+        // time instead of at the user's machine.
+        assert!(
+            COOKBOOK_REF.len() >= 12 && COOKBOOK_REF[..12].chars().all(|c| c.is_ascii_hexdigit())
         );
-        assert_eq!(resolve_alias("creds"), Some("credentials"));
-        assert_eq!(resolve_alias("does-not-exist"), None);
     }
 
     #[test]
-    fn alias_keys_are_unique() {
-        let mut seen = std::collections::HashSet::new();
-        for (old, _) in ALIASES {
-            assert!(
-                seen.insert(*old),
-                "duplicate alias key '{old}' — second entry shadows first",
-            );
+    fn pin_shape_matches_prune_filter() {
+        let key = std::ffi::OsString::from(&COOKBOOK_REF[..12]);
+        assert!(looks_like_cookbook_pin(&key));
+        assert!(!looks_like_cookbook_pin(std::ffi::OsStr::new("not-a-sha")));
+        assert!(!looks_like_cookbook_pin(std::ffi::OsStr::new(
+            "ABCDEF012345"
+        )));
+        assert!(!looks_like_cookbook_pin(std::ffi::OsStr::new(
+            "abcdef0123456" // 13 chars
+        )));
+    }
+
+    #[test]
+    fn prune_keeps_current_and_non_pin_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let parent = tmp.path();
+        let current = parent.join("aaaaaaaaaaaa");
+        let old_pin = parent.join("bbbbbbbbbbbb");
+        let unrelated = parent.join("not-a-sha");
+
+        for d in [&current, &old_pin, &unrelated] {
+            std::fs::create_dir_all(d).unwrap();
+            std::fs::write(d.join("registry.yaml"), "[]").unwrap();
         }
+
+        prune_old_cache_siblings(&current);
+
+        assert!(current.exists(), "current pin must survive");
+        assert!(
+            unrelated.exists(),
+            "non-SHA siblings are not ours to delete"
+        );
+        assert!(!old_pin.exists(), "old SHA pin should be pruned");
     }
 
-    #[test]
-    fn alias_targets_look_like_live_slugs() {
-        // Lightweight sanity: every alias target follows the
-        // `<thing>[-lang]` shape that cookbook example dirs use.
-        // Validation against the actual registry happens at runtime when
-        // the user picks a template (and at CI-time when COOKBOOK_REF
-        // is bumped).
-        for (_, new) in ALIASES {
+    // Online: hits codeload.github.com. Validates that COOKBOOK_REF is
+    // resolvable and that every recipe in registry.yaml maps to a real
+    // directory in the archive. Run via `cargo nextest run --run-ignored
+    // only -E 'test(cookbook_pin_resolves)'`.
+    #[tokio::test]
+    #[ignore = "online: hits codeload.github.com"]
+    async fn cookbook_pin_resolves() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let cache = tmp.path().join(&COOKBOOK_REF[..12]);
+
+        ensure_cookbook_at(&cache, COOKBOOK_REPO, COOKBOOK_REF)
+            .await
+            .expect("cookbook fetch + extract");
+
+        let recipes = load_recipes(&cache).expect("registry.yaml parses");
+        assert!(!recipes.is_empty(), "registry has at least one recipe");
+
+        let mut seen = std::collections::HashSet::new();
+        for r in &recipes {
+            let dir = cache.join(&r.path);
             assert!(
-                new.chars()
-                    .all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()),
-                "alias target '{new}' has unexpected characters",
+                dir.is_dir(),
+                "recipe '{}' points at missing dir: {}",
+                cli_slug(r),
+                dir.display()
             );
             assert!(
-                !new.starts_with('-') && !new.ends_with('-'),
-                "alias target '{new}' has leading/trailing dash",
+                seen.insert(cli_slug(r).to_string()),
+                "duplicate cli slug '{}' in registry",
+                cli_slug(r)
             );
         }
     }

@@ -1,0 +1,28 @@
+name: Verify Cookbook Pin
+
+on:
+  pull_request:
+    paths:
+      - "src/commands/forge.rs"
+      - "scripts/bump-cookbook.sh"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Resolve pinned cookbook ref
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+
+      # Online test: fetches the pinned COOKBOOK_REF, parses
+      # registry.yaml, and asserts every recipe directory exists. Catches
+      # a bad SHA paste before users hit it at runtime.
+      - run: cargo nextest run --run-ignored only -E 'test(cookbook_pin_resolves)'
