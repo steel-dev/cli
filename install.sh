@@ -182,13 +182,30 @@ if [ -x "$STEEL_BIN" ] && [ -n "${SHELL:-}" ]; then
             if _install_completion_file zsh "$_comp_path"; then
                 _completion_shell="zsh"
                 _completion_path="$_comp_path"
-                if [ -f "$HOME/.zshrc" ] && ! grep -qF '.zsh/completions' "$HOME/.zshrc" 2>/dev/null; then
+                if [ -f "$HOME/.zshrc" ]; then
+                    _zshrc="$HOME/.zshrc"
+                    _zshrc_tmp="$_zshrc.steel.tmp"
+                    # Strip any prior Steel-managed completion block (both the
+                    # legacy 3-line block and any sentinel-fenced block from
+                    # newer installs), then re-append a fresh block. This lets
+                    # us migrate users to updated snippets across versions.
+                    awk '
+                        BEGIN { in_block = 0; legacy = 0 }
+                        in_block == 1 {
+                            if ($0 == "# <<< steel completions <<<") { in_block = 0 }
+                            next
+                        }
+                        $0 == "# >>> steel completions >>>" { in_block = 1; next }
+                        legacy > 0 { legacy--; next }
+                        $0 == "# Added by Steel CLI installer: shell completions" { legacy = 2; next }
+                        { print }
+                    ' "$_zshrc" > "$_zshrc_tmp" && mv "$_zshrc_tmp" "$_zshrc"
                     {
-                        printf '\n'
-                        printf '# Added by Steel CLI installer: shell completions\n'
+                        printf '\n# >>> steel completions >>>\n'
                         printf 'fpath=("$HOME/.zsh/completions" $fpath)\n'
-                        printf 'autoload -Uz compinit && compinit\n'
-                    } >> "$HOME/.zshrc"
+                        printf '(( $+functions[compdef] )) || { autoload -Uz compinit && compinit -C; }\n'
+                        printf '# <<< steel completions <<<\n'
+                    } >> "$_zshrc"
                 fi
             fi
             ;;
