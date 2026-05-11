@@ -50,6 +50,23 @@ parking_lot = "0.12"
 
 serde_yaml = "0.9"
 
+# MCP server (rmcp = official Anthropic Rust SDK).
+# Pulls in stdio transport, streamable-HTTP server transport, and schemars
+# for tool-schema generation. The router macros are re-exported from `server`.
+rmcp = { version = "1.6", features = [
+    "server",
+    "macros",
+    "transport-io",
+    "transport-streamable-http-server",
+    "schemars",
+] }
+schemars = "1"
+axum = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+uuid = { version = "1", features = ["v4"] }
+
 [dev-dependencies]
 wiremock = "0.6"
 proptest = "1"

@@ -10,6 +10,7 @@ pub mod forge;
 pub mod init;
 pub mod login;
 pub mod logout;
+pub mod mcp;
 pub mod pdf;
 pub mod profile;
 pub mod scrape;
@@ -171,6 +172,12 @@ Development:
     -d, --docker-check                   Only verify Docker, then exit
   steel dev stop                       Stop local runtime
 
+MCP Server (Model Context Protocol):
+  steel mcp                            Run as MCP server over stdio
+    --http                               Run as streamable HTTP server instead
+    --port <port>                        Port to bind when --http (default: 3000)
+    --bind <addr>                        Bind address when --http (default: 127.0.0.1)
+
 Other:
   steel login                          Login to Steel (alias: auth)
   steel logout                         Logout from Steel
@@ -312,6 +319,9 @@ pub enum Command {
 
     /// Generate a shell completion script
     Completion(completion::Args),
+
+    /// Run as an MCP server (stdio or streamable HTTP)
+    Mcp(mcp::Args),
 }
 
 fn telemetry_command_path(command: &Command) -> Option<String> {
@@ -336,6 +346,7 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Describe(_) => Some("describe".to_string()),
         Command::Doctor(_) => Some("doctor".to_string()),
         Command::Completion(_) => Some("completion".to_string()),
+        Command::Mcp(_) => Some("mcp".to_string()),
     }
 }
 
@@ -379,6 +390,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Describe(args) => describe::run(args).await,
         Command::Doctor(args) => doctor::run(args).await,
         Command::Completion(args) => completion::run(args).await,
+        Command::Mcp(args) => mcp::run(args).await,
     };
 
     if let Some(ref context) = telemetry_context {
