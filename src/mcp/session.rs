@@ -1,20 +1,22 @@
-//! Session map: routes MCP tool calls to `steel browser` daemons.
+//! Session lifecycle: routes MCP tool calls to `steel browser` daemons.
 //!
 //! Each MCP-visible `sessionId` corresponds to a daemon process owning one
-//! Steel cloud session. The map caches `DaemonClient` connections so tool
-//! calls don't repay the socket-connect cost on every invocation.
+//! Steel cloud session. The default session (`mcp-default`) is auto-created
+//! the first time a browser tool runs without an explicit `sessionId`.
 //!
-//! The default session (`mcp-default`) is auto-created the first time a
-//! browser tool is invoked without an explicit `sessionId` — this matches the
-//! hybrid lifecycle model: simple by default, explicit when you need it.
+//! **Connection model.** The daemon's per-connection handler tears down the
+//! Unix socket after 5 s of idle (it was designed for one-command CLI
+//! invocations — see `handle_connection` in `browser::daemon::server`). MCP
+//! tool calls arrive seconds-to-minutes apart, so caching a `DaemonClient`
+//! across calls would write into a half-closed socket and surface as
+//! `Broken pipe`. We follow the CLI's `ensure_daemon` pattern instead:
+//! connect fresh on every call. The daemon itself stays alive; only the
+//! per-call sockets are short-lived.
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
 use serde_json::Value;
-use tokio::sync::Mutex;
 
 use crate::browser::daemon::client::DaemonClient;
 use crate::browser::daemon::process;
@@ -38,108 +40,88 @@ pub struct CreateOptions {
     pub credentials: bool,
 }
 
-/// Cached `DaemonClient` connections keyed by session name (= MCP sessionId).
-///
-/// Cloning is cheap: the inner state is `Arc`. Tool handlers hold a clone for
-/// the duration of each request.
-///
-/// Each `DaemonClient` lives behind its own `Mutex` so tool calls against
-/// different sessions can run concurrently — the outer lock is only held for
-/// the duration of a HashMap lookup or insert.
+/// Stateless session router. Daemons own all session state (PID, socket,
+/// log) on the filesystem; we just dial them on demand. Cloning is free.
 #[derive(Clone, Default)]
-pub struct SessionMap {
-    inner: Arc<Mutex<HashMap<String, Arc<Mutex<DaemonClient>>>>>,
-}
+pub struct SessionMap;
 
 impl SessionMap {
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self
     }
 
-    /// Spawn a new daemon (or attach to an existing one) and return its name.
+    /// Spawn a new daemon (or attach to an existing one with the same name).
+    /// Returns the session name (= MCP sessionId).
     pub async fn create(&self, name: Option<String>, opts: CreateOptions) -> Result<String> {
         let name = name.unwrap_or_else(|| format!("mcp-{}", uuid::Uuid::new_v4()));
         if let Some(err) = process::validate_session_name(&name) {
             bail!("{err}");
         }
-        self.ensure(&name, opts).await?;
+        ensure_daemon(&name, opts).await?;
         Ok(name)
     }
 
-    /// Send a `DaemonCommand` to the given session, auto-creating the default
-    /// session if none exists yet.
+    /// Send a `DaemonCommand`. Connects fresh; the daemon expects
+    /// one-command-per-connection. For the default session, auto-spawns on
+    /// first use and respawns if the daemon died.
     pub async fn send(&self, session_id: Option<&str>, cmd: DaemonCommand) -> Result<Value> {
         let name = session_id.unwrap_or(DEFAULT_SESSION).to_string();
-        self.ensure(&name, CreateOptions::default()).await?;
-        let client = {
-            let map = self.inner.lock().await;
-            map.get(&name)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("Session '{name}' disappeared"))?
+        let mut client = match DaemonClient::connect(&name).await {
+            Ok(c) => c,
+            Err(_) => {
+                if name == DEFAULT_SESSION {
+                    // Default session: auto-create on first call, respawn if dead.
+                    ensure_daemon(&name, CreateOptions::default()).await?;
+                    DaemonClient::connect(&name).await?
+                } else {
+                    bail!(
+                        "Session '{name}' is not running. Call session_create first, or omit session_id to use the default session."
+                    );
+                }
+            }
         };
-        let mut guard = client.lock().await;
-        guard.send(cmd).await
+        client.send(cmd).await
     }
 
-    /// Release a session: drop the cached client connection, then ask the
-    /// daemon to shut down cleanly. Best-effort — daemon may already be gone.
+    /// Release a session: ask the daemon to shut down cleanly. Best-effort.
     pub async fn release(&self, session_id: &str) -> Result<()> {
-        {
-            let mut map = self.inner.lock().await;
-            map.remove(session_id);
-        }
-        let _ = process::stop_daemon(session_id).await;
-        Ok(())
+        process::stop_daemon(session_id).await
     }
 
-    /// List all sessions currently tracked by this server instance.
-    pub async fn list(&self) -> Vec<String> {
-        let map = self.inner.lock().await;
-        map.keys().cloned().collect()
+    /// List MCP-managed sessions visible on the local filesystem.
+    pub fn list(&self) -> Vec<String> {
+        process::list_daemon_names()
+            .into_iter()
+            .filter(|n| n.starts_with("mcp-"))
+            .collect()
+    }
+}
+
+/// Connect to an existing daemon if alive, otherwise spawn a new one.
+async fn ensure_daemon(name: &str, opts: CreateOptions) -> Result<()> {
+    if DaemonClient::connect(name).await.is_ok() {
+        return Ok(());
     }
 
-    /// Ensure a daemon exists for `name`. If not, spawn one with `opts` and
-    /// cache the resulting client connection.
-    async fn ensure(&self, name: &str, opts: CreateOptions) -> Result<()> {
-        if self.inner.lock().await.contains_key(name) {
-            return Ok(());
-        }
+    let (mode, base_url, auth) = api::resolve_with_auth();
+    let params = DaemonCreateParams {
+        api_key: auth.api_key,
+        base_url,
+        mode,
+        session_name: name.to_string(),
+        stealth: opts.stealth,
+        proxy_url: opts.proxy_url,
+        timeout_ms: opts.timeout_ms,
+        headless: None,
+        region: opts.region,
+        solve_captcha: opts.solve_captcha,
+        profile_id: opts.profile_id,
+        persist_profile: opts.persist_profile,
+        namespace: opts.namespace,
+        credentials: opts.credentials,
+    };
 
-        // Try to attach to an existing daemon socket first — the user may
-        // have started a named session via the CLI in another terminal.
-        if let Ok(client) = DaemonClient::connect(name).await {
-            self.inner
-                .lock()
-                .await
-                .insert(name.to_string(), Arc::new(Mutex::new(client)));
-            return Ok(());
-        }
-
-        let (mode, base_url, auth) = api::resolve_with_auth();
-        let params = DaemonCreateParams {
-            api_key: auth.api_key,
-            base_url,
-            mode,
-            session_name: name.to_string(),
-            stealth: opts.stealth,
-            proxy_url: opts.proxy_url,
-            timeout_ms: opts.timeout_ms,
-            headless: None,
-            region: opts.region,
-            solve_captcha: opts.solve_captcha,
-            profile_id: opts.profile_id,
-            persist_profile: opts.persist_profile,
-            namespace: opts.namespace,
-            credentials: opts.credentials,
-        };
-
-        let child = process::spawn_daemon(name, &params)?;
-        process::wait_for_daemon(name, child, Duration::from_secs(30)).await?;
-        let client = DaemonClient::connect(name).await?;
-        self.inner
-            .lock()
-            .await
-            .insert(name.to_string(), Arc::new(Mutex::new(client)));
-        Ok(())
-    }
+    let child = process::spawn_daemon(name, &params)?;
+    process::wait_for_daemon(name, child, Duration::from_secs(30)).await?;
+    Ok(())
 }

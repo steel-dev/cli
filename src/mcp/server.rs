@@ -359,9 +359,9 @@ impl SteelMcp {
         ))
     }
 
-    #[tool(description = "List all Steel browser sessions tracked by this server.")]
+    #[tool(description = "List all MCP-managed Steel browser sessions visible locally.")]
     pub async fn session_list(&self) -> Result<CallToolResult, McpError> {
-        let ids = self.sessions.list().await;
+        let ids = self.sessions.list();
         Ok(success_json(&serde_json::json!({ "sessions": ids })))
     }
 
