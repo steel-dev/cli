@@ -4,7 +4,6 @@
 
 <!-- [![crates.io](https://img.shields.io/crates/v/steel-cli?color=orange&logo=rust)](https://crates.io/crates/steel-cli) -->
 
-[![npm](https://img.shields.io/npm/v/@steel-dev/cli?color=cb3837&logo=npm&label=npm)](https://www.npmjs.com/package/@steel-dev/cli)
 [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/steel-dev)
 
@@ -49,7 +48,6 @@ Alternatives:
 
 - Download from [GitHub Releases](https://github.com/steel-dev/cli/releases)
 - `cargo install steel-cli`
-- `npm i -g @steel-dev/cli` (thin wrapper around the native binary)
 
 After install, either restart your shell or run `export PATH="$HOME/.steel/bin:$PATH"`.
 
@@ -154,16 +152,6 @@ Reference docs:
 Agent skill:
 
 - [Steel Browser skill package](skills/steel-browser/README.md)
-
-## Migrating from the Node CLI
-
-The Steel CLI is now a single native Rust binary. If you previously installed it via `npm i -g @steel-dev/cli`, the `install.sh` script auto-detects and removes the old Node-based install. You can also do it manually:
-
-```bash
-npm update -g @steel-dev/cli    # auto-installs native binary
-npm uninstall -g @steel-dev/cli # optional cleanup
-export PATH="$HOME/.steel/bin:$PATH"
-```
 
 ---
 
