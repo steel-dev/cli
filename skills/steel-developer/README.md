@@ -25,5 +25,8 @@ Use `steel-browser` instead when the agent should operate a live browser itself 
 ## Contents
 
 - `SKILL.md`: routing, non-negotiables, and workflow guidance.
+- `APIS.md`: first-party API routing, source-of-truth links, docs-fetching guidance, and API gotchas.
+- `ECOSYSTEM.md`: Steel ecosystem routing for automation libraries, agent frameworks, computer-use integrations, and coding-agent integrations.
 - `TYPESCRIPT.md`: TypeScript, JavaScript, Playwright, Puppeteer, and Stagehand examples.
 - `PYTHON.md`: Python, Playwright Python, and Browser Use examples.
+- `COVERAGE_PLAN.md`: phased coverage plan for this skill.

@@ -10,12 +10,18 @@ pip install steel-sdk playwright
 
 Use `STEEL_API_KEY` from the environment. Do not hardcode API keys or target-site credentials.
 
+Additional references:
+
+- Read [APIS.md](APIS.md) before implementing browser tools, files, extensions, auth context, embeds, traces, mobile mode, multi-region, or exact API/SDK option lookups.
+- Read [ECOSYSTEM.md](ECOSYSTEM.md) before choosing Browser Use, computer-use integrations, typed agent frameworks, or coding-agent integrations.
+- Use the Python SDK repository for exact types and method signatures: https://github.com/steel-dev/steel-python
+
 ## Check the plan before paid stealth features
 
 Run this before enabling `solve_captcha` or Steel-managed `use_proxy`:
 
 ```bash
-curl -sf "https://api.steel.dev/v1/details" \
+curl -sSfL "https://api.steel.dev/v1/details" \
   -H "steel-api-key: $STEEL_API_KEY" | jq -r '.plan'
 ```
 
@@ -96,6 +102,8 @@ second_session = client.sessions.create(
 ```
 
 Use `profile_id` to load state. Add `persist_profile=True` when the session should update the stored profile after it releases.
+
+Use [APIS.md](APIS.md) when deciding between profiles and session auth context.
 
 ## Use credentials safely
 
@@ -240,6 +248,8 @@ Recommendations:
 ## Bigger Python frameworks
 
 Use direct Playwright for deterministic tools. Use Browser Use when the user wants an LLM agent loop that navigates, fills forms, and extracts data.
+
+Use [ECOSYSTEM.md](ECOSYSTEM.md) to route between Browser Use, LangGraph, Pydantic AI, Agno, CrewAI, Notte, and computer-use integrations.
 
 ```python
 from browser_use import Agent, BrowserSession

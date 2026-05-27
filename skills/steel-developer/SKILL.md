@@ -23,6 +23,8 @@ Load the relevant reference before writing code:
 
 - TypeScript, JavaScript, Node.js, Playwright, Puppeteer, or Stagehand: read [TYPESCRIPT.md](TYPESCRIPT.md)
 - Python, Playwright Python, Browser Use, or Python agents: read [PYTHON.md](PYTHON.md)
+- First-party Steel APIs, exact docs/API/SDK lookup, browser tools, files, extensions, auth context, embeds, traces, mobile mode, or multi-region: read [APIS.md](APIS.md)
+- Framework choice, Stagehand, Browser Use, computer-use integrations, typed agent frameworks, or coding-agent integrations: read [ECOSYSTEM.md](ECOSYSTEM.md)
 - Mixed-language or ambiguous stack: inspect the repo, then read the matching file or ask one short question
 
 ## Non-negotiables
@@ -34,13 +36,15 @@ Load the relevant reference before writing code:
 - Construct the WebSocket URL explicitly as `wss://connect.steel.dev?apiKey=...&sessionId=...`
 - Reuse the default browser context after connecting; do not create a new context unless the user explicitly needs isolation
 - Do not leak raw credentials into prompts, page scripts, logs, or generated examples when Steel Credentials can be used instead
+- For exact API fields, response shapes, and SDK method signatures, consult the API reference or SDK types; do not guess from memory
+- When retrieving Steel docs via shell, use `curl -sSfL` so redirects are followed and HTTP failures are visible
 
 ## Plan gate
 
 Before enabling `solveCaptcha` or Steel-managed `useProxy`, determine the plan:
 
 ```bash
-curl -sf "https://api.steel.dev/v1/details" \
+curl -sSfL "https://api.steel.dev/v1/details" \
   -H "steel-api-key: $STEEL_API_KEY" | jq -r '.plan'
 ```
 
@@ -57,6 +61,8 @@ curl -sf "https://api.steel.dev/v1/details" \
 - Browser automation task: create a session, connect Playwright or Puppeteer, do the work, release the session
 - Reusable authenticated state: use profiles
 - Secure login without exposing secrets to the agent: use credentials
+- File upload/download workflows: use Steel Files APIs and a session-backed browser
+- Browser extension workflows: upload/manage extensions, then start sessions with extension IDs
 - Anti-bot mitigation: start with Steel defaults, then add profiles, natural pacing, managed proxies or BYOP, and CAPTCHA solving when the plan allows it
 
 ### 2. Build a session-based browser tool

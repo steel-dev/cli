@@ -10,12 +10,18 @@ npm install steel-sdk playwright puppeteer-core
 
 Use `STEEL_API_KEY` from the environment. Do not hardcode API keys or target-site credentials.
 
+Additional references:
+
+- Read [APIS.md](APIS.md) before implementing browser tools, files, extensions, auth context, embeds, traces, mobile mode, multi-region, or exact API/SDK option lookups.
+- Read [ECOSYSTEM.md](ECOSYSTEM.md) before choosing Stagehand, Browser Use, computer-use integrations, typed agent frameworks, or coding-agent integrations.
+- Use the Node SDK repository for exact types: https://github.com/steel-dev/steel-node
+
 ## Check the plan before paid stealth features
 
 Run this before enabling `solveCaptcha` or Steel-managed `useProxy`:
 
 ```bash
-curl -sf "https://api.steel.dev/v1/details" \
+curl -sSfL "https://api.steel.dev/v1/details" \
   -H "steel-api-key: $STEEL_API_KEY" | jq -r '.plan'
 ```
 
@@ -129,6 +135,8 @@ const secondSession = await client.sessions.create({
 ```
 
 Use `profileId` to load state. Add `persistProfile: true` when the session should update the stored profile after it releases.
+
+Use [APIS.md](APIS.md) when deciding between profiles and session auth context.
 
 ## Use credentials safely
 
@@ -267,6 +275,8 @@ Recommendations:
 ## Bigger TypeScript frameworks
 
 Use direct Playwright or Puppeteer for deterministic tools. Use Stagehand when the user wants natural-language browser actions like `act`, `extract`, and `observe`.
+
+Use [ECOSYSTEM.md](ECOSYSTEM.md) to route between Stagehand, Vercel AI SDK, OpenAI Agents SDK, Mastra, AgentKit, Magnitude, and computer-use integrations.
 
 - Stagehand integration: https://docs.steel.dev/integrations/stagehand
 - Stagehand recipe: https://docs.steel.dev/cookbook/stagehand
