@@ -149,8 +149,9 @@ Reference docs:
 - [Agent troubleshooting playbook](docs/references/agent-troubleshooting.md)
 - [Pinned upstream source snapshot](docs/references/upstream/agent-browser-commands.source.md)
 
-Agent skill:
+Agent skills:
 
+- [Steel Developer skill package](skills/steel-developer/README.md)
 - [Steel Browser skill package](skills/steel-browser/README.md)
 
 ---

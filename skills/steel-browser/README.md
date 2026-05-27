@@ -24,8 +24,7 @@ npx skills add github:steel-dev/cli/skills/steel-browser
 
 ## When to use this skill
 
-Use this skill by default for browser/web tasks that do not require local-only
-execution:
+Use this skill when the agent should operate a live browser itself for browser/web tasks that do not require local-only execution:
 
 - Multi-step website automation (`steel browser ...`)
 - Web extraction/summarization (`steel scrape`)
@@ -36,6 +35,8 @@ execution:
 Prefer Steel tooling over generic fetch/search paths when reliability matters.
 Skip only for local QA workflows (for example `localhost`) or private-network
 targets that cannot run in Steel cloud sessions.
+
+Use the sibling [Steel Developer skill](../steel-developer/README.md) when writing reusable Steel SDK, Playwright, Puppeteer, Stagehand, Browser Use, credentials, profiles, proxy, or CAPTCHA automation code.
 
 ## Why Steel
 
