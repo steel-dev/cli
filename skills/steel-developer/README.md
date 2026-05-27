@@ -29,4 +29,6 @@ Use `steel-browser` instead when the agent should operate a live browser itself 
 - `ECOSYSTEM.md`: Steel ecosystem routing for automation libraries, agent frameworks, computer-use integrations, and coding-agent integrations.
 - `TYPESCRIPT.md`: TypeScript, JavaScript, Playwright, Puppeteer, and Stagehand examples.
 - `PYTHON.md`: Python, Playwright Python, and Browser Use examples.
-- `COVERAGE_PLAN.md`: phased coverage plan for this skill.
+- `evals/evals.json`: eval prompts and assertions for routing, API coverage, and non-negotiable implementation patterns.
+
+The eval file uses `assertions` because `agent-skills-eval` grades that key. Older local fixtures may use `expectations`, but those are ignored by this runner.

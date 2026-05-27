@@ -1,0 +1,186 @@
+{
+  "skill_name": "steel-developer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write a minimal TypeScript script that creates a Steel session, connects Playwright, opens https://example.com, prints the page title, and cleans up.",
+      "expected_output": "A runnable TypeScript Playwright example that uses STEEL_API_KEY, new Steel({ steelAPIKey }), explicitly constructs wss://connect.steel.dev?apiKey=...&sessionId=..., reuses the default context/page, closes the browser, and releases the Steel session.",
+      "files": [],
+      "assertions": [
+        "Uses process.env.STEEL_API_KEY and validates it is present",
+        "Constructs the CDP URL explicitly with wss://connect.steel.dev?apiKey=...&sessionId=...",
+        "Does not use session.websocketUrl or session.websocket_url",
+        "Uses browser.contexts()[0] and the existing page when available",
+        "Does not call browser.newContext()",
+        "Closes the browser and releases the Steel session in a cleanup path"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Write a Python script using Steel and Playwright to open a cloud browser, navigate to https://example.com, print the title, and release the session.",
+      "expected_output": "A runnable Python Playwright example that uses STEEL_API_KEY, Steel(steel_api_key=...), explicitly constructs wss://connect.steel.dev?apiKey=...&sessionId=..., reuses browser.contexts[0], and releases the session in cleanup.",
+      "files": [],
+      "assertions": [
+        "Uses os.environ['STEEL_API_KEY'] or equivalent environment lookup",
+        "Uses Steel(steel_api_key=...) and not api_key",
+        "Constructs the CDP URL explicitly with wss://connect.steel.dev?apiKey=...&sessionId=...",
+        "Does not suggest Puppeteer for Python",
+        "Uses browser.contexts[0] and the existing page when available",
+        "Stops Playwright, closes the browser, and releases the Steel session in cleanup"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Build a Node.js utility that uses Steel to scrape https://docs.steel.dev as markdown, also captures a screenshot and PDF, and prints the page title. This should be one-shot and not need a reusable browser session.",
+      "expected_output": "A Node.js example that uses Steel Browser Tools, not a session, with client.scrape or equivalent one-shot API. It requests markdown plus screenshot/PDF artifacts, prints metadata.title, and points to API docs/SDK types for exact response fields if needed.",
+      "files": [],
+      "assertions": [
+        "Does not create a Steel session for this one-shot scrape/screenshot/PDF workflow",
+        "Uses client.scrape or the one-shot scrape API",
+        "Requests markdown output",
+        "Includes screenshot and PDF capture in the scrape call or explains the equivalent screenshot/pdf Browser Tools",
+        "Does not connect Playwright or Puppeteer unnecessarily",
+        "Mentions API reference or SDK types as source of truth for exact response shapes"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Show me how to build a Steel login automation using stored credentials for https://app.example.com. Use namespace example:fred, support TOTP if configured, and avoid exposing the password to the browser agent.",
+      "expected_output": "An example that creates credentials for origin https://app.example.com and namespace example:fred, stores password/TOTP from environment variables, creates a session with matching namespace and credentials enabled, navigates to the login page, waits for injection, and verifies login success.",
+      "files": [],
+      "assertions": [
+        "Uses client.credentials.create with origin and namespace",
+        "Uses environment variables for password and optional totpSecret",
+        "Creates a session with the exact same namespace",
+        "Passes credentials: {} or explicit credential options to the session",
+        "Does not hardcode raw secrets in generated code",
+        "Waits for injection and asserts login success after navigation"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "I need to keep a user logged in across repeated Steel sessions. Show the recommended profile-based pattern, and briefly explain when I would use sessionContext instead.",
+      "expected_output": "Guidance and code showing persistProfile on the first session, reusing profileId on later sessions, using profileId plus persistProfile when updating stored state, and using sessionContext only for lighter one-off cookie/localStorage transfer captured before releasing a live session.",
+      "files": [],
+      "assertions": [
+        "Uses persistProfile to create a profile",
+        "Uses profileId to reuse a profile",
+        "Uses profileId plus persistProfile to update stored profile state",
+        "Explains that sessionContext captures cookies/localStorage rather than full browser user data",
+        "States that sessionContext must be captured before releasing the source session",
+        "Mentions profiles are preferred for repeated reusable browser identity"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Write a CAPTCHA-aware Steel browser workflow where I can detect CAPTCHAs but trigger solving manually for a specific task ID after checking status. Include the plan check before enabling solving.",
+      "expected_output": "A workflow that checks the Steel plan first, creates a session with CAPTCHA detection enabled and autoCaptchaSolving disabled, polls client.sessions.captchas.status(session.id), and calls a manual solve method with taskId when appropriate. It should handle failed statuses and timeouts.",
+      "files": [],
+      "assertions": [
+        "Includes curl -sSfL https://api.steel.dev/v1/details with steel-api-key header or equivalent plan check",
+        "Does not silently enable CAPTCHA solving on Hobby plans",
+        "Uses solveCaptcha true or solve_captcha=True only after plan gating",
+        "Sets stealthConfig.autoCaptchaSolving to false or explains the manual-solving configuration",
+        "Uses client.sessions.captchas.status(session.id)",
+        "Shows targeted manual solve with taskId and handles failed statuses/timeouts"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "I'm on the Hobby plan but I have my own proxy server in PROXY_SERVER. Show how to use Steel with that proxy safely, and explain why this is different from Steel-managed proxy bandwidth.",
+      "expected_output": "Guidance and code that uses BYOP via useProxy/use_proxy server from an environment variable, does not enable Steel-managed useProxy: true on Hobby, explains BYOP is separate from Steel-managed proxy bandwidth, and includes retry guidance for transient proxy errors.",
+      "files": [],
+      "assertions": [
+        "Does not use bare Steel-managed useProxy: true or use_proxy=True as the Hobby-plan solution",
+        "Uses useProxy/use_proxy with a server value read from PROXY_SERVER",
+        "States BYOP is separate from Steel-managed proxy bandwidth",
+        "Keeps proxy credentials out of generated logs and prompts",
+        "Mentions transient proxy errors like ERR_TUNNEL_CONNECTION_FAILED and retry/fallback handling",
+        "Recommends checking plan before using Steel-managed proxies"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Build a TypeScript example that uploads ./data.csv into a Steel session and uses Playwright to set it on an input[type=file] before submitting a form.",
+      "expected_output": "A TypeScript example using the Files API to upload or mount data.csv into the session, then using the returned session file path with Playwright file upload or CDP, with cleanup for browser and session. It should point to the API reference/SDK types for exact file method signatures.",
+      "files": [],
+      "assertions": [
+        "Uses Steel Files APIs rather than assuming the local file path exists inside the cloud browser",
+        "Uploads the file to the active session or uploads globally and mounts it into the session",
+        "Uses the Steel-returned file path for the browser file input",
+        "Connects Playwright using the explicit Steel CDP URL if browser control is needed",
+        "Releases the session in cleanup",
+        "Mentions API reference or SDK types for exact Files API method signatures"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Show how to upload a Chrome extension to Steel and start a session with only that extension enabled. Do not load every extension in the organization.",
+      "expected_output": "Guidance and code that uploads or lists an extension to obtain its extensionId, creates a session with extensionIds containing that specific ID, and explains extension changes apply at session start. It should not use all_ext unless explicitly requested.",
+      "files": [],
+      "assertions": [
+        "Uses the Extensions API to upload or list extensions",
+        "Uses a specific extensionId in session creation",
+        "Does not use all_ext",
+        "Mentions extensions are organization-scoped",
+        "Mentions extensions initialize at session start",
+        "Points to API reference or SDK types for exact extension method signatures"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "I want a TypeScript workflow where the browser actions can be written in natural language, but still run on Steel. Which integration should I use and what should the Steel session lifecycle look like?",
+      "expected_output": "Recommendation to use Stagehand for TypeScript natural-language browser actions, with Steel creating the session, explicit CDP URL construction, default context reuse if applicable, and session release. It should keep direct Playwright/Puppeteer as the baseline alternative for deterministic workflows.",
+      "files": [],
+      "assertions": [
+        "Chooses Stagehand for TypeScript natural-language browser actions",
+        "Mentions direct Playwright/Puppeteer as the deterministic baseline",
+        "Creates a Steel session and constructs the CDP URL explicitly",
+        "Keeps session lifecycle ownership clear",
+        "Releases the Steel session in cleanup",
+        "Links or points to Stagehand integration/cookbook docs"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Build a Python Browser Use agent that runs on a Steel cloud browser and knows how to wait for Steel CAPTCHA solving when it sees a CAPTCHA.",
+      "expected_output": "A Python Browser Use example that creates a Steel session, constructs an explicit CDP URL, passes it into BrowserSession, defines or exposes a helper that calls client.sessions.captchas.status(session.id), and releases the session in cleanup.",
+      "files": [],
+      "assertions": [
+        "Chooses Browser Use for a Python browser-agent loop",
+        "Constructs the Steel CDP URL explicitly instead of using session.websocket_url",
+        "Passes the CDP URL into BrowserSession or the current Browser Use equivalent",
+        "Uses client.sessions.captchas.status(session.id) for CAPTCHA tracking",
+        "Instructs the agent/tool to wait for CAPTCHA solving when needed",
+        "Releases the Steel session in cleanup"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "I need exact request fields for POST /v1/sessions and exact Node SDK option types. How should I look them up from the terminal and where are the sources of truth?",
+      "expected_output": "Guidance that says to use the API reference for exact schemas, the steel-node repository/types for SDK option types, and curl -sSfL when fetching docs pages because docs URLs may redirect. It should avoid inventing a full schema from memory.",
+      "files": [],
+      "assertions": [
+        "References https://steel.apidocumentation.com/api-reference#tag/sessions/post/v1/sessions",
+        "References https://github.com/steel-dev/steel-node",
+        "Uses curl -sSfL for fetching docs pages",
+        "Mentions llms.txt, llms-full.txt, or /llms.mdx/<page-path> for docs lookup",
+        "Does not fabricate a complete POST /v1/sessions schema",
+        "Says to use API reference and SDK types for exact fields and method signatures"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Use Steel to go to https://example.com right now and tell me the H1 text. Do not write a reusable script.",
+      "expected_output": "The agent should route this to the steel-browser CLI skill rather than steel-developer, because the user wants live browsing by the agent, not reusable application code.",
+      "files": [],
+      "assertions": [
+        "Does not write a Steel SDK application script as the primary answer",
+        "Recognizes this as a live agent-operated browser task",
+        "Uses or recommends the steel-browser skill/CLI path",
+        "If executed, uses steel scrape or steel browser commands rather than Playwright/Puppeteer code",
+        "Does not create reusable code unless the user asks afterward"
+      ]
+    }
+  ]
+}

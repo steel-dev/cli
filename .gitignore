@@ -15,6 +15,7 @@ target/
 
 # Test outputs
 coverage/
+agent-skills-workspace/
 *.log
 
 # OS generated files

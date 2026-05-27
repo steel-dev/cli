@@ -30,6 +30,7 @@ Load the relevant reference before writing code:
 ## Non-negotiables
 
 - Auth env var is `STEEL_API_KEY`
+- Node examples import the SDK package as `import Steel from "steel-sdk"`; the SDK source repo is `steel-dev/steel-node`
 - Node SDK constructor uses `steelAPIKey`
 - Python SDK constructor uses `steel_api_key`
 - Always release sessions in cleanup
@@ -38,6 +39,8 @@ Load the relevant reference before writing code:
 - Do not leak raw credentials into prompts, page scripts, logs, or generated examples when Steel Credentials can be used instead
 - For exact API fields, response shapes, and SDK method signatures, consult the API reference or SDK types; do not guess from memory
 - When retrieving Steel docs via shell, use `curl -sSfL` so redirects are followed and HTTP failures are visible
+- Never use stale SDK patterns: `steelClient`, `client.createSession`, `client.releaseSession`, `Steel(api_key=...)`, `session.websocketUrl`, `session.websocket_url`, Playwright `chromium.connect({ wsEndpoint })`, or top-level `browser.newPage()` for the default Steel session
+- For API helpers beyond basic sessions, include a short source-of-truth note: "Check the Steel API reference or SDK types for exact method signatures and response fields."
 
 ## Plan gate
 
@@ -73,12 +76,70 @@ curl -sSfL "https://api.steel.dev/v1/details" \
 - Reuse the default context and existing page
 - Close the browser and release the Steel session in cleanup
 
+TypeScript Playwright shape:
+
+```ts
+const client = new Steel({ steelAPIKey });
+const session = await client.sessions.create();
+const cdpUrl = `wss://connect.steel.dev?apiKey=${steelAPIKey}&sessionId=${session.id}`;
+const browser = await chromium.connectOverCDP(cdpUrl);
+const context = browser.contexts()[0];
+const page = context.pages()[0] ?? (await context.newPage());
+try {
+  await page.goto("https://example.com");
+} finally {
+  await browser.close();
+  await client.sessions.release(session.id);
+}
+```
+
+Python Playwright shape:
+
+```python
+steel_api_key = os.environ["STEEL_API_KEY"]
+client = Steel(steel_api_key=steel_api_key)
+session = client.sessions.create()
+cdp_url = f"wss://connect.steel.dev?apiKey={steel_api_key}&sessionId={session.id}"
+browser = await playwright.chromium.connect_over_cdp(cdp_url)
+context = browser.contexts[0]
+page = context.pages[0] if context.pages else await context.new_page()
+try:
+    await page.goto("https://example.com")
+finally:
+    await browser.close()
+    await playwright.stop()
+    client.sessions.release(session.id)
+```
+
 ### 3. Use profiles correctly
 
 - First session: set `persistProfile: true` to create and save a profile
 - Reuse later: pass `profileId`
 - Keep evolving stored state: pass both `profileId` and `persistProfile: true`
 - Use profiles for cookies, auth state, extensions, settings, and browser context reuse across sessions
+- `sessionContext` is lighter cookie/localStorage transfer; capture it with `client.sessions.context(session.id)` before releasing the source session, then pass `sessionContext` into a new session
+
+Profile shape:
+
+```ts
+const firstSession = await client.sessions.create({ persistProfile: true });
+// Log in or configure browser state, then release so Steel persists it.
+await client.sessions.release(firstSession.id);
+
+const secondSession = await client.sessions.create({ profileId: firstSession.profileId });
+const updatedSession = await client.sessions.create({
+  profileId: firstSession.profileId,
+  persistProfile: true,
+});
+```
+
+Auth context shape:
+
+```ts
+const sessionContext = await client.sessions.context(sourceSession.id);
+await client.sessions.release(sourceSession.id);
+const nextSession = await client.sessions.create({ sessionContext });
+```
 
 ### 4. Use credentials correctly
 
@@ -86,6 +147,66 @@ curl -sSfL "https://api.steel.dev/v1/details" \
 - Start the session with matching `namespace` and `credentials: {}`
 - Navigate to the login page and allow time for injection
 - Verify login success with a page assertion instead of assuming it worked
+- Credential values must come from environment variables such as `APP_PASSWORD` and optional `APP_TOTP_SECRET`; never write placeholders like `your_password_here` into examples
+- Do not fill username/password/TOTP with Playwright when using Steel Credentials; create credentials, enable them on the session, navigate, wait, and assert success
+- Do not invent a TOTP retrieval helper; store `totpSecret` in `client.credentials.create` and let Steel inject it
+
+Credential shape:
+
+```ts
+await client.credentials.create({
+  origin: "https://app.example.com",
+  namespace: "example:fred",
+  value: {
+    username: process.env.APP_USERNAME!,
+    password: process.env.APP_PASSWORD!,
+    totpSecret: process.env.APP_TOTP_SECRET,
+  },
+});
+
+const session = await client.sessions.create({
+  namespace: "example:fred",
+  credentials: {},
+});
+```
+
+## API shortcuts
+
+- Browser Tools are the correct choice for one-shot scrape/screenshot/PDF with no reusable browser state; do not create a session for these
+- Node one-shot scrape shape: `await client.scrape({ url, format: ["markdown"], screenshot: true, pdf: true })`, then read `result.metadata.title`; always say "Check the Steel API reference or SDK types for exact response fields."
+- Files: upload or mount files into the Steel session first, then use the Steel-returned file path for Playwright/Puppeteer file inputs; always say "Check the Steel API reference or SDK types for exact Files API method signatures."
+- Extensions: Chrome extensions are not Files API uploads; use Extensions API (`client.extensions.upload` or list existing extensions) to get a specific `extensionId`, then start a session with `extensionIds: [extensionId]`; explicitly say extensions are organization-scoped, initialize at session start, and exact method signatures come from the Steel API reference or SDK types; do not use `all_ext` unless explicitly requested
+- CAPTCHAs: show the `curl -sSfL https://api.steel.dev/v1/details` plan check first; after plan gating, create the session with `solveCaptcha: true` and `stealthConfig: { autoCaptchaSolving: false }` for manual mode; poll `client.sessions.captchas.status(session.id)`, solve targeted tasks with `client.sessions.captchas.solve(session.id, { taskId })`, and handle failed statuses/timeouts
+- Hobby plus BYOP: use `useProxy: { server: process.env.PROXY_SERVER! }`, not Steel-managed `useProxy: true`; BYOP is separate from Steel-managed proxy bandwidth; always say to check plan before enabling Steel-managed proxies and to retry/fallback on transient proxy errors such as `ERR_TUNNEL_CONNECTION_FAILED`
+
+Manual CAPTCHA shape:
+
+```ts
+const session = await client.sessions.create({
+  solveCaptcha: true,
+  stealthConfig: { autoCaptchaSolving: false },
+});
+const states = await client.sessions.captchas.status(session.id);
+await client.sessions.captchas.solve(session.id, { taskId });
+```
+
+## Source-of-truth links
+
+- API reference: https://steel.apidocumentation.com/api-reference
+- Sessions create: https://steel.apidocumentation.com/api-reference#tag/sessions/post/v1/sessions
+- Node SDK/types: https://github.com/steel-dev/steel-node
+- Python SDK/types: https://github.com/steel-dev/steel-python
+- Docs index: `curl -sSfL https://docs.steel.dev/llms.txt`
+- Full docs bundle: `curl -sSfL https://docs.steel.dev/llms-full.txt`
+- Single docs page: `curl -sSfL https://docs.steel.dev/llms.mdx/<page-path>`
+- In answers about exact API or SDK lookup, include those `llms.txt`, `llms-full.txt`, or `/llms.mdx/<page-path>` docs-fetching options by name, not just the API reference
+
+## Ecosystem routing
+
+- Direct Playwright/Puppeteer is the deterministic baseline
+- Stagehand is the TypeScript path for natural-language browser actions; every Stagehand recommendation should also mention that direct Playwright/Puppeteer remains the deterministic baseline; docs: https://docs.steel.dev/integrations/stagehand and https://docs.steel.dev/cookbook/stagehand
+- Browser Use is the Python path for an LLM browser-agent loop; pass the explicit Steel CDP URL into `BrowserSession`, expose CAPTCHA status helpers when needed, and release the Steel session in cleanup
+- For typed agent products, route to Vercel AI SDK, OpenAI Agents SDK, Mastra, AgentKit, LangGraph, Pydantic AI, Agno, CrewAI, Notte, or Magnitude based on language and product needs; keep Steel session lifecycle explicit
 
 ## Output guidance
 
@@ -94,3 +215,9 @@ curl -sSfL "https://api.steel.dev/v1/details" \
 - Mention Browser Use for Python agent loops and Stagehand for TypeScript natural-language browser actions, but keep direct Playwright/Puppeteer examples as the baseline
 - When the user asks "what can Steel do", explain scrape, browser sessions, proxies, CAPTCHA solving, profiles, credentials, extensions, files, and agent integrations
 - When asked to implement, emit minimal runnable code with cleanup
+- When the user asks for docs/source-of-truth lookup, mention `llms.txt`, `llms-full.txt`, and `/llms.mdx/<page-path>` with `curl -sSfL`
+- When recommending Stagehand, also mention direct Playwright/Puppeteer as the deterministic baseline and include the Stagehand integration/cookbook links
+- When explaining profiles, always show all three profile calls: create with `persistProfile`, reuse with `profileId`, and update with both `profileId` plus `persistProfile`; also state `sessionContext` must be captured before releasing the source session
+- When answering Browser Tools, Files, or Extensions questions, always include one sentence pointing to the Steel API reference or SDK types for exact fields/method signatures
+- When answering BYOP/proxy questions, always mention plan-checking before Steel-managed proxies and retry/fallback for `ERR_TUNNEL_CONNECTION_FAILED`
+- When the user asks the agent to browse a site now, do not offer a reusable script; route to `steel-browser` and suggest `steel scrape <url>` or `steel browser ...`
