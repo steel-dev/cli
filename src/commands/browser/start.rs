@@ -82,6 +82,13 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let proxy_enabled = args.proxy.is_some();
     let namespace_set = args.namespace.is_some();
     let inactivity_timeout_ms = resolve_inactivity_timeout(args.inactivity_timeout);
+    if let (Some(timeout), Some(inactivity)) = (args.session_timeout, inactivity_timeout_ms)
+        && inactivity >= timeout
+    {
+        eprintln!(
+            "warning: --inactivity-timeout ({inactivity}ms) >= --session-timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
+        );
+    }
 
     // If a daemon is already running for this session name, stop it first.
     // `start` always creates a fresh session — use `steel browser sessions`
@@ -175,6 +182,9 @@ fn display_session_info(info: &SessionInfo) {
         if let Some(ref rem) = remaining {
             data["remainingMs"] = json!(rem.0);
         }
+        if let Some(ms) = info.inactivity_timeout_ms {
+            data["inactivityTimeoutMs"] = json!(ms);
+        }
         output::success_data(data);
     } else {
         println!("id: {}", info.session_id);
@@ -193,6 +203,9 @@ fn display_session_info(info: &SessionInfo) {
                 println!("expires_in: {label}");
             }
         }
+        if let Some(ms) = info.inactivity_timeout_ms {
+            println!("inactivity_timeout: {}", humanize_secs(ms / 1000));
+        }
     }
 }
 
@@ -209,18 +222,20 @@ fn remaining_time_str(info: &SessionInfo) -> Option<(u64, String)> {
         return Some((0, "expired".to_string()));
     }
     let remaining = expires_at - now;
-    let secs = remaining / 1000;
-    let label = if secs >= 3600 {
+    Some((remaining, humanize_secs(remaining / 1000)))
+}
+
+fn humanize_secs(secs: u64) -> String {
+    if secs >= 3600 {
         format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
     } else if secs >= 60 {
         format!("{}m {}s", secs / 60, secs % 60)
     } else {
         format!("{secs}s")
-    };
-    Some((remaining, label))
+    }
 }
 
-fn resolve_inactivity_timeout(explicit: Option<u64>) -> Option<u64> {
+const fn resolve_inactivity_timeout(explicit: Option<u64>) -> Option<u64> {
     match explicit {
         None => Some(DEFAULT_INACTIVITY_TIMEOUT_MS),
         Some(0) => None,
@@ -248,5 +263,12 @@ mod tests {
     #[test]
     fn inactivity_zero_disables() {
         assert_eq!(resolve_inactivity_timeout(Some(0)), None);
+    }
+
+    #[test]
+    fn humanize_secs_formats() {
+        assert_eq!(humanize_secs(45), "45s");
+        assert_eq!(humanize_secs(120), "2m 0s");
+        assert_eq!(humanize_secs(3661), "1h 1m");
     }
 }

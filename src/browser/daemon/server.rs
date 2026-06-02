@@ -8,7 +8,8 @@ use tokio::net::UnixListener;
 use crate::api::client::SteelClient;
 use crate::browser::engine::BrowserEngine;
 use crate::browser::lifecycle::{
-    get_session_created_at_ms, get_session_timeout, to_session_summary,
+    get_session_created_at_ms, get_session_inactivity_timeout, get_session_timeout,
+    to_session_summary,
 };
 use crate::config::auth::{Auth, AuthSource};
 
@@ -64,6 +65,8 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
 
     // Prefer API-reported timeout over what we requested — the server may apply defaults
     let effective_timeout = get_session_timeout(&session).or(params.timeout_ms);
+    let effective_inactivity_timeout =
+        get_session_inactivity_timeout(&session).or(params.inactivity_timeout_ms);
     // Prefer API-reported createdAt; fall back to local clock
     let created_at_ms = get_session_created_at_ms(&session).or_else(|| {
         std::time::SystemTime::now()
@@ -81,6 +84,7 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
         viewer_url: summary.viewer_url,
         profile_id: summary.profile_id,
         timeout_ms: effective_timeout,
+        inactivity_timeout_ms: effective_inactivity_timeout,
         created_at_ms,
     };
 

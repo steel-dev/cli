@@ -111,6 +111,27 @@ pub fn get_session_timeout(session: &Value) -> Option<u64> {
     None
 }
 
+pub fn get_session_inactivity_timeout(session: &Value) -> Option<u64> {
+    let keys = [
+        "inactivityTimeout",
+        "inactivity_timeout",
+        "inactivityTimeoutMs",
+    ];
+    for key in &keys {
+        if let Some(v) = session.get(key) {
+            if let Some(n) = v.as_u64() {
+                return Some(n);
+            }
+            if let Some(s) = v.as_str()
+                && let Ok(n) = s.trim().parse::<u64>()
+            {
+                return Some(n);
+            }
+        }
+    }
+    None
+}
+
 /// Extract session creation timestamp as epoch milliseconds from API response.
 /// Looks for `createdAt` or `created_at` as ISO 8601 / RFC 3339 string.
 pub fn get_session_created_at_ms(session: &Value) -> Option<u64> {
@@ -515,6 +536,19 @@ mod tests {
     #[test]
     fn session_timeout_missing() {
         assert_eq!(get_session_timeout(&json!({"id": "s1"})), None);
+    }
+
+    #[test]
+    fn inactivity_timeout_from_response() {
+        assert_eq!(
+            get_session_inactivity_timeout(&json!({"inactivityTimeout": 120000})),
+            Some(120000)
+        );
+        assert_eq!(
+            get_session_inactivity_timeout(&json!({"inactivityTimeout": "120000"})),
+            Some(120000)
+        );
+        assert_eq!(get_session_inactivity_timeout(&json!({"id": "s1"})), None);
     }
 
     #[test]

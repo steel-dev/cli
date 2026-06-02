@@ -51,6 +51,9 @@ Main flags:
 - `--credentials` — enable credential injection for the session
 - `--profile <name>` — load a named browser profile into the session
 - `--update-profile` — save session state back to the profile on end
+- `--inactivity-timeout <ms>` — release the session after this much idle time (no CDP command or remote input). Defaults to 120000 (2 min); pass `0` to disable.
+
+Note: sessions created via the CLI auto-release after ~2 minutes of inactivity by default. If you expect a session to sit idle between manual steps, pass `--inactivity-timeout 0` (disable) or a larger value at `start`, and check `inactivity_timeout` in the start output.
 
 Parse these output fields:
 
@@ -59,6 +62,7 @@ Parse these output fields:
 - `name`: session alias if provided
 - `live_url`: live-view URL when available
 - `connect_url`: display-safe URL with sensitive values redacted
+- `inactivity_timeout`: idle-release limit when set (human output); `inactivityTimeoutMs` in JSON
 
 Use `id` for stable machine parsing. Treat `connect_url` as display metadata, not a raw credential.
 

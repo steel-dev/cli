@@ -294,6 +294,7 @@ fn browser_start_flags() {
             flag("stealth"),
             flag_val_short("proxy", 'p'),
             flag_val("session-timeout"),
+            flag_val("inactivity-timeout"),
             flag("session-solve-captcha"),
             flag_val("profile"),
             flag("update-profile"),
