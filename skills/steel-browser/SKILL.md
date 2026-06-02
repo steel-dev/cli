@@ -3,22 +3,32 @@ name: steel-browser
 allowed-tools:
   - "Bash(steel:*)"
 description: >-
-  Use this skill for any web task where WebFetch or curl would fail or be
-  insufficient — pages that require JavaScript to render, forms to fill and
-  submit, screenshots or PDFs of live pages, CAPTCHA/bot-protection bypass,
-  login flows, and multi-step browser navigation with persistent session state.
+  Use this skill only when the agent should perform a live web task itself and
+  WebFetch or curl would fail or be insufficient — pages that require JavaScript
+  to render, forms to fill and submit, screenshots or PDFs of live pages,
+  CAPTCHA/bot-protection bypass, login flows, and multi-step browser navigation
+  with persistent session state.
   WebFetch returns empty HTML for JS-rendered pages; this skill runs a real
   cloud browser that executes JavaScript, maintains cookies, clicks buttons,
   and handles anti-bot measures. Trigger when the user wants you to actually
   perform a web task (visit, interact, extract, capture) rather than just write
-  code for it. Skip only for: static pages a simple GET can fetch, localhost or
-  private-network targets, writing browser automation code the user will run
-  themselves, or conceptual questions about browser tools.
+  code for it. Do not use when writing, debugging, or explaining reusable Steel
+  SDK/browser automation code, Playwright/Puppeteer integrations, Stagehand,
+  Browser Use, credentials, profiles, proxies, or CAPTCHA APIs; use the
+  `steel-developer` skill instead. Skip for static pages a simple GET can fetch, localhost
+  or private-network targets, and conceptual questions about browser tools.
 ---
 
 # Steel
 
 > Cloud browser infrastructure for AI agents. Steel gives your agent a real browser that can navigate pages, fill forms, solve CAPTCHAs, and extract content.
+
+## Skill boundary
+
+- Use this skill to operate a browser now via `steel scrape`, `steel screenshot`, `steel pdf`, and `steel browser ...`
+- Do not generate reusable SDK automation code from this skill
+- If the user asks to build on Steel, integrate `steel-sdk`, connect Playwright/Puppeteer, use Stagehand or Browser Use, manage credentials/profiles programmatically, or implement CAPTCHA/proxy behavior in code, load the `steel-developer` skill and follow that guidance instead
+- This skill can still be used for live reconnaissance before writing code, but the final code should come from the `steel-developer` skill
 
 If Steel is not installed yet, execute the setup steps below autonomously. Only ask the user to do one thing: click the authentication link.
 
@@ -274,64 +284,17 @@ Do not attempt these — they will fail.
 | `steel browser geolocation` | `steel browser set geo LAT LON` |
 | `steel browser pdf` | Top-level `steel pdf <url>` |
 
-## SDK integration (programmatic)
+## Programmatic Steel builds
 
-If you need to use Steel from code instead of the CLI:
+Do not write SDK/browser automation code from this skill. If the user needs reusable code rather than a live agent-operated browser task, load the `steel-developer` skill and follow its current SDK guidance.
 
-### Python (Playwright)
+High-level handoff cues for the build skill:
 
-```bash
-pip install steel-sdk playwright
-```
-
-```python
-from playwright.sync_api import sync_playwright
-from steel import Steel
-import os
-
-client = Steel(steel_api_key=os.environ["STEEL_API_KEY"])
-session = client.sessions.create()
-
-try:
-    pw = sync_playwright().start()
-    browser = pw.chromium.connect_over_cdp(session.websocket_url)
-    page = browser.contexts[0].pages[0]
-
-    page.goto("https://example.com")
-    print(page.title())
-finally:
-    browser.close()
-    pw.stop()
-    client.sessions.release(session.id)
-```
-
-### Node.js (Puppeteer)
-
-```bash
-npm install steel-sdk puppeteer
-```
-
-```typescript
-import Steel from 'steel-sdk';
-import puppeteer from 'puppeteer';
-
-const client = new Steel({ steelAPIKey: process.env.STEEL_API_KEY });
-const session = await client.sessions.create();
-
-try {
-  const browser = await puppeteer.connect({
-    browserWSEndpoint: `${session.websocketUrl}?apiKey=${process.env.STEEL_API_KEY}`,
-  });
-  const page = await browser.newPage();
-  await page.goto('https://example.com');
-  console.log(await page.title());
-  await browser.disconnect();
-} finally {
-  await client.sessions.release(session.id);
-}
-```
-
-**Key pattern:** Create session → connect via CDP websocket URL → use any browser library → release session.
+- Create a Steel session from application code
+- Construct the CDP URL explicitly with `wss://connect.steel.dev?apiKey=...&sessionId=...`
+- Connect Playwright or Puppeteer to the default browser context
+- Release the Steel session in cleanup
+- Gate CAPTCHA solving and Steel-managed proxies by plan before enabling them
 
 ## Troubleshooting
 
@@ -339,7 +302,6 @@ try {
 |---------|-----|
 | `steel: command not found` | `curl -sSf https://setup.steel.dev/install.sh \| sh && export PATH="$HOME/.steel/bin:$PATH"` |
 | `Missing browser auth` | `steel login` or set `STEEL_API_KEY` env var |
-| Authentication error in SDK | `export STEEL_API_KEY="your_key"` |
 | `No running session` | Check session name; `steel browser stop --all` then restart |
 | Stale element refs | Re-run `steel browser snapshot -i` before interacting |
 | CAPTCHA blocking | `steel browser start --stealth --session <name>` |
