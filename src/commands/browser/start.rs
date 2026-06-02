@@ -3,7 +3,9 @@ use serde_json::json;
 
 use crate::browser::daemon::client::DaemonClient;
 use crate::browser::daemon::process;
-use crate::browser::daemon::protocol::{DaemonCommand, DaemonCreateParams, SessionInfo};
+use crate::browser::daemon::protocol::{
+    DEFAULT_INACTIVITY_TIMEOUT_MS, DaemonCommand, DaemonCreateParams, SessionInfo,
+};
 use crate::browser::lifecycle::sanitize_connect_url;
 use crate::browser::profile_store;
 use crate::status;
@@ -22,6 +24,10 @@ pub struct Args {
     /// Session timeout in milliseconds (create-time only)
     #[arg(long = "session-timeout")]
     pub session_timeout: Option<u64>,
+
+    /// Inactivity timeout in milliseconds: release the session when no CDP command or remote input is received for this long. Defaults to 120000 (2 minutes); pass 0 to disable (create-time only)
+    #[arg(long = "inactivity-timeout")]
+    pub inactivity_timeout: Option<u64>,
 
     /// Create new sessions in headless mode (create-time only)
     #[arg(long = "session-headless", hide = true)]
@@ -75,6 +81,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let persist_profile = args.profile.is_some() && args.update_profile;
     let proxy_enabled = args.proxy.is_some();
     let namespace_set = args.namespace.is_some();
+    let inactivity_timeout_ms = resolve_inactivity_timeout(args.inactivity_timeout);
 
     // If a daemon is already running for this session name, stop it first.
     // `start` always creates a fresh session — use `steel browser sessions`
@@ -96,6 +103,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         stealth: args.stealth,
         proxy_url: args.proxy,
         timeout_ms: args.session_timeout,
+        inactivity_timeout_ms,
         headless: args.session_headless,
         region: args.session_region,
         solve_captcha: args.session_solve_captcha,
@@ -135,6 +143,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         "session_timeout_set".into(),
         json!(args.session_timeout.is_some()),
     );
+    properties.insert("inactivity_timeout_ms".into(), json!(inactivity_timeout_ms));
     crate::telemetry::track_event("browser_session_started", properties);
 
     display_session_info(&info);
@@ -209,4 +218,35 @@ fn remaining_time_str(info: &SessionInfo) -> Option<(u64, String)> {
         format!("{secs}s")
     };
     Some((remaining, label))
+}
+
+fn resolve_inactivity_timeout(explicit: Option<u64>) -> Option<u64> {
+    match explicit {
+        None => Some(DEFAULT_INACTIVITY_TIMEOUT_MS),
+        Some(0) => None,
+        Some(ms) => Some(ms),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inactivity_default_when_unset() {
+        assert_eq!(
+            resolve_inactivity_timeout(None),
+            Some(DEFAULT_INACTIVITY_TIMEOUT_MS)
+        );
+    }
+
+    #[test]
+    fn inactivity_explicit_value_wins() {
+        assert_eq!(resolve_inactivity_timeout(Some(45000)), Some(45000));
+    }
+
+    #[test]
+    fn inactivity_zero_disables() {
+        assert_eq!(resolve_inactivity_timeout(Some(0)), None);
+    }
 }

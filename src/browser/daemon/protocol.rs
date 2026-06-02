@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::api::session::CreateSessionOptions;
 use crate::config::settings::ApiMode;
 
+pub const DEFAULT_INACTIVITY_TIMEOUT_MS: u64 = 120_000;
+
 /// Parameters passed to the daemon subprocess via env var so it can create
 /// the cloud session itself.  Serialized as JSON into `STEEL_DAEMON_PARAMS`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,6 +19,7 @@ pub struct DaemonCreateParams {
     pub stealth: bool,
     pub proxy_url: Option<String>,
     pub timeout_ms: Option<u64>,
+    pub inactivity_timeout_ms: Option<u64>,
     pub headless: Option<bool>,
     pub region: Option<String>,
     pub solve_captcha: bool,
@@ -32,6 +35,7 @@ impl DaemonCreateParams {
             stealth: self.stealth,
             proxy_url: self.proxy_url.clone(),
             timeout_ms: self.timeout_ms,
+            inactivity_timeout_ms: self.inactivity_timeout_ms,
             headless: self.headless,
             region: self.region.clone(),
             solve_captcha: self.solve_captcha,

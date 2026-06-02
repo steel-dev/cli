@@ -277,6 +277,7 @@ fn daemon_create_params_json_roundtrip() {
         stealth: true,
         proxy_url: Some("http://proxy:8080".to_string()),
         timeout_ms: Some(60000),
+        inactivity_timeout_ms: Some(120000),
         headless: Some(true),
         region: Some("us-east-1".to_string()),
         solve_captcha: true,
@@ -296,6 +297,7 @@ fn daemon_create_params_json_roundtrip() {
     assert!(back.stealth);
     assert_eq!(back.proxy_url.as_deref(), Some("http://proxy:8080"));
     assert_eq!(back.timeout_ms, Some(60000));
+    assert_eq!(back.inactivity_timeout_ms, Some(120000));
     assert_eq!(back.headless, Some(true));
     assert_eq!(back.region.as_deref(), Some("us-east-1"));
     assert!(back.solve_captcha);
@@ -315,6 +317,7 @@ fn daemon_create_params_minimal_roundtrip() {
         stealth: false,
         proxy_url: None,
         timeout_ms: None,
+        inactivity_timeout_ms: None,
         headless: None,
         region: None,
         solve_captcha: false,
@@ -343,6 +346,7 @@ fn daemon_create_params_to_create_options() {
         stealth: true,
         proxy_url: Some("http://proxy".to_string()),
         timeout_ms: Some(30000),
+        inactivity_timeout_ms: Some(90000),
         headless: Some(false),
         region: Some("eu-west-1".to_string()),
         solve_captcha: true,
@@ -356,6 +360,7 @@ fn daemon_create_params_to_create_options() {
     assert!(opts.stealth);
     assert_eq!(opts.proxy_url.as_deref(), Some("http://proxy"));
     assert_eq!(opts.timeout_ms, Some(30000));
+    assert_eq!(opts.inactivity_timeout_ms, Some(90000));
     assert_eq!(opts.headless, Some(false));
     assert_eq!(opts.region.as_deref(), Some("eu-west-1"));
     assert!(opts.solve_captcha);

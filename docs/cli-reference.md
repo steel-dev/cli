@@ -329,6 +329,7 @@ steel browser start [options]
 - **--stealth**: Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving / solveCaptcha=true)
 - -p, **--proxy**: Proxy URL for new sessions (for example, http://user:pass@host:port)
 - **--session-timeout**: Session timeout in milliseconds (create-time only)
+- **--inactivity-timeout**: Inactivity timeout in milliseconds — release the session when no CDP command or remote input is received for this long (create-time only; defaults to 120000 / 2 minutes, pass 0 to disable)
 - **--session-headless**: Create new sessions in headless mode (create-time only)
 - **--session-region**: Preferred session region (create-time only)
 - **--session-solve-captcha**: Enable manual CAPTCHA solving on new sessions (create-time only; use `steel browser captcha solve`)

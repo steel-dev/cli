@@ -8,7 +8,9 @@ use clap::{Parser, Subcommand};
 
 use crate::browser::daemon::client::DaemonClient;
 use crate::browser::daemon::process;
-use crate::browser::daemon::protocol::{DaemonCommand, DaemonCreateParams};
+use crate::browser::daemon::protocol::{
+    DEFAULT_INACTIVITY_TIMEOUT_MS, DaemonCommand, DaemonCreateParams,
+};
 use crate::status;
 use crate::util::{api, output};
 
@@ -1249,6 +1251,7 @@ async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
         stealth: false,
         proxy_url: None,
         timeout_ms: None,
+        inactivity_timeout_ms: Some(DEFAULT_INACTIVITY_TIMEOUT_MS),
         headless: None,
         region: None,
         solve_captcha: false,

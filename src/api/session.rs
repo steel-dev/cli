@@ -13,6 +13,7 @@ pub struct CreateSessionOptions {
     pub stealth: bool,
     pub proxy_url: Option<String>,
     pub timeout_ms: Option<u64>,
+    pub inactivity_timeout_ms: Option<u64>,
     pub headless: Option<bool>,
     pub region: Option<String>,
     pub solve_captcha: bool,
@@ -77,6 +78,10 @@ fn build_create_body(options: &CreateSessionOptions) -> Value {
 
     if let Some(timeout) = options.timeout_ms {
         obj.insert("timeout".into(), json!(timeout));
+    }
+
+    if let Some(inactivity_timeout) = options.inactivity_timeout_ms {
+        obj.insert("inactivityTimeout".into(), json!(inactivity_timeout));
     }
 
     if let Some(headless) = options.headless {
@@ -349,6 +354,7 @@ mod tests {
         let body = build_create_body(&CreateSessionOptions {
             proxy_url: Some("http://proxy:8080".into()),
             timeout_ms: Some(30000),
+            inactivity_timeout_ms: Some(120000),
             headless: Some(true),
             region: Some("us-east-1".into()),
             solve_captcha: true,
@@ -358,11 +364,21 @@ mod tests {
         });
         assert_eq!(body["proxyUrl"], "http://proxy:8080");
         assert_eq!(body["timeout"], 30000);
+        assert_eq!(body["inactivityTimeout"], 120000);
         assert_eq!(body["headless"], true);
         assert_eq!(body["region"], "us-east-1");
         assert_eq!(body["solveCaptcha"], true);
         assert_eq!(body["namespace"], "ns");
         assert!(body["credentials"].is_object());
+    }
+
+    #[test]
+    fn create_body_inactivity_timeout() {
+        let body = build_create_body(&CreateSessionOptions {
+            inactivity_timeout_ms: Some(120000),
+            ..Default::default()
+        });
+        assert_eq!(body["inactivityTimeout"], 120000);
     }
 
     #[test]
