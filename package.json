@@ -12,7 +12,9 @@
     "scripts"
   ],
   "scripts": {
-    "postinstall": "node scripts/postinstall.js"
+    "postinstall": "node scripts/postinstall.js",
+    "docs:generate": "node scripts/generate-docs.mjs",
+    "api:generate": "node scripts/generate-api.mjs"
   },
   "repository": {
     "type": "git",

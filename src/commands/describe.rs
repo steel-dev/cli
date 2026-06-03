@@ -3,6 +3,8 @@ use anyhow::{Result, bail};
 use clap::{ArgAction, CommandFactory, Parser};
 use serde::Serialize;
 
+use crate::api::generated::{CLI_OPERATION_METADATA, StreamingMetadata};
+
 #[derive(Parser)]
 #[command(about = "Describe commands and parameters (structured introspection for AI agents)")]
 pub struct Args {
@@ -28,6 +30,8 @@ pub struct DescribeOutput {
     pub parameters: Option<Vec<ParameterInfo>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub global_args: Vec<ParameterInfo>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub api_operations: Vec<ApiOperationInfo>,
 }
 
 #[derive(Serialize)]
@@ -45,6 +49,8 @@ pub struct SubcommandInfo {
     pub parameters: Option<Vec<ParameterInfo>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub global_args: Vec<ParameterInfo>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub api_operations: Vec<ApiOperationInfo>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -62,6 +68,19 @@ pub struct ParameterInfo {
     pub default: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub enum_values: Vec<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct ApiOperationInfo {
+    pub operation_id: String,
+    pub command: String,
+    pub status: String,
+    pub method: String,
+    pub path: String,
+    pub summary: String,
+    pub example: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub streaming: Option<StreamingMetadata>,
 }
 
 // ── Entry point ─────────────────────────────────────────────────────
@@ -134,14 +153,19 @@ fn describe_node(cmd: &clap::Command, path: &[String]) -> DescribeOutput {
     if has_subs {
         let subcommands: Vec<SubcommandInfo> = visible_subs
             .iter()
-            .map(|sub| SubcommandInfo {
-                name: sub.get_name().to_string(),
-                description: sub.get_about().map(|s| s.to_string()),
-                aliases: get_aliases(sub),
-                has_subcommands: has_visible_subcommands(sub),
-                subcommands: None,
-                parameters: None,
-                global_args: Vec::new(),
+            .map(|sub| {
+                let mut child_path = path.to_vec();
+                child_path.push(sub.get_name().to_string());
+                SubcommandInfo {
+                    name: sub.get_name().to_string(),
+                    description: sub.get_about().map(|s| s.to_string()),
+                    aliases: get_aliases(sub),
+                    has_subcommands: has_visible_subcommands(sub),
+                    subcommands: None,
+                    parameters: None,
+                    global_args: Vec::new(),
+                    api_operations: api_operations_for_path(&child_path),
+                }
             })
             .collect();
 
@@ -152,6 +176,7 @@ fn describe_node(cmd: &clap::Command, path: &[String]) -> DescribeOutput {
             subcommands: Some(subcommands),
             parameters: None,
             global_args: extract_global_args(cmd),
+            api_operations: api_operations_for_path(path),
         }
     } else {
         DescribeOutput {
@@ -161,6 +186,7 @@ fn describe_node(cmd: &clap::Command, path: &[String]) -> DescribeOutput {
             subcommands: None,
             parameters: Some(extract_local_args(cmd)),
             global_args: extract_global_args(cmd),
+            api_operations: api_operations_for_path(path),
         }
     }
 }
@@ -188,6 +214,7 @@ fn describe_tree(cmd: &clap::Command, path: &[String]) -> DescribeOutput {
             subcommands: Some(subcommands),
             parameters: None,
             global_args: extract_global_args(cmd),
+            api_operations: api_operations_for_path(path),
         }
     } else {
         DescribeOutput {
@@ -197,6 +224,7 @@ fn describe_tree(cmd: &clap::Command, path: &[String]) -> DescribeOutput {
             subcommands: None,
             parameters: Some(extract_local_args(cmd)),
             global_args: extract_global_args(cmd),
+            api_operations: api_operations_for_path(path),
         }
     }
 }
@@ -222,6 +250,7 @@ fn describe_subtree(cmd: &clap::Command, parent_path: &[String]) -> SubcommandIn
             subcommands: Some(subcommands),
             parameters: None,
             global_args: extract_global_args(cmd),
+            api_operations: api_operations_for_path(&child_path),
         }
     } else {
         SubcommandInfo {
@@ -232,8 +261,41 @@ fn describe_subtree(cmd: &clap::Command, parent_path: &[String]) -> SubcommandIn
             subcommands: None,
             parameters: Some(extract_local_args(cmd)),
             global_args: extract_global_args(cmd),
+            api_operations: api_operations_for_path(&child_path),
         }
     }
+}
+
+fn api_operations_for_path(path: &[String]) -> Vec<ApiOperationInfo> {
+    let command_path = path
+        .iter()
+        .skip(1)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    CLI_OPERATION_METADATA
+        .iter()
+        .filter(|operation| {
+            let base_command = operation
+                .command
+                .split_whitespace()
+                .filter(|part| !part.starts_with('-'))
+                .collect::<Vec<_>>()
+                .join(" ");
+            base_command == command_path
+        })
+        .map(|operation| ApiOperationInfo {
+            operation_id: operation.id.to_string(),
+            command: operation.command.to_string(),
+            status: operation.status.to_string(),
+            method: operation.method.to_string(),
+            path: operation.path.to_string(),
+            summary: operation.summary.to_string(),
+            example: operation.example.to_string(),
+            streaming: operation.streaming,
+        })
+        .collect()
 }
 
 // ── Parameter extraction ────────────────────────────────────────────

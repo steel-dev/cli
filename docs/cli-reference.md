@@ -13,6 +13,12 @@ This is an auto-generated reference for the Steel CLI. The Steel CLI helps you c
 - [steel pdf](#steel-pdf)
 - [steel scrape](#steel-scrape)
 - [steel screenshot](#steel-screenshot)
+- [steel skills list](#steel-skills-list)
+- [steel skills install](#steel-skills-install)
+- [steel skills update](#steel-skills-update)
+- [steel skills doctor](#steel-skills-doctor)
+- [steel skills open](#steel-skills-open)
+- [steel skills paths](#steel-skills-paths)
 - [steel settings](#steel-settings)
 - [steel star](#steel-star)
 - [steel support](#steel-support)
@@ -190,6 +196,66 @@ steel screenshot [url] [options]
 - -r, **--region**: Region identifier for request execution
 - -l, **--local**: Send request to local Steel runtime mode
 - **--api-url**: Explicit self-hosted API endpoint URL
+
+## steel skills list
+
+List available Steel Skills from the public manifest, cache, or bundled fallback.
+
+### Usage
+
+```
+steel skills list [--offline]
+```
+
+## steel skills install
+
+Install one or more Steel Skills through `npx skills`.
+
+### Usage
+
+```
+steel skills install <name>... [-a <agent>] [-g] [-y]
+```
+
+## steel skills update
+
+Update installed Steel Skills through `npx skills`.
+
+### Usage
+
+```
+steel skills update [name]... [-y]
+```
+
+## steel skills doctor
+
+Check Steel Skills health: manifest, `npx`, auth, and detected install paths.
+
+### Usage
+
+```
+steel skills doctor [--offline]
+```
+
+## steel skills open
+
+Open an installed skill path when present, otherwise open the skill docs page.
+
+### Usage
+
+```
+steel skills open <name>
+```
+
+## steel skills paths
+
+Show detected agent install paths for Steel Skills.
+
+### Usage
+
+```
+steel skills paths
+```
 
 ## steel settings
 
