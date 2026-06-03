@@ -220,7 +220,7 @@ struct AgentPath {
     installed: bool,
 }
 
-pub fn telemetry_name(command: &SkillsCommand) -> &'static str {
+pub const fn telemetry_name(command: &SkillsCommand) -> &'static str {
     match command {
         SkillsCommand::List { .. } => "list",
         SkillsCommand::Install { .. } => "install",
@@ -423,11 +423,9 @@ async fn paths() -> anyhow::Result<()> {
 }
 
 async fn load_manifest(offline: bool) -> anyhow::Result<Manifest> {
-    if !offline {
-        if let Ok(manifest) = fetch_manifest().await {
-            let _ = write_cached_manifest(&manifest);
-            return Ok(manifest);
-        }
+    if !offline && let Ok(manifest) = fetch_manifest().await {
+        let _ = write_cached_manifest(&manifest);
+        return Ok(manifest);
     }
     if let Ok(manifest) = read_cached_manifest() {
         return Ok(manifest);
@@ -591,7 +589,7 @@ fn title_case(value: &str) -> String {
     }
 }
 
-fn yes_no(value: bool) -> &'static str {
+const fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
 }
 
