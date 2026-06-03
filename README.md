@@ -152,6 +152,7 @@ Agent skills:
 
 - [Steel Skills catalog](https://github.com/steel-dev/skills)
 - [Steel Agent Skills docs](https://docs.steel.dev/overview/agent-skills)
+- [agent-browser migration guide](https://github.com/steel-dev/skills/blob/main/steel-browser/references/migration-agent-browser.md)
 
 ---
 
