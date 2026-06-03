@@ -1,8 +1,6 @@
-pub mod agents;
-
 use clap::Parser;
 
-use crate::commands::{doctor, login};
+use crate::commands::{doctor, login, skills};
 use crate::status;
 
 #[derive(Parser)]
@@ -11,6 +9,15 @@ pub struct Args {
     /// agent-friendly output. Designed for AI coding agents
     #[arg(long)]
     pub agent: bool,
+
+    /// Install selected Steel skills via the skills installer. With no value,
+    /// installs the recommended bootstrap set
+    #[arg(long, num_args = 0..=1, value_delimiter = ',', default_missing_value = "steel-browser,steel-developer")]
+    pub skills: Option<Vec<String>>,
+
+    /// Skip Steel skill installation
+    #[arg(long)]
+    pub no_skills: bool,
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
@@ -29,9 +36,9 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("");
     doctor::run(doctor::Args { preflight: true }).await?;
 
-    // Step 3: auto-install the Steel skill into any detected coding agents.
+    // Step 3: install Steel skills.
     status!("");
-    agents::install_skills(args.agent)?;
+    install_skills(&args).await?;
 
     // Next steps.
     status!("");
@@ -48,4 +55,32 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+async fn install_skills(args: &Args) -> anyhow::Result<()> {
+    if args.no_skills {
+        status!("Skipping Steel skill install (--no-skills).");
+        return Ok(());
+    }
+
+    let selected = args
+        .skills
+        .clone()
+        .unwrap_or_else(|| vec!["steel-browser".to_string(), "steel-developer".to_string()]);
+
+    if selected.is_empty() {
+        return Ok(());
+    }
+
+    match skills::install_names(&selected, args.agent).await {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            status!("Could not install Steel skills through npx skills: {error:#}");
+            status!("Install manually with:");
+            for name in &selected {
+                status!("  npx skills add steel-dev/skills --skill {name}");
+            }
+            Ok(())
+        }
+    }
 }

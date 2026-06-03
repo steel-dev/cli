@@ -100,7 +100,7 @@ All other `steel browser <command>` calls inherit upstream runtime behavior and 
 - before: `agent-browser <command> ...`
 - after: `steel browser <command> ...`
 
-See the [migration guide](skills/steel-browser/references/migration-agent-browser.md), [compatibility matrix](docs/browser-compat.md), and [synced command catalog](docs/references/steel-browser-commands.md) for details.
+See the [compatibility matrix](docs/browser-compat.md), [Steel browser reference](docs/references/steel-browser.md), and [synced command catalog](docs/references/steel-browser-commands.md) for details.
 
 ## Endpoint Resolution
 
@@ -137,7 +137,6 @@ Primary docs:
 - [Docs index](docs/README.md)
 - [Generated CLI reference](docs/cli-reference.md)
 - [Browser compatibility](docs/browser-compat.md)
-- [agent-browser migration guide](skills/steel-browser/references/migration-agent-browser.md)
 - [Upstream sync guide](docs/upstream-sync.md)
 
 Reference docs:
@@ -149,9 +148,11 @@ Reference docs:
 - [Agent troubleshooting playbook](docs/references/agent-troubleshooting.md)
 - [Pinned upstream source snapshot](docs/references/upstream/agent-browser-commands.source.md)
 
-Agent skill:
+Agent skills:
 
-- [Steel Browser skill package](skills/steel-browser/README.md)
+- [Steel Skills catalog](https://github.com/steel-dev/skills)
+- [Steel Agent Skills docs](https://docs.steel.dev/overview/agent-skills)
+- [agent-browser migration guide](https://github.com/steel-dev/skills/blob/main/steel-browser/references/migration-agent-browser.md)
 
 ---
 

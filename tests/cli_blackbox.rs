@@ -164,6 +164,42 @@ fn credentials_help_lists_subcommands() {
 }
 
 #[test]
+fn skills_help_lists_subcommands() {
+    let output = run(&["skills", "--help"]);
+    assert!(output.status.success(), "steel skills --help should exit 0");
+    let out = stdout(&output);
+    for sub in &["list", "install", "update", "doctor", "open", "paths"] {
+        assert!(
+            out.contains(sub),
+            "skills help should list '{sub}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn skills_list_offline_shows_launch_catalog() {
+    let output = run(&["skills", "list", "--offline"]);
+    assert!(
+        output.status.success(),
+        "steel skills list --offline should exit 0; stderr: {}",
+        stderr(&output)
+    );
+    let out = stdout(&output);
+    for skill in &[
+        "steel-browser",
+        "steel-developer",
+        "steel-session-debugging",
+        "steel-reliability",
+        "steel-skill-creator",
+    ] {
+        assert!(
+            out.contains(skill),
+            "skills list should include '{skill}', got: {out}"
+        );
+    }
+}
+
+#[test]
 fn profile_help_lists_subcommands() {
     let output = run(&["profile", "--help"]);
     assert!(
@@ -175,6 +211,61 @@ fn profile_help_lists_subcommands() {
         assert!(
             out.contains(sub),
             "profile help should list '{sub}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn sessions_help_lists_subcommands() {
+    let output = run(&["sessions", "--help"]);
+    assert!(
+        output.status.success(),
+        "steel sessions --help should exit 0"
+    );
+    let out = stdout(&output);
+    for sub in &["list", "get", "release", "logs", "agent-logs", "traces"] {
+        assert!(
+            out.contains(sub),
+            "sessions help should list '{sub}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn sessions_logs_help_shows_expected_flags() {
+    let output = run(&["sessions", "logs", "--help"]);
+    assert!(
+        output.status.success(),
+        "steel sessions logs --help should exit 0"
+    );
+    let out = stdout(&output);
+    for flag in &[
+        "--session",
+        "--follow",
+        "--since",
+        "--event-type",
+        "--limit",
+        "--offset",
+    ] {
+        assert!(
+            out.contains(flag),
+            "sessions logs help should mention '{flag}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn sessions_traces_help_shows_expected_flags() {
+    let output = run(&["sessions", "traces", "--help"]);
+    assert!(
+        output.status.success(),
+        "steel sessions traces --help should exit 0"
+    );
+    let out = stdout(&output);
+    for flag in &["--session", "--follow", "--since", "--event-type"] {
+        assert!(
+            out.contains(flag),
+            "sessions traces help should mention '{flag}', got: {out}"
         );
     }
 }

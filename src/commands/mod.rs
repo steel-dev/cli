@@ -14,6 +14,8 @@ pub mod pdf;
 pub mod profile;
 pub mod scrape;
 pub mod screenshot;
+pub mod sessions;
+pub mod skills;
 pub mod update;
 
 use clap::{Parser, Subcommand, builder::styling::Styles};
@@ -27,6 +29,9 @@ Global Flags:
 Getting Started:
   steel init                           Log in, verify, and install Steel skills into detected agents
     --agent                              Print the agent onboarding guide to stdout and exit
+  steel skills list                    List available Steel Skills
+  steel skills install <name>          Install a Steel Skill through npx skills
+  steel skills doctor                  Check skills installer, auth, manifest, and paths
 
 Quick Actions:
   steel scrape <url>                   Scrape webpage content (markdown by default)
@@ -52,6 +57,20 @@ Browser Sessions:
   steel browser stop [--session <name>]       Stop a session (-a for all)
   steel browser sessions               List active sessions (use --json for structured output)
   steel browser live [--session <name>]       Open live session viewer
+
+Cloud Sessions:
+  steel sessions list                  List cloud sessions
+    --status <status>                   Filter: live, released, failed
+    --limit <n>                         Number of sessions to return
+  steel sessions get <id>              Show cloud session details
+  steel sessions release <id>          Release a cloud session
+    -a, --all                           Release all active cloud sessions
+  steel sessions logs <id>             Show browser event logs
+    -f, --follow                        Follow live logs over WebSocket
+    --since <time>                      Start timestamp
+  steel sessions agent-logs <id>       Show raw CDP-derived agent events
+  steel sessions traces <id>           Show semantic agent traces
+    -f, --follow                        Follow live traces over WebSocket
 
 Browser Navigation:
   steel browser navigate <url>         Navigate to URL (aliases: open, goto)
@@ -264,6 +283,12 @@ pub enum Command {
     /// Browser session management and automation
     Browser(browser::BrowserArgs),
 
+    /// Cloud session management and debugging
+    Sessions {
+        #[command(subcommand)]
+        command: sessions::Command,
+    },
+
     /// One-command onboarding: login + verify + install agent skills
     Init(init::Args),
 
@@ -310,6 +335,9 @@ pub enum Command {
     /// Check environment, auth, and connectivity
     Doctor(doctor::Args),
 
+    /// Manage Steel agent skills
+    Skills(skills::Args),
+
     /// Generate a shell completion script
     Completion(completion::Args),
 }
@@ -321,6 +349,7 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Screenshot(_) => Some("screenshot".to_string()),
         Command::Pdf(_) => Some("pdf".to_string()),
         Command::Browser(args) => Some(format!("browser.{}", args.command.telemetry_name())),
+        Command::Sessions { command } => Some(format!("sessions.{}", command.telemetry_name())),
         Command::Init(_) => Some("init".to_string()),
         Command::Login(_) => Some("login".to_string()),
         Command::Logout(_) => Some("logout".to_string()),
@@ -335,6 +364,7 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Profile { command } => Some(format!("profile.{}", command.telemetry_name())),
         Command::Describe(_) => Some("describe".to_string()),
         Command::Doctor(_) => Some("doctor".to_string()),
+        Command::Skills(args) => Some(format!("skills.{}", skills::telemetry_name(&args.command))),
         Command::Completion(_) => Some("completion".to_string()),
     }
 }
@@ -366,6 +396,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Screenshot(args) => screenshot::run(args).await,
         Command::Pdf(args) => pdf::run(args).await,
         Command::Browser(args) => browser::run(args).await,
+        Command::Sessions { command } => sessions::run(command).await,
         Command::Init(args) => init::run(args).await,
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,
@@ -378,6 +409,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Profile { command } => profile::run(command).await,
         Command::Describe(args) => describe::run(args).await,
         Command::Doctor(args) => doctor::run(args).await,
+        Command::Skills(args) => skills::run(args.command).await,
         Command::Completion(args) => completion::run(args).await,
     };
 
