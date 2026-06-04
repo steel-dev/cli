@@ -209,11 +209,12 @@ steel skills list [--offline]
 
 ## steel skills install
 
-Install one or more Steel Skills through `npx skills`.
+Install all Steel Skills, or one or more selected Steel Skills, through `npx skills`.
 
 ### Usage
 
 ```
+steel skills install --all [-a <agent>] [-g] [-y]
 steel skills install <name>... [-a <agent>] [-g] [-y]
 ```
 

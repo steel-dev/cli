@@ -10,9 +10,8 @@ pub struct Args {
     #[arg(long)]
     pub agent: bool,
 
-    /// Install selected Steel skills via the skills installer. With no value,
-    /// installs the recommended bootstrap set
-    #[arg(long, num_args = 0..=1, value_delimiter = ',', default_missing_value = "steel-browser,steel-developer")]
+    /// Open the Steel skills installer flow. With no value, lets you choose skills interactively
+    #[arg(long, num_args = 0..=1, value_delimiter = ',', default_missing_value = "__all__")]
     pub skills: Option<Vec<String>>,
 
     /// Skip Steel skill installation
@@ -63,24 +62,32 @@ async fn install_skills(args: &Args) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let selected = args
-        .skills
-        .clone()
-        .unwrap_or_else(|| vec!["steel-browser".to_string(), "steel-developer".to_string()]);
+    let install_result = match &args.skills {
+        Some(selected) if selected.is_empty() => return Ok(()),
+        Some(selected) if is_all_selection(selected) => skills::install_catalog_flow().await,
+        Some(selected) => skills::install_names(selected, false).await,
+        None => skills::install_catalog_flow().await,
+    };
 
-    if selected.is_empty() {
-        return Ok(());
-    }
-
-    match skills::install_names(&selected, args.agent).await {
+    match install_result {
         Ok(()) => Ok(()),
         Err(error) => {
             status!("Could not install Steel skills through npx skills: {error:#}");
             status!("Install manually with:");
-            for name in &selected {
-                status!("  npx skills add steel-dev/skills --skill {name}");
+            if let Some(selected) = &args.skills
+                && !is_all_selection(selected)
+            {
+                for name in selected {
+                    status!("  npx skills add steel-dev/skills --skill {name}");
+                }
+            } else {
+                status!("  npx skills add steel-dev/skills");
             }
             Ok(())
         }
     }
+}
+
+fn is_all_selection(selected: &[String]) -> bool {
+    selected.len() == 1 && matches!(selected[0].as_str(), "__all__" | "all")
 }

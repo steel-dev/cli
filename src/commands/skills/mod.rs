@@ -128,11 +128,14 @@ pub enum SkillsCommand {
         #[arg(long)]
         offline: bool,
     },
-    /// Install one or more Steel skills through npx skills
+    /// Install all or selected Steel skills through npx skills
     Install {
         /// Skill name(s) to install
-        #[arg(required = true)]
+        #[arg(required_unless_present = "all")]
         names: Vec<String>,
+        /// Install all Steel skills from the catalog
+        #[arg(long)]
+        all: bool,
         /// Target agent passed to npx skills (-a)
         #[arg(short = 'a', long)]
         agent: Option<String>,
@@ -236,10 +239,20 @@ pub async fn run(command: SkillsCommand) -> anyhow::Result<()> {
         SkillsCommand::List { offline } => list(offline).await,
         SkillsCommand::Install {
             names,
+            all,
             agent,
             global,
             yes,
-        } => install_names_with_options(&names, agent.as_deref(), global, yes).await,
+        } => {
+            if all {
+                if !names.is_empty() {
+                    anyhow::bail!("cannot combine --all with explicit skill names");
+                }
+                install_all_with_options(agent.as_deref(), global, yes).await
+            } else {
+                install_names_with_options(&names, agent.as_deref(), global, yes).await
+            }
+        }
         SkillsCommand::Update { names, yes } => update(names, yes).await,
         SkillsCommand::Doctor { offline } => doctor(offline).await,
         SkillsCommand::Open { name } => open_skill(&name).await,
@@ -248,7 +261,18 @@ pub async fn run(command: SkillsCommand) -> anyhow::Result<()> {
 }
 
 pub async fn install_names(names: &[String], yes: bool) -> anyhow::Result<()> {
-    install_names_with_options(names, None, true, yes).await
+    install_names_with_options(names, None, false, yes).await
+}
+
+pub async fn install_all(yes: bool) -> anyhow::Result<()> {
+    install_all_with_options(None, false, yes).await
+}
+
+pub async fn install_catalog_flow() -> anyhow::Result<()> {
+    run_npx(&["skills", "add", REPO_SPEC])
+        .context("starting Steel skills installer. You can also run manually: npx skills add steel-dev/skills")?;
+    output::success_silent();
+    Ok(())
 }
 
 async fn list(offline: bool) -> anyhow::Result<()> {
@@ -286,6 +310,10 @@ async fn install_names_with_options(
     global: bool,
     yes: bool,
 ) -> anyhow::Result<()> {
+    if names.is_empty() {
+        anyhow::bail!("provide a skill name or use --all");
+    }
+
     let manifest = load_manifest(false).await?;
     for name in names {
         ensure_known_skill(&manifest, name)?;
@@ -308,6 +336,28 @@ async fn install_names_with_options(
         })?;
         status!("Installed {name}");
     }
+    output::success_silent();
+    Ok(())
+}
+
+async fn install_all_with_options(
+    agent: Option<&str>,
+    global: bool,
+    yes: bool,
+) -> anyhow::Result<()> {
+    let mut args = vec!["skills", "add", REPO_SPEC, "--all"];
+    if let Some(agent) = agent {
+        args.push("-a");
+        args.push(agent);
+    }
+    if global {
+        args.push("-g");
+    }
+    if yes {
+        args.push("-y");
+    }
+    run_npx(&args).context("installing all Steel skills. You can also run manually: npx skills add steel-dev/skills --all")?;
+    status!("Installed all Steel skills");
     output::success_silent();
     Ok(())
 }
