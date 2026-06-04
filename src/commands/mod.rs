@@ -30,6 +30,7 @@ Getting Started:
   steel init                           Log in, verify, and install Steel skills into detected agents
     --agent                              Print the agent onboarding guide to stdout and exit
   steel skills list                    List available Steel Skills
+  steel skills install --all           Install all Steel Skills through npx skills
   steel skills install <name>          Install a Steel Skill through npx skills
   steel skills doctor                  Check skills installer, auth, manifest, and paths
 
