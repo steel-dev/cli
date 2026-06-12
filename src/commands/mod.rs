@@ -12,6 +12,7 @@ pub mod login;
 pub mod logout;
 pub mod pdf;
 pub mod profile;
+pub mod projects;
 pub mod scrape;
 pub mod screenshot;
 pub mod sessions;
@@ -191,8 +192,14 @@ Development:
     -d, --docker-check                   Only verify Docker, then exit
   steel dev stop                       Stop local runtime
 
+Projects:
+  steel projects list                  List projects in your organization
+  steel projects create [name]         Create a new project and make it active
+  steel projects select [id|slug]      Switch the active project
+  steel projects current               Show the currently active project
+
 Other:
-  steel login                          Login to Steel (alias: auth)
+  steel login                          Login to Steel via device flow (alias: auth)
   steel logout                         Logout from Steel
   steel config                         Show current configuration
   steel doctor                         Check environment, auth, and connectivity
@@ -203,7 +210,8 @@ Other:
   steel completion <shell>             Generate shell completion script (bash, zsh, fish, powershell, elvish)
 
 Environment:
-  STEEL_API_KEY                        API key for Steel (overrides login)
+  STEEL_API_KEY                        Project API key for Steel (overrides login)
+  STEEL_ACCOUNT_TOKEN                  Account-level CLI token (overrides login)
   STEEL_API_URL                        Steel API endpoint
   STEEL_BROWSER_API_URL                Steel Browser API endpoint
   STEEL_LOCAL_API_URL                  Local runtime API endpoint
@@ -300,6 +308,12 @@ pub enum Command {
     /// Logout from Steel CLI
     Logout(logout::Args),
 
+    /// Manage projects in your organization
+    Projects {
+        #[command(subcommand)]
+        command: projects::Command,
+    },
+
     /// Manage stored credentials
     Credentials {
         #[command(subcommand)]
@@ -354,6 +368,7 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Init(_) => Some("init".to_string()),
         Command::Login(_) => Some("login".to_string()),
         Command::Logout(_) => Some("logout".to_string()),
+        Command::Projects { command } => Some(format!("projects.{}", command.telemetry_name())),
         Command::Credentials { command } => {
             Some(format!("credentials.{}", command.telemetry_name()))
         }
@@ -401,6 +416,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Init(args) => init::run(args).await,
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,
+        Command::Projects { command } => projects::run(command).await,
         Command::Credentials { command } => credentials::run(command).await,
         Command::Dev { command } => dev::run(command).await,
         Command::Forge(args) => forge::run(args).await,

@@ -102,16 +102,47 @@ fn normalize_api_url(url: &str) -> String {
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
+    /// Active project API key, used for browser/session work.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+    /// Account-level CLI token (manages projects and project API keys).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_token: Option<String>,
+    /// Device name associated with the account token.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instance: Option<String>,
+    /// Organization the account token belongs to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub org: Option<OrgInfo>,
+    /// Currently selected project.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<ProjectInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub browser: Option<BrowserConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub telemetry: Option<TelemetryConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct OrgInfo {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectInfo {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -192,8 +223,19 @@ mod tests {
 
         let config = Config {
             api_key: Some("sk-test-123".into()),
+            account_token: Some("ste-cli-abc".into()),
             name: Some("CLI".into()),
             instance: Some("cloud".into()),
+            org: Some(OrgInfo {
+                id: "org-1".into(),
+                slug: Some("acme".into()),
+                name: Some("Acme".into()),
+            }),
+            project: Some(ProjectInfo {
+                id: "proj-1".into(),
+                slug: Some("dev".into()),
+                name: Some("Dev".into()),
+            }),
             browser: Some(BrowserConfig {
                 api_url: Some("http://localhost:4000/v1".into()),
             }),
@@ -206,8 +248,14 @@ mod tests {
         let loaded = read_config_from(&path).unwrap();
 
         assert_eq!(loaded.api_key.as_deref(), Some("sk-test-123"));
+        assert_eq!(loaded.account_token.as_deref(), Some("ste-cli-abc"));
         assert_eq!(loaded.name.as_deref(), Some("CLI"));
         assert_eq!(loaded.instance.as_deref(), Some("cloud"));
+        assert_eq!(loaded.org.as_ref().map(|o| o.id.as_str()), Some("org-1"));
+        assert_eq!(
+            loaded.project.as_ref().map(|p| p.id.as_str()),
+            Some("proj-1")
+        );
         assert_eq!(loaded.local_api_url(), Some("http://localhost:4000/v1"));
         assert!(loaded.telemetry_disabled());
     }

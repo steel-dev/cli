@@ -1,291 +1,220 @@
-use std::io::{BufRead, BufReader, Write as IoWrite};
-
 use clap::Parser;
-use tokio::net::TcpListener;
+use dialoguer::{Confirm, Input, Select};
 
+use crate::api::device_auth::{self, OrgPayload};
+use crate::commands::projects;
 use crate::config;
 use crate::config::auth;
-use crate::config::settings::{Config, read_config_from, write_config_to};
+use crate::config::settings::{OrgInfo, read_config_from, write_config_to};
 use crate::status;
+use crate::util::{api, output};
 
 #[derive(Parser)]
 pub struct Args {}
 
-const LOGIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+/// Result of authenticating: the account token and the org it belongs to.
+pub struct AuthOutcome {
+    pub account_token: String,
+    pub device_name: String,
+    pub org: OrgPayload,
+}
+
+impl AuthOutcome {
+    pub fn org_label(&self) -> String {
+        self.org.name.clone()
+    }
+}
 
 pub async fn run(_args: Args) -> anyhow::Result<()> {
-    // Check if already logged in
-    let existing_auth = auth::resolve_auth();
-    if existing_auth.api_key.is_some() {
-        status!("You are already logged in.");
+    if auth::resolve_account_token().is_some() {
+        status!("You are already logged in. Run `steel logout` first to switch accounts.");
         return Ok(());
     }
 
-    status!("Launching browser for authentication...");
+    let (mode, base_url) = api::resolve();
 
-    let (api_key, name) = login_flow().await?;
+    if interactive() {
+        let choice = Select::new()
+            .with_prompt("Welcome to Steel! Would you like to log in?")
+            .items([
+                "Use Steel locally (no account)",
+                "Log in or create an account",
+            ])
+            .default(1)
+            .interact()?;
 
-    save_api_key(&api_key, &name)?;
+        if choice == 0 {
+            print_local_guidance();
+            return Ok(());
+        }
+    }
+
+    let outcome = authenticate(&base_url).await?;
+
+    let project = projects::ensure_active_project(
+        &base_url,
+        mode,
+        &outcome.account_token,
+        &outcome.device_name,
+    )
+    .await?;
 
     crate::telemetry::track_event("login_completed", serde_json::Map::new());
 
-    status!("Authentication successful! Your API key has been saved.");
+    status!("Logged in to {}.", outcome.org_label());
+    if let Some(name) = project.name.as_deref() {
+        status!("Active project: {name}");
+    }
+    status!("Saved credentials to {}", config::config_path().display());
 
     Ok(())
 }
 
-async fn login_flow() -> anyhow::Result<(String, String)> {
-    let state = generate_random_hex(16);
+/// Run the device authorization flow and persist the account token.
+///
+/// Shared by `steel login` and `steel init`. Prints the verification URL + code
+/// even in non-interactive / JSON mode so the user can always complete the flow.
+pub async fn authenticate(base_url: &str) -> anyhow::Result<AuthOutcome> {
+    let is_interactive = interactive();
 
-    // Bind to random port on localhost
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port();
-
-    let auth_url = format!(
-        "{}?cli_redirect=true&port={}&state={}",
-        config::LOGIN_URL,
-        port,
-        state
-    );
-
-    status!("Opening your browser for authentication...");
-    status!("If it does not open automatically, please click:");
-    status!("{auth_url}");
-
-    if let Err(e) = open::that(&auth_url) {
-        status!("Warning: could not open browser automatically: {e}");
-        status!("Please open the URL above manually.");
-    }
-
-    // Wait for the callback with timeout
-    let result = tokio::time::timeout(LOGIN_TIMEOUT, async {
-        let (stream, _) = listener.accept().await?;
-        stream.readable().await?;
-
-        let std_stream = stream.into_std()?;
-        let mut reader = BufReader::new(&std_stream);
-
-        let mut request_line = String::new();
-        reader.read_line(&mut request_line)?;
-
-        // Parse query params from GET /callback?jwt=...&state=...
-        let query = parse_query_from_request(&request_line);
-
-        let received_state = query
-            .iter()
-            .find(|(k, _)| k == "state")
-            .map(|(_, v)| v.as_str());
-
-        if received_state != Some(&state) {
-            send_response(&std_stream, 400, "Error: Invalid state parameter.")?;
-            anyhow::bail!("Invalid state parameter. Possible CSRF attack.");
-        }
-
-        let jwt = query
-            .iter()
-            .find(|(k, _)| k == "jwt")
-            .map(|(_, v)| v.clone());
-
-        let Some(jwt) = jwt else {
-            send_response(&std_stream, 400, "Error: JWT not found in callback.")?;
-            anyhow::bail!("Callback did not include a JWT.");
-        };
-
-        // Redirect browser to success page
-        let redirect = format!(
-            "HTTP/1.1 302 Found\r\nLocation: {}\r\nConnection: close\r\n\r\n",
-            config::SUCCESS_URL
-        );
-        (&std_stream).write_all(redirect.as_bytes())?;
-        (&std_stream).flush()?;
-
-        // Exchange JWT for API key
-        create_api_key_using_jwt(&jwt).await
-    })
-    .await;
-
-    match result {
-        Ok(inner) => inner,
-        Err(_) => anyhow::bail!("Login timed out. Please try again."),
-    }
-}
-
-async fn create_api_key_using_jwt(jwt: &str) -> anyhow::Result<(String, String)> {
-    let client = reqwest::Client::new();
-    let response = client
-        .post(config::API_KEYS_URL)
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {jwt}"))
-        .json(&serde_json::json!({"name": "CLI"}))
-        .send()
-        .await?;
-
-    if !response.status().is_success() {
-        anyhow::bail!(
-            "Failed to get API key: {} {}",
-            response.status().as_u16(),
-            response.status().canonical_reason().unwrap_or("")
-        );
-    }
-
-    let data: serde_json::Value = response.json().await?;
-    let key = data
-        .get("key")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("No API key found in response"))?;
-    let name = data
-        .get("name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("No name found in response"))?;
-
-    Ok((key.to_string(), name.to_string()))
-}
-
-fn save_api_key(api_key: &str, name: &str) -> anyhow::Result<()> {
-    let config_dir = config::config_dir();
-    std::fs::create_dir_all(&config_dir)?;
-    let config_path = config::config_path_in(&config_dir);
-
-    let mut config = read_config_from(&config_path).unwrap_or_else(|_| Config::default());
-    config.api_key = Some(api_key.to_string());
-    config.name = Some(name.to_string());
-
-    write_config_to(&config_path, &config)?;
-
-    Ok(())
-}
-
-fn parse_query_from_request(request_line: &str) -> Vec<(String, String)> {
-    // "GET /callback?jwt=xxx&state=yyy HTTP/1.1"
-    let parts: Vec<&str> = request_line.split_whitespace().collect();
-    if parts.len() < 2 {
-        return vec![];
-    }
-
-    let path = parts[1];
-    let query_start = match path.find('?') {
-        Some(i) => i + 1,
-        None => return vec![],
+    let device_name = if is_interactive {
+        Input::new()
+            .with_prompt("Device name")
+            .default(default_device_name())
+            .interact_text()?
+    } else {
+        default_device_name()
     };
 
-    let query_str = &path[query_start..];
-    query_str
-        .split('&')
-        .filter_map(|pair| {
-            let mut kv = pair.splitn(2, '=');
-            let key = kv.next()?;
-            let value = kv.next().unwrap_or("");
-            Some((
-                urlencoding::decode(key).unwrap_or_default().to_string(),
-                urlencoding::decode(value).unwrap_or_default().to_string(),
-            ))
-        })
-        .collect()
+    let authz = device_auth::request_device_authorization(base_url).await?;
+
+    // Essential instructions: printed directly so they are visible regardless of
+    // output mode (status! is suppressed when JSON output is active).
+    eprintln!();
+    eprintln!("Visit {} to finish logging in.", authz.verification_uri);
+    eprintln!(
+        "Enter this code (expires in {} seconds): {}",
+        authz.expires_in, authz.user_code
+    );
+    eprintln!();
+
+    let open_browser = if is_interactive {
+        Confirm::new()
+            .with_prompt("Open the browser?")
+            .default(true)
+            .interact()?
+    } else {
+        false
+    };
+
+    if open_browser {
+        if let Err(e) = open::that(&authz.verification_uri_complete) {
+            eprintln!("Could not open the browser automatically: {e}");
+            eprintln!(
+                "Open this URL manually: {}",
+                authz.verification_uri_complete
+            );
+        }
+    } else if !is_interactive {
+        eprintln!(
+            "Open this URL to authorize: {}",
+            authz.verification_uri_complete
+        );
+    }
+
+    status!("Waiting for authorization...");
+
+    let token = device_auth::poll_for_token(
+        base_url,
+        &authz.device_code,
+        &device_name,
+        authz.interval,
+        authz.expires_in,
+    )
+    .await?;
+
+    save_account(&token.access_token, &device_name, &token.org)?;
+
+    Ok(AuthOutcome {
+        account_token: token.access_token,
+        device_name,
+        org: token.org,
+    })
 }
 
-fn send_response(stream: &std::net::TcpStream, status: u16, body: &str) -> anyhow::Result<()> {
-    let response = format!(
-        "HTTP/1.1 {status} Error\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{body}"
-    );
-    let mut stream = stream;
-    stream.write_all(response.as_bytes())?;
-    stream.flush()?;
+fn save_account(token: &str, device_name: &str, org: &OrgPayload) -> anyhow::Result<()> {
+    let path = config::config_path();
+    let mut cfg = read_config_from(&path).unwrap_or_default();
+    cfg.account_token = Some(token.to_string());
+    cfg.name = Some(device_name.to_string());
+    cfg.org = Some(OrgInfo {
+        id: org.id.clone(),
+        slug: org.slug.clone(),
+        name: Some(org.name.clone()),
+    });
+    cfg.instance = Some("cloud".to_string());
+    write_config_to(&path, &cfg)?;
     Ok(())
 }
 
-fn generate_random_hex(bytes: usize) -> String {
-    let mut buf = vec![0u8; bytes];
-    getrandom::fill(&mut buf).expect("failed to generate random bytes");
-    buf.iter().map(|b| format!("{b:02x}")).collect()
+fn interactive() -> bool {
+    output::is_tty() && !output::is_json()
+}
+
+fn print_local_guidance() {
+    status!("Running Steel locally - no account needed.");
+    status!("");
+    status!("  steel dev install     Install the local Steel Browser runtime");
+    status!("  steel dev start       Start the local runtime");
+    status!("  steel --local ...     Run any command against the local runtime");
+    status!("");
+    status!("Run `steel login` again any time to connect a cloud account.");
+}
+
+/// Best-effort device name from the host machine. Avoids `unsafe`/extra deps by
+/// shelling out to `hostname`, then falling back to env vars.
+fn default_device_name() -> String {
+    if let Ok(output) = std::process::Command::new("hostname").output()
+        && output.status.success()
+    {
+        let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !name.is_empty() {
+            return name;
+        }
+    }
+
+    for key in ["HOSTNAME", "COMPUTERNAME", "USER", "USERNAME"] {
+        if let Ok(value) = std::env::var(key) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    "Steel CLI".to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // --- parse_query_from_request ---
-
     #[test]
-    fn parse_query_normal_get() {
-        let query = parse_query_from_request("GET /callback?code=abc&state=xyz HTTP/1.1\r\n");
-        assert_eq!(query.len(), 2);
-        assert_eq!(query[0], ("code".to_string(), "abc".to_string()));
-        assert_eq!(query[1], ("state".to_string(), "xyz".to_string()));
+    fn default_device_name_is_non_empty() {
+        assert!(!default_device_name().is_empty());
     }
 
     #[test]
-    fn parse_query_no_query_string() {
-        let query = parse_query_from_request("GET /callback HTTP/1.1\r\n");
-        assert!(query.is_empty());
-    }
-
-    #[test]
-    fn parse_query_empty_input() {
-        let query = parse_query_from_request("");
-        assert!(query.is_empty());
-    }
-
-    #[test]
-    fn parse_query_single_word() {
-        let query = parse_query_from_request("GET");
-        assert!(query.is_empty());
-    }
-
-    #[test]
-    fn parse_query_url_encoded() {
-        let query = parse_query_from_request("GET /cb?msg=hello%20world HTTP/1.1\r\n");
-        assert_eq!(query.len(), 1);
-        assert_eq!(query[0], ("msg".to_string(), "hello world".to_string()));
-    }
-
-    #[test]
-    fn parse_query_empty_value() {
-        let query = parse_query_from_request("GET /cb?key= HTTP/1.1\r\n");
-        assert_eq!(query.len(), 1);
-        assert_eq!(query[0], ("key".to_string(), "".to_string()));
-    }
-
-    #[test]
-    fn parse_query_key_without_equals() {
-        let query = parse_query_from_request("GET /cb?flag HTTP/1.1\r\n");
-        assert_eq!(query.len(), 1);
-        assert_eq!(query[0], ("flag".to_string(), "".to_string()));
-    }
-
-    #[test]
-    fn parse_query_multiple_params() {
-        let query = parse_query_from_request("GET /cb?a=1&b=2&c=3 HTTP/1.1\r\n");
-        assert_eq!(query.len(), 3);
-        assert_eq!(query[0].0, "a");
-        assert_eq!(query[1].0, "b");
-        assert_eq!(query[2].0, "c");
-    }
-
-    #[test]
-    fn parse_query_value_with_equals() {
-        let query = parse_query_from_request("GET /cb?q=a=b HTTP/1.1\r\n");
-        assert_eq!(query.len(), 1);
-        assert_eq!(query[0], ("q".to_string(), "a=b".to_string()));
-    }
-
-    // --- generate_random_hex ---
-
-    #[test]
-    fn random_hex_length() {
-        assert_eq!(generate_random_hex(16).len(), 32);
-        assert_eq!(generate_random_hex(1).len(), 2);
-    }
-
-    #[test]
-    fn random_hex_chars_only() {
-        let hex = generate_random_hex(16);
-        assert!(hex.chars().all(|c| c.is_ascii_hexdigit()));
-    }
-
-    #[test]
-    fn random_hex_uniqueness() {
-        let a = generate_random_hex(16);
-        let b = generate_random_hex(16);
-        assert_ne!(a, b);
+    fn org_label_uses_name() {
+        let outcome = AuthOutcome {
+            account_token: "ste-cli-x".into(),
+            device_name: "Mac".into(),
+            org: OrgPayload {
+                id: "org-1".into(),
+                slug: Some("acme".into()),
+                name: "Acme".into(),
+            },
+        };
+        assert_eq!(outcome.org_label(), "Acme");
     }
 }
