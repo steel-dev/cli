@@ -4,6 +4,7 @@ use clap::Parser;
 use serde_json::{Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
+use crate::api::projects::{environment_label, parse_projects, resolve_current_project};
 use crate::browser::daemon::process;
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
@@ -41,7 +42,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     };
 
     // Sort by category order
-    const ORDER: &[&str] = &["auth", "api", "sessions", "version"];
+    const ORDER: &[&str] = &["auth", "project", "api", "sessions", "version"];
     checks.sort_by_key(|c| ORDER.iter().position(|&o| o == c.category).unwrap_or(99));
 
     let has_fail = checks.iter().any(|c| c.status == "fail");
@@ -135,18 +136,30 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
         return checks;
     };
 
-    let start = Instant::now();
-    let result = client
-        .request(
-            base_url,
-            mode,
-            reqwest::Method::GET,
-            "/sessions",
-            None,
-            auth,
-        )
-        .await;
-    let latency_ms = start.elapsed().as_millis();
+    let timed_sessions = async {
+        let start = Instant::now();
+        let result = client
+            .request(
+                base_url,
+                mode,
+                reqwest::Method::GET,
+                "/sessions",
+                None,
+                auth,
+            )
+            .await;
+        (result, start.elapsed().as_millis())
+    };
+    // Project info is informational only: fetched alongside the auth probe,
+    // silently skipped on any error so doctor never degrades because of it.
+    let projects = async {
+        if need_auth {
+            client.get_projects(base_url, mode, auth).await.ok()
+        } else {
+            None
+        }
+    };
+    let ((result, latency_ms), projects_data) = tokio::join!(timed_sessions, projects);
 
     match result {
         Ok(_) => {
@@ -167,6 +180,9 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
                     fix: None,
                     transient: false,
                 });
+                if let Some(check) = project_check(projects_data.as_ref()) {
+                    checks.push(check);
+                }
             }
         }
         Err(ApiError::Unreachable { .. } | ApiError::Other(_)) => {
@@ -222,6 +238,31 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
     }
 
     checks
+}
+
+/// Build the project/environment check from a `/projects` response body.
+/// Returns `None` when the response is absent or no single project resolves.
+fn project_check(data: Option<&Value>) -> Option<Check> {
+    let projects = parse_projects(data?);
+    let current = resolve_current_project(&projects)?;
+    Some(Check {
+        category: "project",
+        name: format!(
+            "Project \"{}\" ({}) — {}",
+            current.name,
+            current.slug,
+            environment_label(current.is_production)
+        ),
+        status: "pass",
+        detail: json!({
+            "project_id": current.id,
+            "name": current.name,
+            "slug": current.slug,
+            "is_production": current.is_production,
+        }),
+        fix: None,
+        transient: false,
+    })
 }
 
 fn check_sessions() -> Vec<Check> {
@@ -361,6 +402,7 @@ fn print_text(checks: &[Check]) {
 fn format_category(s: &str) -> &str {
     match s {
         "auth" => "Auth",
+        "project" => "Project",
         "api" => "API",
         "sessions" => "Sessions",
         "version" => "Version",
@@ -421,9 +463,64 @@ mod tests {
     #[test]
     fn format_categories() {
         assert_eq!(format_category("auth"), "Auth");
+        assert_eq!(format_category("project"), "Project");
         assert_eq!(format_category("api"), "API");
         assert_eq!(format_category("sessions"), "Sessions");
         assert_eq!(format_category("version"), "Version");
+    }
+
+    #[test]
+    fn project_check_resolves_single_project() {
+        let data = json!({
+            "projects": [{
+                "id": "p1",
+                "name": "Default project",
+                "slug": "default",
+                "isProduction": false,
+                "isDefault": true
+            }]
+        });
+
+        let check = project_check(Some(&data)).unwrap();
+        assert_eq!(check.category, "project");
+        assert_eq!(check.status, "pass");
+        assert_eq!(
+            check.name,
+            "Project \"Default project\" (default) — development"
+        );
+        assert_eq!(check.detail["is_production"], json!(false));
+        assert_eq!(check.detail["project_id"], json!("p1"));
+    }
+
+    #[test]
+    fn project_check_production_label() {
+        let data = json!({
+            "projects": [{
+                "id": "p2",
+                "name": "Main",
+                "slug": "main",
+                "isProduction": true
+            }]
+        });
+
+        let check = project_check(Some(&data)).unwrap();
+        assert_eq!(check.name, "Project \"Main\" (main) — production");
+    }
+
+    #[test]
+    fn project_check_none_without_data() {
+        assert!(project_check(None).is_none());
+    }
+
+    #[test]
+    fn project_check_none_when_ambiguous() {
+        let data = json!({
+            "projects": [
+                {"id": "a", "name": "A", "slug": "a"},
+                {"id": "b", "name": "B", "slug": "b"}
+            ]
+        });
+        assert!(project_check(Some(&data)).is_none());
     }
 
     #[test]
