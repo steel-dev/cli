@@ -6,7 +6,7 @@ use crate::config;
 use crate::config::auth;
 use crate::config::settings::read_config_from;
 use crate::status;
-use crate::util::{api, output};
+use crate::util::{api, output, style};
 
 #[derive(Parser)]
 pub struct Args {
@@ -25,34 +25,36 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    status!("Steel CLI setup");
+    status!("");
+    status!("{}", style::bold("Steel CLI setup"));
+    status!("{}", style::dim("Browser automation for AI agents"));
     if let Ok(from) = std::env::var("STEEL_ONBOARDING_FROM")
         && !from.is_empty()
     {
-        status!("Onboarding source: {from}");
+        status!("{}", style::dim(&format!("Onboarding source: {from}")));
     }
     status!("");
 
     let (mode, base_url) = api::resolve();
 
     // Step 1: authenticate (account-level CLI token).
-    let mut just_authenticated = false;
+    let mut tos_required = false;
     let account_token = match auth::resolve_account_token() {
         Some(token) => {
-            status!("Already logged in.");
+            status!("{} Already logged in.", style::tick());
             token
         }
         None => {
             let outcome = login::authenticate(&base_url).await?;
-            status!("Logged in to {}.", outcome.org_label());
-            just_authenticated = true;
+            status!("{} Logged in to {}.", style::tick(), outcome.org_label());
+            tos_required = outcome.tos_required;
             outcome.account_token
         }
     };
 
     // Step 2: Terms of Service. Only prompt during first-time login; an
     // already-authenticated user has already accepted them.
-    if just_authenticated && !confirm_tos(args.agent)? {
+    if tos_required && !confirm_tos(args.agent)? {
         anyhow::bail!("You must accept the Terms of Service to continue.");
     }
 
@@ -76,10 +78,24 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         status!("  • Take a screenshot. Ask for a URL, then run: steel screenshot <url>");
         status!("  • Start an interactive browser session: steel browser start --session demo");
     } else {
-        status!("Setup complete. Try one of these:");
-        status!("  steel scrape https://example.com");
-        status!("  steel browser start --session hello");
-        status!("  steel --help");
+        status!("{} {}", style::tick(), style::bold("Setup complete!"));
+        status!("");
+        status!("{}", style::dim("Try one of these:"));
+        status!(
+            "  {}  {}",
+            style::cyan(&format!("{:<36}", "steel scrape https://example.com")),
+            style::dim("Scrape a page to markdown")
+        );
+        status!(
+            "  {}  {}",
+            style::cyan(&format!("{:<36}", "steel browser start --session hello")),
+            style::dim("Start a browser session")
+        );
+        status!(
+            "  {}  {}",
+            style::cyan(&format!("{:<36}", "steel --help")),
+            style::dim("See all commands")
+        );
     }
 
     Ok(())
@@ -117,7 +133,7 @@ async fn setup_project(
         return Ok(());
     }
 
-    let name: String = Input::new()
+    let name: String = Input::with_theme(&*style::prompt_theme())
         .with_prompt("Project name")
         .default(projects::default_project_name())
         .interact_text()?;
@@ -145,7 +161,7 @@ fn confirm_tos(agent: bool) -> anyhow::Result<bool> {
         return Ok(true);
     }
 
-    Ok(Confirm::new()
+    Ok(Confirm::with_theme(&*style::prompt_theme())
         .with_prompt(format!("Do you agree to our Terms of Service at {url}?"))
         .default(true)
         .interact()?)

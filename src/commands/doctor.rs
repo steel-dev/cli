@@ -8,7 +8,7 @@ use crate::api::projects::{environment_label, parse_projects, resolve_current_pr
 use crate::browser::daemon::process;
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
-use crate::util::output;
+use crate::util::{output, style};
 
 #[derive(Parser)]
 pub struct Args {
@@ -365,7 +365,6 @@ async fn check_version() -> Vec<Check> {
 }
 
 fn print_text(checks: &[Check]) {
-    let use_color = !output::no_color();
     let mut current_category = "";
 
     for check in checks {
@@ -373,27 +372,20 @@ fn print_text(checks: &[Check]) {
             if !current_category.is_empty() {
                 println!();
             }
-            println!("  {}", format_category(check.category));
+            println!("  {}", style::bold(format_category(check.category)));
             current_category = check.category;
         }
 
-        let symbol = match (check.status, use_color) {
-            ("pass", true) => "\x1b[32m✓\x1b[0m",
-            ("degraded", true) => "\x1b[33m!\x1b[0m",
-            ("fail", true) => "\x1b[31m✗\x1b[0m",
-            ("pass", false) => "✓",
-            ("degraded", false) => "!",
-            ("fail", false) => "✗",
-            _ => "?",
+        let symbol = match check.status {
+            "pass" => style::tick(),
+            "degraded" => style::bang(),
+            "fail" => style::cross(),
+            _ => "?".to_string(),
         };
 
         println!("    {symbol} {}", check.name);
         if let Some(fix) = check.fix {
-            if use_color {
-                println!("      \x1b[2m→ {fix}\x1b[0m");
-            } else {
-                println!("      → {fix}");
-            }
+            println!("      {}", style::dim(&format!("→ {fix}")));
         }
     }
     println!();

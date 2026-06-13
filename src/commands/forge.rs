@@ -9,7 +9,7 @@ use serde_json::json;
 use zip::ZipArchive;
 
 use crate::status;
-use crate::util::output;
+use crate::util::{output, style};
 
 const COOKBOOK_REPO: &str = "steel-dev/steel-cookbook";
 // To bump: run scripts/bump-cookbook.sh [<ref>] (defaults to upstream main).
@@ -157,7 +157,7 @@ async fn ensure_cookbook_at(cache: &Path, repo: &str, git_ref: &str) -> anyhow::
     }
 
     let short = &git_ref[..12.min(git_ref.len())];
-    status!("Fetching templates from {repo}@{short}...");
+    let spinner = style::spinner(format!("Fetching templates from {repo}@{short}…"));
 
     let url = format!("https://codeload.github.com/{repo}/zip/{git_ref}");
     let bytes = reqwest::get(&url)
@@ -206,6 +206,7 @@ async fn ensure_cookbook_at(cache: &Path, repo: &str, git_ref: &str) -> anyhow::
         Err(e) => return Err(e.into()),
     }
 
+    spinner.finish_and_clear();
     prune_old_cache_siblings(cache);
 
     Ok(())
@@ -292,7 +293,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             .map(|r| format!("{} [{}]", r.title, r.language))
             .collect();
 
-        let selection = Select::new()
+        let selection = Select::with_theme(&*style::prompt_theme())
             .with_prompt("Select a template")
             .items(&items)
             .default(0)
@@ -306,7 +307,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let project_name = if let Some(ref name) = args.name {
         name.clone()
     } else {
-        Input::new()
+        Input::with_theme(&*style::prompt_theme())
             .with_prompt("Project name")
             .default(slug.to_string())
             .interact_text()?
@@ -334,7 +335,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     copy_dir(&template_src, &target_dir)?;
 
     status!(
-        "Project '{}' created at {}",
+        "{} Project '{}' created at {}",
+        style::tick(),
         project_name,
         target_dir.display()
     );

@@ -38,6 +38,8 @@ pub struct DeviceTokenSuccess {
     #[allow(dead_code)]
     pub token_name: String,
     pub org: OrgPayload,
+    #[serde(default)]
+    pub tos_required: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -7,7 +7,7 @@ use crate::config;
 use crate::config::auth;
 use crate::config::settings::{ApiMode, ProjectInfo, read_config_from, write_config_to};
 use crate::status;
-use crate::util::{api, output};
+use crate::util::{api, output, style};
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -110,7 +110,7 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
         Some(name) if !name.trim().is_empty() => name,
         _ => {
             if output::is_tty() && !output::is_json() {
-                Input::new()
+                Input::with_theme(&*style::prompt_theme())
                     .with_prompt("Project name")
                     .default(default_project_name())
                     .interact_text()?
@@ -162,7 +162,7 @@ async fn run_select(args: SelectArgs) -> anyhow::Result<()> {
                 .iter()
                 .map(|p| format!("{} [{}]", p.name, p.slug))
                 .collect();
-            let selection = Select::new()
+            let selection = Select::with_theme(&*style::prompt_theme())
                 .with_prompt("Select active project")
                 .items(&labels)
                 .default(0)

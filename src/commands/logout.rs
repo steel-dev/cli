@@ -4,7 +4,7 @@ use crate::api::device_auth;
 use crate::config;
 use crate::config::settings::{read_config_from, write_config_to};
 use crate::status;
-use crate::util::api;
+use crate::util::{api, style};
 
 #[derive(Parser)]
 pub struct Args {}
@@ -25,11 +25,16 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    let org_label = cfg.org.as_ref().and_then(|o| o.name.clone());
+
     // Best-effort server-side revocation of the account token.
     if let Some(token) = cfg.account_token.clone() {
         let (mode, base_url) = api::resolve();
         if let Err(e) = device_auth::revoke_account_token(&base_url, mode, &token).await {
-            status!("Warning: could not revoke the CLI token on the server: {e}");
+            status!(
+                "{} Could not revoke the CLI token on the server: {e}",
+                style::bang()
+            );
         }
     }
 
@@ -41,7 +46,11 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
 
     write_config_to(&config_path, &cfg)?;
 
-    status!("Successfully logged out. Have a great day!");
+    match org_label {
+        Some(name) => status!("{} Logged out of {name}.", style::tick()),
+        None => status!("{} Logged out.", style::tick()),
+    }
+    status!("{}", style::dim("Run steel login to sign back in."));
 
     Ok(())
 }

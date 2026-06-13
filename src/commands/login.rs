@@ -7,7 +7,7 @@ use crate::config;
 use crate::config::auth;
 use crate::config::settings::{OrgInfo, read_config_from, write_config_to};
 use crate::status;
-use crate::util::{api, output};
+use crate::util::{api, output, style};
 
 #[derive(Parser)]
 pub struct Args {}
@@ -17,6 +17,7 @@ pub struct AuthOutcome {
     pub account_token: String,
     pub device_name: String,
     pub org: OrgPayload,
+    pub tos_required: bool,
 }
 
 impl AuthOutcome {
@@ -34,7 +35,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
     let (mode, base_url) = api::resolve();
 
     if interactive() {
-        let choice = Select::new()
+        let choice = Select::with_theme(&*style::prompt_theme())
             .with_prompt("Welcome to Steel! Would you like to log in?")
             .items([
                 "Use Steel locally (no account)",
@@ -61,7 +62,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
 
     crate::telemetry::track_event("login_completed", serde_json::Map::new());
 
-    status!("Logged in to {}.", outcome.org_label());
+    status!("{} Logged in to {}.", style::tick(), outcome.org_label());
     if let Some(name) = project.name.as_deref() {
         status!("Active project: {name}");
     }
@@ -78,7 +79,7 @@ pub async fn authenticate(base_url: &str) -> anyhow::Result<AuthOutcome> {
     let is_interactive = interactive();
 
     let device_name = if is_interactive {
-        Input::new()
+        Input::with_theme(&*style::prompt_theme())
             .with_prompt("Device name")
             .default(default_device_name())
             .interact_text()?
@@ -89,17 +90,22 @@ pub async fn authenticate(base_url: &str) -> anyhow::Result<AuthOutcome> {
     let authz = device_auth::request_device_authorization(base_url).await?;
 
     // Essential instructions: printed directly so they are visible regardless of
-    // output mode (status! is suppressed when JSON output is active).
-    eprintln!();
-    eprintln!("Visit {} to finish logging in.", authz.verification_uri);
-    eprintln!(
-        "Enter this code (expires in {} seconds): {}",
-        authz.expires_in, authz.user_code
-    );
-    eprintln!();
+    // output mode (status! is suppressed when JSON output is active). Humans get
+    // a spotlighted block; non-interactive/CI gets plain, parseable lines.
+    if is_interactive {
+        print_auth_prompt(&authz);
+    } else {
+        eprintln!();
+        eprintln!("Visit {} to finish logging in.", authz.verification_uri);
+        eprintln!(
+            "Enter this code (expires in {} seconds): {}",
+            authz.expires_in, authz.user_code
+        );
+        eprintln!();
+    }
 
     let open_browser = if is_interactive {
-        Confirm::new()
+        Confirm::with_theme(&*style::prompt_theme())
             .with_prompt("Open the browser?")
             .default(true)
             .interact()?
@@ -122,8 +128,7 @@ pub async fn authenticate(base_url: &str) -> anyhow::Result<AuthOutcome> {
         );
     }
 
-    status!("Waiting for authorization...");
-
+    let spinner = style::spinner("Waiting for authorization…");
     let token = device_auth::poll_for_token(
         base_url,
         &authz.device_code,
@@ -131,7 +136,9 @@ pub async fn authenticate(base_url: &str) -> anyhow::Result<AuthOutcome> {
         authz.interval,
         authz.expires_in,
     )
-    .await?;
+    .await;
+    spinner.finish_and_clear();
+    let token = token?;
 
     save_account(&token.access_token, &device_name, &token.org)?;
 
@@ -139,6 +146,7 @@ pub async fn authenticate(base_url: &str) -> anyhow::Result<AuthOutcome> {
         account_token: token.access_token,
         device_name,
         org: token.org,
+        tos_required: token.tos_required,
     })
 }
 
@@ -159,6 +167,42 @@ fn save_account(token: &str, device_name: &str, org: &OrgPayload) -> anyhow::Res
 
 fn interactive() -> bool {
     output::is_tty() && !output::is_json()
+}
+
+/// Pretty, interactive-only device-login instructions: a styled URL and the
+/// one-time code spotlighted in a box so it's easy to spot and copy.
+fn print_auth_prompt(authz: &device_auth::DeviceAuthorization) {
+    eprintln!();
+    eprintln!(
+        "  To finish logging in, visit  {}",
+        style::link(&authz.verification_uri)
+    );
+    eprintln!(
+        "  and enter this code {}:",
+        style::dim(&format!(
+            "(expires in {})",
+            humanize_duration(authz.expires_in)
+        ))
+    );
+    eprintln!();
+    eprintln!("{}", style::code_box(&authz.user_code, "  "));
+    eprintln!();
+}
+
+/// Render a second count as a friendly duration, e.g. 900 -> "15 minutes".
+fn humanize_duration(secs: u64) -> String {
+    if secs >= 60 {
+        let mins = secs / 60;
+        let unit = if mins == 1 { "minute" } else { "minutes" };
+        if secs.is_multiple_of(60) {
+            format!("{mins} {unit}")
+        } else {
+            format!("~{mins} {unit}")
+        }
+    } else {
+        let unit = if secs == 1 { "second" } else { "seconds" };
+        format!("{secs} {unit}")
+    }
 }
 
 fn print_local_guidance() {
@@ -205,6 +249,16 @@ mod tests {
     }
 
     #[test]
+    fn humanize_duration_formats() {
+        assert_eq!(humanize_duration(900), "15 minutes");
+        assert_eq!(humanize_duration(60), "1 minute");
+        assert_eq!(humanize_duration(90), "~1 minute");
+        assert_eq!(humanize_duration(150), "~2 minutes");
+        assert_eq!(humanize_duration(45), "45 seconds");
+        assert_eq!(humanize_duration(1), "1 second");
+    }
+
+    #[test]
     fn org_label_uses_name() {
         let outcome = AuthOutcome {
             account_token: "ste-cli-x".into(),
@@ -214,6 +268,7 @@ mod tests {
                 slug: Some("acme".into()),
                 name: "Acme".into(),
             },
+            tos_required: false,
         };
         assert_eq!(outcome.org_label(), "Acme");
     }
