@@ -1,5 +1,5 @@
 use clap::Parser;
-use dialoguer::{Confirm, Input};
+use dialoguer::Confirm;
 
 use crate::commands::{doctor, login, projects, skills};
 use crate::config;
@@ -133,15 +133,11 @@ async fn setup_project(
         return Ok(());
     }
 
-    let name: String = Input::with_theme(&*style::prompt_theme())
-        .with_prompt("Project name")
-        .default(projects::default_project_name())
-        .interact_text()?;
-
     let project =
-        projects::create_and_activate(base_url, mode, account_token, &name, &device_name).await?;
+        projects::choose_project_interactive(base_url, mode, account_token, &device_name).await?;
     status!(
-        "Created project: {}",
+        "{} Using project: {}",
+        style::tick(),
         project.name.as_deref().unwrap_or(&project.id)
     );
 

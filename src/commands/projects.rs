@@ -285,6 +285,75 @@ pub async fn ensure_active_project(
     activate_project(base_url, mode, account_token, &project, device_name).await
 }
 
+/// Interactive project selection for `steel init`.
+pub async fn choose_project_interactive(
+    base_url: &str,
+    mode: ApiMode,
+    account_token: &str,
+    device_name: &str,
+) -> anyhow::Result<ProjectInfo> {
+    let projects = device_auth::list_projects(base_url, mode, account_token).await?;
+
+    let Some(default_project) = projects
+        .iter()
+        .find(|p| p.is_default)
+        .or_else(|| projects.first())
+    else {
+        let name = prompt_project_name(&default_project_name())?;
+        return create_and_activate(base_url, mode, account_token, &name, device_name).await;
+    };
+
+    // Multiple projects: pick an existing one or create a new one.
+    if projects.len() > 1 {
+        let mut labels: Vec<String> = projects
+            .iter()
+            .map(|p| {
+                let tag = if p.is_default { " (default)" } else { "" };
+                format!("{} [{}]{tag}", p.name, p.slug)
+            })
+            .collect();
+        let create_index = labels.len();
+        labels.push("Create a new project".to_string());
+
+        let default_index = projects.iter().position(|p| p.is_default).unwrap_or(0);
+        let selection = Select::with_theme(&*style::prompt_theme())
+            .with_prompt("Select a project")
+            .items(&labels)
+            .default(default_index)
+            .interact()?;
+
+        if selection == create_index {
+            let name = prompt_project_name(&default_project_name())?;
+            return create_and_activate(base_url, mode, account_token, &name, device_name).await;
+        }
+
+        return activate_project(
+            base_url,
+            mode,
+            account_token,
+            &projects[selection],
+            device_name,
+        )
+        .await;
+    }
+
+    // Exactly one project (the default): reuse it unless the user renames.
+    let default_name = default_project.name.clone();
+    let name = prompt_project_name(&default_name)?;
+    if name.trim().eq_ignore_ascii_case(default_name.trim()) {
+        return activate_project(base_url, mode, account_token, default_project, device_name).await;
+    }
+
+    create_and_activate(base_url, mode, account_token, &name, device_name).await
+}
+
+fn prompt_project_name(default: &str) -> anyhow::Result<String> {
+    Ok(Input::with_theme(&*style::prompt_theme())
+        .with_prompt("Project name")
+        .default(default.to_string())
+        .interact_text()?)
+}
+
 fn save_active_project(project: &ProjectInfo, api_key: &str) -> anyhow::Result<()> {
     let path = config::config_path();
     let mut cfg = read_config_from(&path).unwrap_or_default();
