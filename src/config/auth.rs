@@ -66,12 +66,43 @@ pub fn read_api_key_from_config(path: &Path) -> Option<String> {
         .filter(|k| !k.trim().is_empty())
 }
 
+/// Read the account token from a config file at the given path.
+pub fn read_account_token_from_config(path: &Path) -> Option<String> {
+    settings::read_config_from(path)
+        .ok()
+        .and_then(|c| c.account_token)
+        .filter(|t| !t.trim().is_empty())
+}
+
 /// Resolve API key from environment and default config path.
 pub fn resolve_auth() -> Auth {
     let env_key = std::env::var("STEEL_API_KEY").ok();
     let config_key = read_api_key_from_config(&super::config_path());
 
     resolve_auth_with(env_key.as_deref(), config_key.as_deref())
+}
+
+/// Resolve the account-level CLI token.
+///
+/// Priority: `STEEL_ACCOUNT_TOKEN` env var -> config file.
+pub fn resolve_account_token() -> Option<String> {
+    if let Ok(token) = std::env::var("STEEL_ACCOUNT_TOKEN") {
+        let trimmed = token.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    read_account_token_from_config(&super::config_path())
+}
+
+/// Build an `Auth` value that carries the account token in the API-key slot, so
+/// management requests authenticate via the `Steel-Api-Key` header (the API routes
+/// account tokens by prefix).
+pub fn account_token_auth(token: &str) -> Auth {
+    Auth {
+        api_key: Some(token.to_string()),
+        source: AuthSource::Config,
+    }
 }
 
 #[cfg(test)]
