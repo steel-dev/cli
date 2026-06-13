@@ -90,13 +90,24 @@ async fn run_list() -> anyhow::Result<()> {
         status!("No projects found.");
     } else {
         for p in &projects {
-            let marker = if active.as_deref() == Some(p.id.as_str()) {
-                "* "
+            let is_active = active.as_deref() == Some(p.id.as_str());
+            let marker = if is_active {
+                style::green("●")
             } else {
-                "  "
+                " ".to_string()
             };
-            let default_tag = if p.is_default { " (default)" } else { "" };
-            println!("{marker}{} [{}]{default_tag}", p.name, p.slug);
+            let name = if is_active {
+                style::bold(&p.name)
+            } else {
+                p.name.clone()
+            };
+            let slug = style::dim(&format!("[{}]", p.slug));
+            let default_tag = if p.is_default {
+                style::dim(" (default)")
+            } else {
+                String::new()
+            };
+            println!("{marker} {name} {slug}{default_tag}");
         }
     }
 
@@ -132,9 +143,11 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
         }));
     } else {
         status!(
-            "Created project '{}' and set it as active.",
-            project.name.as_deref().unwrap_or(&project.id)
+            "{} Created project {}.",
+            style::tick(),
+            style::bold(project.name.as_deref().unwrap_or(&project.id))
         );
+        status!("{}", style::dim("Now your active project."));
     }
 
     Ok(())
@@ -183,8 +196,9 @@ async fn run_select(args: SelectArgs) -> anyhow::Result<()> {
         }));
     } else {
         status!(
-            "Active project is now '{}'.",
-            info.name.as_deref().unwrap_or(&info.id)
+            "{} Active project is now {}.",
+            style::tick(),
+            style::bold(info.name.as_deref().unwrap_or(&info.id))
         );
     }
 
@@ -203,9 +217,16 @@ fn run_current() -> anyhow::Result<()> {
                 }));
             } else {
                 println!(
-                    "{} [{}]",
-                    project.name.as_deref().unwrap_or(&project.id),
-                    project.slug.as_deref().unwrap_or("")
+                    "{} {}",
+                    style::bold(project.name.as_deref().unwrap_or(&project.id)),
+                    style::dim(&format!("[{}]", project.slug.as_deref().unwrap_or("")))
+                );
+                println!(
+                    "{}",
+                    style::dim(&format!(
+                        "environment: {}",
+                        crate::api::projects::environment_label(project.is_production)
+                    ))
                 );
             }
         }
