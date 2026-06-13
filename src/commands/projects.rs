@@ -2,7 +2,8 @@ use clap::{Parser, Subcommand};
 use dialoguer::{Input, Select};
 use serde_json::json;
 
-use crate::api::device_auth::{self, ProjectPayload};
+use crate::api::device_auth;
+use crate::api::projects::Project;
 use crate::config;
 use crate::config::auth;
 use crate::config::settings::{ApiMode, ProjectInfo, read_config_from, write_config_to};
@@ -234,7 +235,7 @@ pub async fn activate_project(
     base_url: &str,
     mode: ApiMode,
     account_token: &str,
-    project: &ProjectPayload,
+    project: &Project,
     device_name: &str,
 ) -> anyhow::Result<ProjectInfo> {
     let key = device_auth::create_project_api_key(
@@ -250,6 +251,7 @@ pub async fn activate_project(
         id: project.id.clone(),
         slug: Some(project.slug.clone()),
         name: Some(project.name.clone()),
+        is_production: project.is_production,
     };
     save_active_project(&info, &key)?;
     Ok(info)

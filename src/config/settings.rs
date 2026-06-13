@@ -143,6 +143,8 @@ pub struct ProjectInfo {
     pub slug: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(default)]
+    pub is_production: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -235,6 +237,7 @@ mod tests {
                 id: "proj-1".into(),
                 slug: Some("dev".into()),
                 name: Some("Dev".into()),
+                is_production: false,
             }),
             browser: Some(BrowserConfig {
                 api_url: Some("http://localhost:4000/v1".into()),

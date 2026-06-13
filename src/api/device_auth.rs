@@ -11,6 +11,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::api::client::SteelClient;
+use crate::api::projects::{Project, parse_projects};
 use crate::config::auth;
 use crate::config::settings::ApiMode;
 
@@ -40,16 +41,6 @@ pub struct DeviceTokenSuccess {
     pub org: OrgPayload,
     #[serde(default)]
     pub tos_required: bool,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectPayload {
-    pub id: String,
-    pub slug: String,
-    pub name: String,
-    #[serde(default)]
-    pub is_default: bool,
 }
 
 /// Start a device authorization request. Returns the user code and verification URLs.
@@ -165,30 +156,14 @@ pub async fn list_projects(
     base_url: &str,
     mode: ApiMode,
     account_token: &str,
-) -> anyhow::Result<Vec<ProjectPayload>> {
+) -> anyhow::Result<Vec<Project>> {
     let client = SteelClient::new()?;
     let data = client
-        .request(
-            base_url,
-            mode,
-            reqwest::Method::GET,
-            "/projects",
-            None,
-            &auth::account_token_auth(account_token),
-        )
+        .get_projects(base_url, mode, &auth::account_token_auth(account_token))
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    let projects = data
-        .get("projects")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
-
-    Ok(projects
-        .into_iter()
-        .filter_map(|p| serde_json::from_value(p).ok())
-        .collect())
+    Ok(parse_projects(&data))
 }
 
 /// Create a new project. Requires an org admin account token (API returns 403 otherwise).
@@ -197,7 +172,7 @@ pub async fn create_project(
     mode: ApiMode,
     account_token: &str,
     name: &str,
-) -> anyhow::Result<ProjectPayload> {
+) -> anyhow::Result<Project> {
     let client = SteelClient::new()?;
     let data = client
         .request(
@@ -310,19 +285,5 @@ mod tests {
         assert_eq!(parsed.access_token, "ste-cli-abc");
         assert_eq!(parsed.org.id, "org-1");
         assert_eq!(parsed.org.name, "Acme");
-    }
-
-    #[test]
-    fn project_payload_deserializes_camel_case() {
-        let body = json!({
-            "id": "proj-1",
-            "slug": "dev",
-            "name": "Dev",
-            "isDefault": true,
-            "isProduction": false
-        });
-        let parsed: ProjectPayload = serde_json::from_value(body).unwrap();
-        assert_eq!(parsed.id, "proj-1");
-        assert!(parsed.is_default);
     }
 }

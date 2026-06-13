@@ -1,11 +1,8 @@
-use std::time::Duration;
-
 use clap::Parser;
 
-use crate::api::client::SteelClient;
-use crate::api::projects::{environment_label, parse_projects, resolve_current_project};
-use crate::config::auth::{self, Auth};
-use crate::config::settings::{ApiMode, read_config};
+use crate::api::projects::environment_label;
+use crate::config::auth;
+use crate::config::settings::{Config, read_config};
 
 #[derive(Parser)]
 pub struct Args {}
@@ -29,7 +26,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         println!("source: {}", auth.source);
     }
 
-    print_project_info(&auth).await;
+    print_project_info(config.as_ref());
 
     if let Some(ref cfg) = config
         && let Some(ref browser) = cfg.browser
@@ -45,26 +42,15 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Print the project (environment) the API key is scoped to.
-/// Best-effort: skipped in local mode, without a key, or on any fetch error,
-/// so `steel config` stays usable offline.
-async fn print_project_info(auth: &Auth) {
-    let (mode, base_url) = crate::util::api::resolve();
-    if mode != ApiMode::Cloud || auth.api_key.is_none() {
-        return;
-    }
-    let Ok(client) = SteelClient::new() else {
+/// Print the active project (and its environment) recorded at login / selection.
+fn print_project_info(config: Option<&Config>) {
+    let Some(project) = config.and_then(|c| c.project.as_ref()) else {
         return;
     };
-
-    let fetch = client.get_projects(&base_url, mode, auth);
-    let Ok(Ok(data)) = tokio::time::timeout(Duration::from_secs(2), fetch).await else {
-        return;
-    };
-
-    let projects = parse_projects(&data);
-    if let Some(project) = resolve_current_project(&projects) {
-        println!("project: {} ({})", project.name, project.slug);
-        println!("environment: {}", environment_label(project.is_production));
-    }
+    let name = project.name.as_deref().unwrap_or(&project.id);
+    println!(
+        "project: {name} ({})",
+        project.slug.as_deref().unwrap_or("")
+    );
+    println!("environment: {}", environment_label(project.is_production));
 }
