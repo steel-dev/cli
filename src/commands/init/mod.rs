@@ -1,5 +1,4 @@
 use clap::Parser;
-use dialoguer::Confirm;
 
 use crate::commands::{doctor, login, projects, skills};
 use crate::config;
@@ -37,8 +36,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     let (mode, base_url) = api::resolve();
 
-    // Step 1: authenticate (account-level CLI token).
-    let mut tos_required = false;
+    // Step 1: authenticate.
     let account_token = match auth::resolve_account_token() {
         Some(token) => {
             status!("{} Already logged in.", style::tick());
@@ -47,26 +45,20 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         None => {
             let outcome = login::authenticate(&base_url).await?;
             status!("{} Logged in to {}.", style::tick(), outcome.org_label());
-            tos_required = outcome.tos_required;
+            login::enforce_tos(&base_url, mode, &outcome, args.agent).await?;
             outcome.account_token
         }
     };
 
-    // Step 2: Terms of Service. Only prompt during first-time login; an
-    // already-authenticated user has already accepted them.
-    if tos_required && !confirm_tos(args.agent)? {
-        anyhow::bail!("You must accept the Terms of Service to continue.");
-    }
-
-    // Step 3: project (create a named one, or reuse the active one).
+    // Step 2: project (create a named one, or reuse the active one).
     status!("");
     setup_project(&base_url, mode, &account_token, args.agent).await?;
 
-    // Step 4: preflight check (verifies the new project API key works).
+    // Step 3: preflight check (verifies the new project API key works).
     status!("");
     doctor::run(doctor::Args { preflight: true }).await?;
 
-    // Step 5: install Steel skills.
+    // Step 4: install Steel skills.
     status!("");
     install_skills(&args).await?;
 
@@ -142,25 +134,6 @@ async fn setup_project(
     );
 
     Ok(())
-}
-
-fn confirm_tos(agent: bool) -> anyhow::Result<bool> {
-    let url = config::TOS_URL;
-
-    if agent {
-        status!("Accepting the Terms of Service at {url}.");
-        return Ok(true);
-    }
-
-    if !interactive() {
-        status!("By continuing you agree to the Terms of Service at {url}.");
-        return Ok(true);
-    }
-
-    Ok(Confirm::with_theme(&*style::prompt_theme())
-        .with_prompt(format!("Do you agree to our Terms of Service at {url}?"))
-        .default(true)
-        .interact()?)
 }
 
 fn interactive() -> bool {

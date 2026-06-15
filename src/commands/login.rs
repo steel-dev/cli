@@ -52,6 +52,8 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
 
     let outcome = authenticate(&base_url).await?;
 
+    enforce_tos(&base_url, mode, &outcome, false).await?;
+
     let project = projects::ensure_active_project(
         &base_url,
         mode,
@@ -161,6 +163,69 @@ fn save_account(token: &str, device_name: &str, org: &OrgPayload) -> anyhow::Res
         name: Some(org.name.clone()),
     });
     cfg.instance = Some("cloud".to_string());
+    write_config_to(&path, &cfg)?;
+    Ok(())
+}
+
+pub async fn enforce_tos(
+    base_url: &str,
+    mode: crate::config::settings::ApiMode,
+    outcome: &AuthOutcome,
+    auto_accept: bool,
+) -> anyhow::Result<()> {
+    if !outcome.tos_required {
+        return Ok(());
+    }
+
+    if accept_tos_decision(auto_accept)? {
+        if let Err(e) =
+            device_auth::record_tos_acceptance(base_url, mode, &outcome.account_token).await
+        {
+            let _ = device_auth::revoke_account_token(base_url, mode, &outcome.account_token).await;
+            clear_saved_account()?;
+            anyhow::bail!(
+                "Could not record your Terms of Service acceptance ({e}). Run `steel login` to try again."
+            );
+        }
+        return Ok(());
+    }
+
+    let _ = device_auth::revoke_account_token(base_url, mode, &outcome.account_token).await;
+    clear_saved_account()?;
+    anyhow::bail!(
+        "You must accept the Terms of Service to continue. Run `steel login` to try again."
+    );
+}
+
+fn accept_tos_decision(auto_accept: bool) -> anyhow::Result<bool> {
+    let url = config::TOS_URL;
+
+    if auto_accept {
+        status!("Accepting the Terms of Service at {url}.");
+        return Ok(true);
+    }
+
+    if !interactive() {
+        status!("By continuing you agree to the Terms of Service at {url}.");
+        return Ok(true);
+    }
+
+    Ok(Confirm::with_theme(&*style::prompt_theme())
+        .with_prompt(format!("Do you agree to our Terms of Service at {url}?"))
+        .default(true)
+        .interact()?)
+}
+
+/// Clear the saved account token + derived credentials (used when ToS is declined).
+fn clear_saved_account() -> anyhow::Result<()> {
+    let path = config::config_path();
+    let mut cfg = read_config_from(&path).unwrap_or_default();
+    cfg.account_token = None;
+    cfg.api_key = None;
+    cfg.api_key_id = None;
+    cfg.name = None;
+    cfg.org = None;
+    cfg.project = None;
     write_config_to(&path, &cfg)?;
     Ok(())
 }

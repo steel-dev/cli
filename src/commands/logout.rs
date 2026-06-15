@@ -40,6 +40,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
 
     cfg.account_token = None;
     cfg.api_key = None;
+    cfg.api_key_id = None;
     cfg.name = None;
     cfg.org = None;
     cfg.project = None;

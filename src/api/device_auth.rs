@@ -189,6 +189,12 @@ pub async fn create_project(
     serde_json::from_value(data).map_err(|e| anyhow::anyhow!("Unexpected project response: {e}"))
 }
 
+#[derive(Debug, Clone)]
+pub struct CreatedProjectKey {
+    pub id: String,
+    pub key: String,
+}
+
 /// Mint a project-scoped API key (used for browser/session work).
 pub async fn create_project_api_key(
     base_url: &str,
@@ -196,7 +202,7 @@ pub async fn create_project_api_key(
     account_token: &str,
     project_id: &str,
     name: &str,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<CreatedProjectKey> {
     let client = SteelClient::new()?;
     let data = client
         .request(
@@ -210,10 +216,59 @@ pub async fn create_project_api_key(
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    data.get("key")
+    let key = data
+        .get("key")
         .and_then(|v| v.as_str())
         .map(str::to_string)
-        .ok_or_else(|| anyhow::anyhow!("API key response did not include a key"))
+        .ok_or_else(|| anyhow::anyhow!("API key response did not include a key"))?;
+    let id = data
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .ok_or_else(|| anyhow::anyhow!("API key response did not include an id"))?;
+
+    Ok(CreatedProjectKey { id, key })
+}
+
+pub async fn revoke_project_api_key(
+    base_url: &str,
+    mode: ApiMode,
+    account_token: &str,
+    api_key_id: &str,
+) -> anyhow::Result<()> {
+    let client = SteelClient::new()?;
+    client
+        .request(
+            base_url,
+            mode,
+            reqwest::Method::DELETE,
+            &format!("/api-keys/{api_key_id}"),
+            None,
+            &auth::account_token_auth(account_token),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok(())
+}
+
+pub async fn record_tos_acceptance(
+    base_url: &str,
+    mode: ApiMode,
+    account_token: &str,
+) -> anyhow::Result<()> {
+    let client = SteelClient::new()?;
+    client
+        .request(
+            base_url,
+            mode,
+            reqwest::Method::POST,
+            "/auth/tos",
+            None,
+            &auth::account_token_auth(account_token),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok(())
 }
 
 /// Revoke the account token used for this request (server-side logout).

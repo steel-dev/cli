@@ -105,6 +105,8 @@ pub struct Config {
     /// Active project API key, used for browser/session work.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_id: Option<String>,
     /// Account-level CLI token (manages projects and project API keys).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_token: Option<String>,
@@ -225,6 +227,7 @@ mod tests {
 
         let config = Config {
             api_key: Some("sk-test-123".into()),
+            api_key_id: Some("key-1".into()),
             account_token: Some("ste-cli-abc".into()),
             name: Some("CLI".into()),
             instance: Some("cloud".into()),
@@ -251,6 +254,7 @@ mod tests {
         let loaded = read_config_from(&path).unwrap();
 
         assert_eq!(loaded.api_key.as_deref(), Some("sk-test-123"));
+        assert_eq!(loaded.api_key_id.as_deref(), Some("key-1"));
         assert_eq!(loaded.account_token.as_deref(), Some("ste-cli-abc"));
         assert_eq!(loaded.name.as_deref(), Some("CLI"));
         assert_eq!(loaded.instance.as_deref(), Some("cloud"));

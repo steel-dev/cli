@@ -251,7 +251,6 @@ pub async fn create_and_activate(
     activate_project(base_url, mode, account_token, &project, device_name).await
 }
 
-/// Mint a project API key for `project` and persist it as the active project.
 pub async fn activate_project(
     base_url: &str,
     mode: ApiMode,
@@ -259,7 +258,25 @@ pub async fn activate_project(
     project: &Project,
     device_name: &str,
 ) -> anyhow::Result<ProjectInfo> {
-    let key = device_auth::create_project_api_key(
+    let path = config::config_path();
+    let mut cfg = read_config_from(&path).unwrap_or_default();
+
+    let info = ProjectInfo {
+        id: project.id.clone(),
+        slug: Some(project.slug.clone()),
+        name: Some(project.name.clone()),
+        is_production: project.is_production,
+    };
+
+    // Re-activating the project that's already active: keep the existing key.
+    let already_active = cfg.project.as_ref().map(|p| p.id.as_str()) == Some(project.id.as_str());
+    if already_active && cfg.api_key.as_deref().is_some_and(|k| !k.trim().is_empty()) {
+        cfg.project = Some(info.clone());
+        write_config_to(&path, &cfg)?;
+        return Ok(info);
+    }
+
+    let created = device_auth::create_project_api_key(
         base_url,
         mode,
         account_token,
@@ -268,13 +285,25 @@ pub async fn activate_project(
     )
     .await?;
 
-    let info = ProjectInfo {
-        id: project.id.clone(),
-        slug: Some(project.slug.clone()),
-        name: Some(project.name.clone()),
-        is_production: project.is_production,
-    };
-    save_active_project(&info, &key)?;
+    let previous_key_id = cfg.api_key_id.clone();
+
+    cfg.project = Some(info.clone());
+    cfg.api_key = Some(created.key);
+    cfg.api_key_id = Some(created.id.clone());
+    write_config_to(&path, &cfg)?;
+
+    // Best-effort: revoke the key we just replaced. Never fail activation over it.
+    if let Some(prev_id) = previous_key_id
+        && prev_id != created.id
+        && let Err(e) =
+            device_auth::revoke_project_api_key(base_url, mode, account_token, &prev_id).await
+    {
+        status!(
+            "{} Could not revoke the previous project key: {e}",
+            style::bang()
+        );
+    }
+
     Ok(info)
 }
 
@@ -375,15 +404,6 @@ fn prompt_project_name(default: &str) -> anyhow::Result<String> {
         .with_prompt("Project name")
         .default(default.to_string())
         .interact_text()?)
-}
-
-fn save_active_project(project: &ProjectInfo, api_key: &str) -> anyhow::Result<()> {
-    let path = config::config_path();
-    let mut cfg = read_config_from(&path).unwrap_or_default();
-    cfg.project = Some(project.clone());
-    cfg.api_key = Some(api_key.to_string());
-    write_config_to(&path, &cfg)?;
-    Ok(())
 }
 
 fn stored_device_name() -> String {
