@@ -93,18 +93,22 @@ fn get_session_status(session: &Value) -> Option<String> {
 
 /// Extract session timeout (milliseconds) from API response.
 /// The API may return it as `timeout`, `sessionTimeout`, or `timeoutMs`.
+///
+/// A returned value of `0` is treated as "no expiry" (matches self-hosted
+/// servers that signal "session never expires" with `timeout: 0`). Callers
+/// that need an actual deadline must treat `None` and `Some(0)` identically.
 pub fn get_session_timeout(session: &Value) -> Option<u64> {
     let keys = ["timeout", "sessionTimeout", "timeoutMs"];
     for key in &keys {
         if let Some(v) = session.get(key) {
             if let Some(n) = v.as_u64() {
-                return Some(n);
+                return Some(n).filter(|&n| n > 0);
             }
             // Handle string numbers
             if let Some(s) = v.as_str()
                 && let Ok(n) = s.trim().parse::<u64>()
             {
-                return Some(n);
+                return Some(n).filter(|&n| n > 0);
             }
         }
     }
@@ -120,12 +124,12 @@ pub fn get_session_inactivity_timeout(session: &Value) -> Option<u64> {
     for key in &keys {
         if let Some(v) = session.get(key) {
             if let Some(n) = v.as_u64() {
-                return Some(n);
+                return Some(n).filter(|&n| n > 0);
             }
             if let Some(s) = v.as_str()
                 && let Ok(n) = s.trim().parse::<u64>()
             {
-                return Some(n);
+                return Some(n).filter(|&n| n > 0);
             }
         }
     }
@@ -536,6 +540,49 @@ mod tests {
     #[test]
     fn session_timeout_missing() {
         assert_eq!(get_session_timeout(&json!({"id": "s1"})), None);
+    }
+
+    #[test]
+    fn session_timeout_zero_collapses_to_none() {
+        // Self-hosted server returns `timeout: 0` to mean "no expiry".
+        // The daemon treats this as None; otherwise its deadline
+        // arithmetic resolves to "already past expiry" on the first
+        // loop tick and the Unix listener drops (CLI sees ECONNRESET).
+        assert_eq!(get_session_timeout(&json!({"timeout": 0})), None);
+        assert_eq!(get_session_timeout(&json!({"sessionTimeout": 0})), None);
+        assert_eq!(get_session_timeout(&json!({"timeoutMs": 0})), None);
+        assert_eq!(get_session_timeout(&json!({"timeout": "0"})), None);
+        // A field set to 0 must not mask another field with a real value
+        // in any single response, but per the existing precedence rules
+        // the first key wins. Document the precedence stays unchanged.
+        assert_eq!(
+            get_session_timeout(&json!({"timeout": 0, "sessionTimeout": 60000})),
+            None,
+            "precedence keeps the 0 → None semantics, doesn't fall through"
+        );
+    }
+
+    #[test]
+    fn inactivity_timeout_zero_collapses_to_none() {
+        assert_eq!(
+            get_session_inactivity_timeout(&json!({"inactivityTimeout": 0})),
+            None
+        );
+        assert_eq!(
+            get_session_inactivity_timeout(&json!({"inactivityTimeout": "0"})),
+            None
+        );
+        assert_eq!(
+            get_session_inactivity_timeout(&json!({"inactivityTimeoutMs": 0})),
+            None
+        );
+    }
+
+    #[test]
+    fn session_timeout_preserves_nonzero() {
+        // Sanity: the filter only affects the zero case.
+        assert_eq!(get_session_timeout(&json!({"timeout": 1})), Some(1));
+        assert_eq!(get_session_timeout(&json!({"timeout": u64::MAX})), Some(u64::MAX));
     }
 
     #[test]
