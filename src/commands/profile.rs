@@ -284,7 +284,7 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
             })
             .collect();
 
-        let selection = dialoguer::Select::new()
+        let selection = dialoguer::Select::with_theme(&*crate::util::style::prompt_theme())
             .with_prompt("Select profile")
             .items(&items)
             .default(0)

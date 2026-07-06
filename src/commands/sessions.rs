@@ -16,7 +16,7 @@ use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
 use crate::status;
-use crate::util::{api, output};
+use crate::util::{api, output, style};
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -497,7 +497,10 @@ fn print_sessions(data: &Value) {
         .max()
         .unwrap_or(2)
         .max(2);
-    println!("{:<max_id$}  {:<10}  CREATED", "ID", "STATUS");
+    println!(
+        "{}",
+        style::bold(&format!("{:<max_id$}  {:<10}  CREATED", "ID", "STATUS"))
+    );
     for session in sessions {
         let id = session.get("id").and_then(Value::as_str).unwrap_or("-");
         let status = session.get("status").and_then(Value::as_str).unwrap_or("-");
@@ -506,7 +509,20 @@ fn print_sessions(data: &Value) {
             .or_else(|| session.get("created_at"))
             .and_then(Value::as_str)
             .unwrap_or("-");
-        println!("{id:<max_id$}  {status:<10}  {created}");
+        let status_cell = colorize_status(status, &format!("{status:<10}"));
+        println!("{id:<max_id$}  {status_cell}  {created}");
+    }
+}
+
+/// Color a session status cell by lifecycle: live (green), failed (red),
+/// released (dim). The cell is pre-padded so alignment is preserved regardless
+/// of whether color is emitted.
+fn colorize_status(status: &str, padded: &str) -> String {
+    match status {
+        "live" => style::green(padded),
+        "failed" => style::red(padded),
+        "released" => style::dim(padded),
+        _ => padded.to_string(),
     }
 }
 
@@ -587,7 +603,30 @@ fn format_event_line(event: &Value) -> String {
         .map(str::to_string)
         .unwrap_or_else(|| compact_json(event));
 
-    format!("{timestamp}  {kind:<18}  {detail}")
+    let timestamp = style::dim(timestamp);
+    let kind = colorize_kind(kind, &format!("{kind:<18}"));
+    format!("{timestamp}  {kind}  {detail}")
+}
+
+/// Color an event/trace type by semantics so failures and warnings stand out in
+/// a fast-scrolling stream. The label is pre-padded so columns stay aligned
+/// whether or not color is emitted.
+fn colorize_kind(kind: &str, padded: &str) -> String {
+    let lower = kind.to_ascii_lowercase();
+    if lower.contains("error") || lower.contains("fail") || lower.contains("exception") {
+        style::red(padded)
+    } else if lower.contains("warn") {
+        style::yellow(padded)
+    } else if lower.contains("nav")
+        || lower.contains("request")
+        || lower.contains("response")
+        || lower.contains("network")
+        || lower.contains("goto")
+    {
+        style::blue(padded)
+    } else {
+        style::cyan(padded)
+    }
 }
 
 fn compact_json(value: &Value) -> String {

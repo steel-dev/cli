@@ -1,7 +1,11 @@
 use clap::Parser;
 
-use crate::commands::{doctor, login, skills};
+use crate::commands::{doctor, login, projects, skills};
+use crate::config;
+use crate::config::auth;
+use crate::config::settings::read_config_from;
 use crate::status;
+use crate::util::{api, output, style};
 
 #[derive(Parser)]
 pub struct Args {
@@ -20,22 +24,41 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    status!("Steel CLI setup");
+    status!("");
+    status!("{}", style::bold("Steel CLI setup"));
+    status!("{}", style::dim("Browser automation for AI agents"));
     if let Ok(from) = std::env::var("STEEL_ONBOARDING_FROM")
         && !from.is_empty()
     {
-        status!("Onboarding source: {from}");
+        status!("{}", style::dim(&format!("Onboarding source: {from}")));
     }
     status!("");
 
-    // Step 1: login (no-ops if already logged in).
-    login::run(login::Args {}).await?;
+    let (mode, base_url) = api::resolve();
 
-    // Step 2: preflight check.
+    // Step 1: authenticate.
+    let account_token = match auth::resolve_account_token() {
+        Some(token) => {
+            status!("{} Already logged in.", style::tick());
+            token
+        }
+        None => {
+            let outcome = login::authenticate(&base_url).await?;
+            status!("{} Logged in to {}.", style::tick(), outcome.org_label());
+            login::enforce_tos(&base_url, mode, &outcome, args.agent).await?;
+            outcome.account_token
+        }
+    };
+
+    // Step 2: project (create a named one, or reuse the active one).
+    status!("");
+    setup_project(&base_url, mode, &account_token, args.agent).await?;
+
+    // Step 3: preflight check (verifies the new project API key works).
     status!("");
     doctor::run(doctor::Args { preflight: true }).await?;
 
-    // Step 3: install Steel skills.
+    // Step 4: install Steel skills.
     status!("");
     install_skills(&args).await?;
 
@@ -47,13 +70,74 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         status!("  • Take a screenshot. Ask for a URL, then run: steel screenshot <url>");
         status!("  • Start an interactive browser session: steel browser start --session demo");
     } else {
-        status!("Setup complete. Try one of these:");
-        status!("  steel scrape https://example.com");
-        status!("  steel browser start --session hello");
-        status!("  steel --help");
+        status!("{} {}", style::tick(), style::bold("Setup complete!"));
+        status!("");
+        status!("{}", style::dim("Try one of these:"));
+        status!(
+            "  {}  {}",
+            style::cyan(&format!("{:<36}", "steel scrape https://example.com")),
+            style::dim("Scrape a page to markdown")
+        );
+        status!(
+            "  {}  {}",
+            style::cyan(&format!("{:<36}", "steel browser start --session hello")),
+            style::dim("Start a browser session")
+        );
+        status!(
+            "  {}  {}",
+            style::cyan(&format!("{:<36}", "steel --help")),
+            style::dim("See all commands")
+        );
     }
 
     Ok(())
+}
+
+async fn setup_project(
+    base_url: &str,
+    mode: crate::config::settings::ApiMode,
+    account_token: &str,
+    agent: bool,
+) -> anyhow::Result<()> {
+    let cfg = read_config_from(&config::config_path()).unwrap_or_default();
+    let device_name = cfg
+        .name
+        .clone()
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(projects::default_project_name);
+
+    // Reuse an already-configured project if one is active.
+    if let (Some(project), Some(_)) = (cfg.project.as_ref(), cfg.api_key.as_ref()) {
+        status!(
+            "Using existing project: {}",
+            project.name.as_deref().unwrap_or(&project.id)
+        );
+        return Ok(());
+    }
+
+    if agent || !interactive() {
+        let project =
+            projects::ensure_active_project(base_url, mode, account_token, &device_name).await?;
+        status!(
+            "Active project: {}",
+            project.name.as_deref().unwrap_or(&project.id)
+        );
+        return Ok(());
+    }
+
+    let project =
+        projects::choose_project_interactive(base_url, mode, account_token, &device_name).await?;
+    status!(
+        "{} Using project: {}",
+        style::tick(),
+        project.name.as_deref().unwrap_or(&project.id)
+    );
+
+    Ok(())
+}
+
+fn interactive() -> bool {
+    output::is_tty() && !output::is_json()
 }
 
 async fn install_skills(args: &Args) -> anyhow::Result<()> {
