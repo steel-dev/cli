@@ -50,7 +50,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         }
     }
 
-    let outcome = authenticate(&base_url).await?;
+    let outcome = authenticate(&base_url, mode).await?;
 
     enforce_tos(&base_url, mode, &outcome, false).await?;
 
@@ -77,7 +77,10 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
 ///
 /// Shared by `steel login` and `steel init`. Prints the verification URL + code
 /// even in non-interactive / JSON mode so the user can always complete the flow.
-pub async fn authenticate(base_url: &str) -> anyhow::Result<AuthOutcome> {
+pub async fn authenticate(
+    base_url: &str,
+    mode: crate::config::settings::ApiMode,
+) -> anyhow::Result<AuthOutcome> {
     let is_interactive = interactive();
 
     let device_name = if is_interactive {
@@ -144,11 +147,27 @@ pub async fn authenticate(base_url: &str) -> anyhow::Result<AuthOutcome> {
 
     save_account(&token.access_token, &device_name, &token.org)?;
 
+    // ToS status lives on GET /auth/tos (not the device-token payload). Fail open to
+    // "required" if the status call itself errors so we never skip the prompt by accident.
+    let tos_required = match device_auth::get_tos_status(base_url, mode, &token.access_token).await
+    {
+        Ok(status) => status.tos_required,
+        Err(e) => {
+            status!(
+                "{}",
+                style::dim(&format!(
+                    "Could not check Terms of Service status ({e}); prompting to be safe."
+                ))
+            );
+            true
+        }
+    };
+
     Ok(AuthOutcome {
         account_token: token.access_token,
         device_name,
         org: token.org,
-        tos_required: token.tos_required,
+        tos_required,
     })
 }
 

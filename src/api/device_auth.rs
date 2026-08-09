@@ -39,8 +39,16 @@ pub struct DeviceTokenSuccess {
     #[allow(dead_code)]
     pub token_name: String,
     pub org: OrgPayload,
-    #[serde(default)]
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TosStatus {
     pub tos_required: bool,
+    #[allow(dead_code)]
+    pub tos_version: String,
+    #[allow(dead_code)]
+    pub accepted_at: Option<String>,
 }
 
 /// Start a device authorization request. Returns the user code and verification URLs.
@@ -251,6 +259,31 @@ pub async fn revoke_project_api_key(
     Ok(())
 }
 
+/// Whether the account behind this CLI token still needs to accept the current ToS.
+///
+/// The device-token exchange no longer embeds this flag; the dashboard and CLI both
+/// consult `GET /auth/tos` (camelCase body) after the user is authenticated.
+pub async fn get_tos_status(
+    base_url: &str,
+    mode: ApiMode,
+    account_token: &str,
+) -> anyhow::Result<TosStatus> {
+    let client = SteelClient::new()?;
+    let data = client
+        .request(
+            base_url,
+            mode,
+            reqwest::Method::GET,
+            "/auth/tos",
+            None,
+            &auth::account_token_auth(account_token),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    serde_json::from_value(data).map_err(|e| anyhow::anyhow!("Unexpected ToS status response: {e}"))
+}
+
 pub async fn record_tos_acceptance(
     base_url: &str,
     mode: ApiMode,
@@ -340,5 +373,18 @@ mod tests {
         assert_eq!(parsed.access_token, "ste-cli-abc");
         assert_eq!(parsed.org.id, "org-1");
         assert_eq!(parsed.org.name, "Acme");
+    }
+
+    #[test]
+    fn tos_status_deserializes_camel_case() {
+        let body = json!({
+            "tosRequired": true,
+            "tosVersion": "2026-06-01",
+            "acceptedAt": null
+        });
+        let parsed: TosStatus = serde_json::from_value(body).unwrap();
+        assert!(parsed.tos_required);
+        assert_eq!(parsed.tos_version, "2026-06-01");
+        assert!(parsed.accepted_at.is_none());
     }
 }

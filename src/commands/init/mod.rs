@@ -43,7 +43,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             token
         }
         None => {
-            let outcome = login::authenticate(&base_url).await?;
+            let outcome = login::authenticate(&base_url, mode).await?;
             status!("{} Logged in to {}.", style::tick(), outcome.org_label());
             login::enforce_tos(&base_url, mode, &outcome, args.agent).await?;
             outcome.account_token
