@@ -203,9 +203,9 @@ pub fn handle_error(err: &anyhow::Error) -> ! {
         }
         println!("{obj}");
     } else {
-        eprintln!("Error: {msg}");
+        eprintln!("{} {msg}", crate::util::style::error_label("Error:"));
         if let Some(h) = hint {
-            eprintln!("Hint: {h}");
+            eprintln!("{}", crate::util::style::dim(&format!("Hint: {h}")));
         }
     }
 

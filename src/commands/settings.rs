@@ -30,7 +30,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         ),
     ];
 
-    let selection = Select::new()
+    let selection = Select::with_theme(&*crate::util::style::prompt_theme())
         .with_prompt("Select instance type")
         .items(&items)
         .default(if current_instance == "local" { 1 } else { 0 })

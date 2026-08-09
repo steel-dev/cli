@@ -1,6 +1,7 @@
 use clap::Parser;
 
 use crate::status;
+use crate::util::style;
 
 #[derive(Parser)]
 pub struct Args {
@@ -14,19 +15,19 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
-    status!("Checking for updates...");
-
     let client = reqwest::Client::new();
     let current_version = env!("CARGO_PKG_VERSION");
 
-    // Check GitHub releases for latest version
-    let latest_version = match client
+    let spinner = style::spinner("Checking for updates…");
+    let response = client
         .get("https://api.github.com/repos/steel-dev/cli/releases/latest")
         .header("Accept", "application/vnd.github+json")
         .header("User-Agent", format!("steel-cli/{current_version}"))
         .send()
-        .await
-    {
+        .await;
+
+    // Check GitHub releases for latest version
+    let latest_version = match response {
         Ok(resp) if resp.status().is_success() => {
             let data: serde_json::Value = resp.json().await.unwrap_or_default();
             data.get("tag_name")
@@ -35,6 +36,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         }
         _ => None,
     };
+    spinner.finish_and_clear();
 
     let Some(latest) = latest_version else {
         status!("Could not check for updates. Please check your network connection.");
@@ -72,7 +74,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     match status {
         Ok(s) if s.success() => {
-            status!("Updated to v{latest}");
+            status!("{} Updated to v{latest}", style::tick());
         }
         _ => {
             anyhow::bail!(

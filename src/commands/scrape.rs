@@ -3,7 +3,7 @@ use clap::Parser;
 use crate::api::client::SteelClient;
 use crate::api::top_level::{get_scrape_output_text, parse_scrape_formats};
 use crate::util::url::resolve_tool_url;
-use crate::util::{api, output};
+use crate::util::{api, output, style};
 
 #[derive(Parser)]
 pub struct Args {
@@ -46,6 +46,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let (mode, base_url, auth) = api::resolve_with_auth();
 
     let client = SteelClient::new()?;
+    let spinner = style::spinner(format!("Scraping {url}…"));
     let response = client
         .scrape(
             &base_url,
@@ -59,7 +60,9 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             args.use_proxy,
             args.region.as_deref(),
         )
-        .await?;
+        .await;
+    spinner.finish_and_clear();
+    let response = response?;
 
     if output::is_json() {
         output::success_data(response);

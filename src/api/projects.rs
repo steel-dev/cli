@@ -29,19 +29,6 @@ pub fn parse_projects(data: &Value) -> Vec<Project> {
         .unwrap_or_default()
 }
 
-/// Pick the project an API key is scoped to.
-/// A single project wins outright; among several, a sole default wins.
-pub fn resolve_current_project(projects: &[Project]) -> Option<&Project> {
-    if let [only] = projects {
-        return Some(only);
-    }
-    let mut defaults = projects.iter().filter(|p| p.is_default);
-    match (defaults.next(), defaults.next()) {
-        (Some(default), None) => Some(default),
-        _ => None,
-    }
-}
-
 /// Human label for a project's production flag.
 pub const fn environment_label(is_production: bool) -> &'static str {
     if is_production {
@@ -75,16 +62,6 @@ impl SteelClient {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    fn project(name: &str, is_production: bool, is_default: bool) -> Project {
-        Project {
-            id: format!("id-{name}"),
-            name: name.into(),
-            slug: name.to_lowercase(),
-            is_production,
-            is_default,
-        }
-    }
 
     // --- parse_projects ---
 
@@ -141,40 +118,6 @@ mod tests {
         assert!(!projects[0].is_default);
     }
 
-    // --- resolve_current_project ---
-
-    #[test]
-    fn resolve_single_project() {
-        let projects = vec![project("Solo", true, false)];
-        assert_eq!(resolve_current_project(&projects).unwrap().name, "Solo");
-    }
-
-    #[test]
-    fn resolve_prefers_sole_default() {
-        let projects = vec![
-            project("Staging", false, false),
-            project("Main", true, true),
-        ];
-        assert_eq!(resolve_current_project(&projects).unwrap().name, "Main");
-    }
-
-    #[test]
-    fn resolve_ambiguous_returns_none() {
-        let projects = vec![project("A", false, false), project("B", true, false)];
-        assert!(resolve_current_project(&projects).is_none());
-    }
-
-    #[test]
-    fn resolve_two_defaults_returns_none() {
-        let projects = vec![project("A", false, true), project("B", true, true)];
-        assert!(resolve_current_project(&projects).is_none());
-    }
-
-    #[test]
-    fn resolve_empty_returns_none() {
-        assert!(resolve_current_project(&[]).is_none());
-    }
-
     // --- environment_label ---
 
     #[test]
@@ -224,8 +167,8 @@ mod tests {
             .unwrap();
 
         let projects = parse_projects(&data);
-        let current = resolve_current_project(&projects).unwrap();
-        assert_eq!(current.slug, "default");
-        assert_eq!(environment_label(current.is_production), "development");
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].slug, "default");
+        assert_eq!(environment_label(projects[0].is_production), "development");
     }
 }

@@ -4,11 +4,11 @@ use clap::Parser;
 use serde_json::{Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
-use crate::api::projects::{environment_label, parse_projects, resolve_current_project};
+use crate::api::projects::environment_label;
 use crate::browser::daemon::process;
 use crate::config::auth::Auth;
-use crate::config::settings::ApiMode;
-use crate::util::output;
+use crate::config::settings::{ApiMode, ProjectInfo, read_config};
+use crate::util::{output, style};
 
 #[derive(Parser)]
 pub struct Args {
@@ -150,16 +150,7 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
             .await;
         (result, start.elapsed().as_millis())
     };
-    // Project info is informational only: fetched alongside the auth probe,
-    // silently skipped on any error so doctor never degrades because of it.
-    let projects = async {
-        if need_auth {
-            client.get_projects(base_url, mode, auth).await.ok()
-        } else {
-            None
-        }
-    };
-    let ((result, latency_ms), projects_data) = tokio::join!(timed_sessions, projects);
+    let (result, latency_ms) = timed_sessions.await;
 
     match result {
         Ok(_) => {
@@ -180,7 +171,11 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
                     fix: None,
                     transient: false,
                 });
-                if let Some(check) = project_check(projects_data.as_ref()) {
+                // Project info is informational only; sourced from the active
+                // project recorded at login / selection (no extra network call).
+                if let Some(check) =
+                    project_check(read_config().ok().and_then(|c| c.project).as_ref())
+                {
                     checks.push(check);
                 }
             }
@@ -240,25 +235,24 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
     checks
 }
 
-/// Build the project/environment check from a `/projects` response body.
-/// Returns `None` when the response is absent or no single project resolves.
-fn project_check(data: Option<&Value>) -> Option<Check> {
-    let projects = parse_projects(data?);
-    let current = resolve_current_project(&projects)?;
+/// Build the project/environment check from the active project recorded in config.
+/// Returns `None` when no project has been selected yet.
+fn project_check(project: Option<&ProjectInfo>) -> Option<Check> {
+    let project = project?;
+    let name = project.name.as_deref().unwrap_or(&project.id);
+    let slug = project.slug.as_deref().unwrap_or("");
     Some(Check {
         category: "project",
         name: format!(
-            "Project \"{}\" ({}) — {}",
-            current.name,
-            current.slug,
-            environment_label(current.is_production)
+            "Project \"{name}\" ({slug}) — {}",
+            environment_label(project.is_production)
         ),
         status: "pass",
         detail: json!({
-            "project_id": current.id,
-            "name": current.name,
-            "slug": current.slug,
-            "is_production": current.is_production,
+            "project_id": project.id,
+            "name": project.name,
+            "slug": project.slug,
+            "is_production": project.is_production,
         }),
         fix: None,
         transient: false,
@@ -365,7 +359,6 @@ async fn check_version() -> Vec<Check> {
 }
 
 fn print_text(checks: &[Check]) {
-    let use_color = !output::no_color();
     let mut current_category = "";
 
     for check in checks {
@@ -373,27 +366,20 @@ fn print_text(checks: &[Check]) {
             if !current_category.is_empty() {
                 println!();
             }
-            println!("  {}", format_category(check.category));
+            println!("  {}", style::bold(format_category(check.category)));
             current_category = check.category;
         }
 
-        let symbol = match (check.status, use_color) {
-            ("pass", true) => "\x1b[32m✓\x1b[0m",
-            ("degraded", true) => "\x1b[33m!\x1b[0m",
-            ("fail", true) => "\x1b[31m✗\x1b[0m",
-            ("pass", false) => "✓",
-            ("degraded", false) => "!",
-            ("fail", false) => "✗",
-            _ => "?",
+        let symbol = match check.status {
+            "pass" => style::tick(),
+            "degraded" => style::bang(),
+            "fail" => style::cross(),
+            _ => "?".to_string(),
         };
 
         println!("    {symbol} {}", check.name);
         if let Some(fix) = check.fix {
-            if use_color {
-                println!("      \x1b[2m→ {fix}\x1b[0m");
-            } else {
-                println!("      → {fix}");
-            }
+            println!("      {}", style::dim(&format!("→ {fix}")));
         }
     }
     println!();
@@ -469,19 +455,20 @@ mod tests {
         assert_eq!(format_category("version"), "Version");
     }
 
-    #[test]
-    fn project_check_resolves_single_project() {
-        let data = json!({
-            "projects": [{
-                "id": "p1",
-                "name": "Default project",
-                "slug": "default",
-                "isProduction": false,
-                "isDefault": true
-            }]
-        });
+    fn project_info(id: &str, slug: &str, name: &str, is_production: bool) -> ProjectInfo {
+        ProjectInfo {
+            id: id.into(),
+            slug: Some(slug.into()),
+            name: Some(name.into()),
+            is_production,
+        }
+    }
 
-        let check = project_check(Some(&data)).unwrap();
+    #[test]
+    fn project_check_renders_active_project() {
+        let project = project_info("p1", "default", "Default project", false);
+
+        let check = project_check(Some(&project)).unwrap();
         assert_eq!(check.category, "project");
         assert_eq!(check.status, "pass");
         assert_eq!(
@@ -494,33 +481,14 @@ mod tests {
 
     #[test]
     fn project_check_production_label() {
-        let data = json!({
-            "projects": [{
-                "id": "p2",
-                "name": "Main",
-                "slug": "main",
-                "isProduction": true
-            }]
-        });
-
-        let check = project_check(Some(&data)).unwrap();
+        let project = project_info("p2", "main", "Main", true);
+        let check = project_check(Some(&project)).unwrap();
         assert_eq!(check.name, "Project \"Main\" (main) — production");
     }
 
     #[test]
-    fn project_check_none_without_data() {
+    fn project_check_none_without_project() {
         assert!(project_check(None).is_none());
-    }
-
-    #[test]
-    fn project_check_none_when_ambiguous() {
-        let data = json!({
-            "projects": [
-                {"id": "a", "name": "A", "slug": "a"},
-                {"id": "b", "name": "B", "slug": "b"}
-            ]
-        });
-        assert!(project_check(Some(&data)).is_none());
     }
 
     #[test]
