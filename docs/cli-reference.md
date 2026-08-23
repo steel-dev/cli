@@ -395,7 +395,7 @@ steel browser start [options]
 - -s, **--session**: Named session key for create-or-attach behavior
 - **--stealth**: Apply stealth preset on new sessions (humanized interactions + auto CAPTCHA solving / solveCaptcha=true)
 - -p, **--proxy**: Proxy URL for new sessions (for example, http://user:pass@host:port)
-- **--session-timeout**: Session timeout in milliseconds (create-time only)
+- **--session-timeout**: Session timeout in milliseconds (create-time only; defaults to `browser.sessionTimeoutMs` in `~/.config/steel/config.json`)
 - **--inactivity-timeout**: Inactivity timeout in milliseconds — release the session when no CDP command or remote input is received for this long (create-time only; defaults to 120000 / 2 minutes, pass 0 to disable)
 - **--session-headless**: Create new sessions in headless mode (create-time only)
 - **--session-region**: Preferred session region (create-time only)
