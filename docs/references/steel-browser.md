@@ -26,10 +26,10 @@ Upstream command catalog (pinned reference):
 
 ## Modes
 
-- Cloud mode (default): no mode flag required.
-- Self-hosted mode: use `--local` or `--api-url <url>`.
+- Cloud mode (default): no mode flag or persisted local instance is required.
+- Self-hosted mode: use `--local`, `--api-url <url>`, or set `"instance": "local"` in `~/.config/steel/config.json`.
 
-`--api-url` implies self-hosted mode.
+`--api-url` implies self-hosted mode. A persisted local instance uses the configured self-hosted endpoint or falls back to `http://localhost:3000/v1`.
 
 ## Endpoint Resolution
 
