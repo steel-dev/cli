@@ -19,8 +19,18 @@
 		},
 		{ "name": "cache" },
 		{
+			"name": "checkpoint",
+			"subcommands": [
+				{ "name": "delete" },
+				{ "name": "get" },
+				{ "name": "list" },
+				{ "name": "restore" }
+			]
+		},
+		{
 			"name": "computer",
 			"subcommands": [
+				{ "name": "checkpoint" },
 				{ "name": "create" },
 				{ "name": "delete" },
 				{ "name": "exec" },

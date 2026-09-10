@@ -10,12 +10,13 @@ use serde_json::Value;
 
 use crate::api::client::SteelClient;
 use crate::api::computers::CreateComputer;
+use crate::commands::checkpoint;
 use crate::config::settings::{self, ComputerConfig};
 use crate::status;
 use crate::util::{api, output};
 
-const WAIT_POLL_INTERVAL: Duration = Duration::from_secs(1);
-const WAIT_TIMEOUT: Duration = Duration::from_secs(180);
+pub const WAIT_POLL_INTERVAL: Duration = Duration::from_secs(1);
+pub const WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -45,6 +46,9 @@ pub enum Command {
 
     /// Open an SSH session to a computer
     Ssh(ssh::Args),
+
+    /// Save a computer as a checkpoint
+    Checkpoint(CheckpointArgs),
 }
 
 impl Command {
@@ -59,6 +63,7 @@ impl Command {
             Self::Use(_) => "use",
             Self::Exec(_) => "exec",
             Self::Ssh(_) => "ssh",
+            Self::Checkpoint(_) => "checkpoint",
         }
     }
 }
@@ -119,6 +124,20 @@ pub struct ResumeArgs {
 }
 
 #[derive(Parser)]
+pub struct CheckpointArgs {
+    /// Computer ID (defaults to STEEL_COMPUTER_ID or `steel computer use`)
+    pub computer_id: Option<String>,
+
+    /// Name for the checkpoint
+    #[arg(long)]
+    pub name: Option<String>,
+
+    /// Wait until the checkpoint is ready
+    #[arg(long)]
+    pub wait: bool,
+}
+
+#[derive(Parser)]
 pub struct UseArgs {
     /// Computer ID to remember
     pub computer_id: Option<String>,
@@ -139,6 +158,7 @@ pub async fn run(command: Command) -> Result<()> {
         Command::Use(args) => run_use(args),
         Command::Exec(args) => exec::run(args).await,
         Command::Ssh(args) => ssh::run(args).await,
+        Command::Checkpoint(args) => run_checkpoint(args).await,
     }
 }
 
@@ -163,7 +183,7 @@ pub fn choose_computer_id(
     bail!("No computer given. Pass an id, set STEEL_COMPUTER_ID, or run `steel computer use <id>`.")
 }
 
-fn remember_computer(id: Option<&str>) -> Result<()> {
+pub fn remember_computer(id: Option<&str>) -> Result<()> {
     let mut config = settings::read_config().unwrap_or_default();
     config.computer = id.map(|id| ComputerConfig {
         default_id: Some(id.to_string()),
@@ -171,11 +191,11 @@ fn remember_computer(id: Option<&str>) -> Result<()> {
     settings::write_config(&config).context("Failed to save the default computer")
 }
 
-fn status_of(computer: &Value) -> &str {
+pub fn status_of(computer: &Value) -> &str {
     computer["status"].as_str().unwrap_or("unknown")
 }
 
-fn id_of(computer: &Value) -> Result<String> {
+pub fn id_of(computer: &Value) -> Result<String> {
     computer["id"]
         .as_str()
         .map(str::to_string)
@@ -290,6 +310,31 @@ async fn run_resume(args: ResumeArgs) -> Result<()> {
     Ok(())
 }
 
+async fn run_checkpoint(args: CheckpointArgs) -> Result<()> {
+    let id = resolve_computer_id(args.computer_id.as_deref())?;
+    let (mode, base_url, auth) = api::resolve_with_auth();
+    let client = SteelClient::new()?;
+    let created = client
+        .create_checkpoint(&base_url, mode, &auth, &id, args.name.as_deref())
+        .await?;
+    let checkpoint_id = created["id"]
+        .as_str()
+        .map(str::to_string)
+        .context("the API returned a checkpoint without an id")?;
+    let checkpoint = if args.wait {
+        status!("Saving {id} as {checkpoint_id}, this takes a while.");
+        checkpoint::wait_until_ready(&client, &base_url, mode, &auth, &checkpoint_id).await?
+    } else {
+        created
+    };
+    if output::is_json() {
+        output::success_data(checkpoint);
+    } else {
+        println!("{checkpoint_id} is {}.", checkpoint::status_of(&checkpoint));
+    }
+    Ok(())
+}
+
 fn run_use(args: UseArgs) -> Result<()> {
     if args.clear {
         remember_computer(None)?;
@@ -317,7 +362,7 @@ fn run_use(args: UseArgs) -> Result<()> {
     Ok(())
 }
 
-async fn wait_for(
+pub async fn wait_for(
     client: &SteelClient,
     base_url: &str,
     mode: crate::config::settings::ApiMode,

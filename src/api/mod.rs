@@ -1,3 +1,4 @@
+pub mod checkpoints;
 pub mod client;
 pub mod computers;
 pub mod generated;

@@ -101,6 +101,12 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel computer use](#steel-computer-use)
 - [steel computer exec](#steel-computer-exec)
 - [steel computer ssh](#steel-computer-ssh)
+- [steel computer checkpoint](#steel-computer-checkpoint)
+- [steel checkpoint](#steel-checkpoint)
+- [steel checkpoint list](#steel-checkpoint-list)
+- [steel checkpoint get](#steel-checkpoint-get)
+- [steel checkpoint delete](#steel-checkpoint-delete)
+- [steel checkpoint restore](#steel-checkpoint-restore)
 - [steel init](#steel-init)
 - [steel login](#steel-login)
 - [steel logout](#steel-logout)
@@ -1550,6 +1556,7 @@ steel computer
 - `use`: Remember a computer as the default for other commands
 - `exec`: Run one command in a computer
 - `ssh`: Open an SSH session to a computer
+- `checkpoint`: Save a computer as a checkpoint
 
 ## steel computer create
 
@@ -1699,6 +1706,95 @@ steel computer ssh
 - `attach_computer_ssh` (implemented): `GET /v1/computers/{id}/ssh`
   Example: `steel computer ssh <computer-id>`
   Streaming: websocket `/v1/computers/{id}/ssh`
+
+## steel computer checkpoint
+
+Save a computer as a checkpoint
+
+### Usage
+
+```bash
+steel computer checkpoint
+```
+
+### Parameters
+
+- `computer_id` (string, optional): Computer ID (defaults to STEEL_COMPUTER_ID or `steel computer use`)
+- `--name` (string, optional): Name for the checkpoint
+- `--wait` (boolean, optional): Wait until the checkpoint is ready
+
+## steel checkpoint
+
+Computer checkpoints: list, restore, delete
+
+### Usage
+
+```bash
+steel checkpoint
+```
+
+### Subcommands
+
+- `list`: List checkpoints
+- `get`: Get one checkpoint
+- `delete`: Delete a checkpoint
+- `restore`: Start a new computer from a checkpoint
+
+## steel checkpoint list
+
+List checkpoints
+
+### Usage
+
+```bash
+steel checkpoint list
+```
+
+## steel checkpoint get
+
+Get one checkpoint
+
+### Usage
+
+```bash
+steel checkpoint get
+```
+
+### Parameters
+
+- `checkpoint_id` (string, required): Checkpoint ID
+
+## steel checkpoint delete
+
+Delete a checkpoint
+
+### Usage
+
+```bash
+steel checkpoint delete
+```
+
+### Parameters
+
+- `checkpoint_id` (string, required): Checkpoint ID
+
+## steel checkpoint restore
+
+Start a new computer from a checkpoint
+
+### Usage
+
+```bash
+steel checkpoint restore
+```
+
+### Parameters
+
+- `checkpoint_id` (string, required): Checkpoint ID
+- `--timeout` (string, optional): Stop the computer after this many seconds of running time
+- `--auto-pause` (boolean, optional): Pause instead of stopping when the timeout is reached
+- `--wait` (boolean, optional): Wait until the computer is running
+- `--use` (boolean, optional): Make the new computer the default for other commands
 
 ## steel init
 
