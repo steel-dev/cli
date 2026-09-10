@@ -65,6 +65,12 @@ fn extract_error_message(body: &Value, status_text: &str) -> Cow<'static, str> {
         return Cow::Owned(msg.to_string());
     }
 
+    if let Some(msg) = body.get("error").and_then(|v| v.as_str())
+        && !msg.trim().is_empty()
+    {
+        return Cow::Owned(msg.to_string());
+    }
+
     if !status_text.is_empty() {
         return Cow::Owned(status_text.to_string());
     }

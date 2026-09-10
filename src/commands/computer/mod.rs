@@ -1,6 +1,6 @@
 pub mod exec;
 pub mod ssh;
-mod wsio;
+pub mod wsio;
 
 use std::time::{Duration, Instant};
 

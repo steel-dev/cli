@@ -4,18 +4,17 @@ use std::task::{Context, Poll};
 
 use futures_util::{Sink, Stream};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::net::TcpStream;
+use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::{Bytes, Message};
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
-pub struct WsIo {
-    inner: WebSocketStream<MaybeTlsStream<TcpStream>>,
+pub struct WsIo<S> {
+    inner: WebSocketStream<S>,
     pending: Bytes,
     closed: bool,
 }
 
-impl WsIo {
-    pub const fn new(inner: WebSocketStream<MaybeTlsStream<TcpStream>>) -> Self {
+impl<S> WsIo<S> {
+    pub const fn new(inner: WebSocketStream<S>) -> Self {
         Self {
             inner,
             pending: Bytes::new(),
@@ -24,7 +23,7 @@ impl WsIo {
     }
 }
 
-impl AsyncRead for WsIo {
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for WsIo<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -39,6 +38,9 @@ impl AsyncRead for WsIo {
             }
             if self.closed {
                 return Poll::Ready(Ok(()));
+            }
+            if let Poll::Ready(Err(err)) = Pin::new(&mut self.inner).poll_flush(cx) {
+                return Poll::Ready(Err(io::Error::other(err)));
             }
             match Pin::new(&mut self.inner).poll_next(cx) {
                 Poll::Pending => return Poll::Pending,
@@ -61,7 +63,7 @@ impl AsyncRead for WsIo {
     }
 }
 
-impl AsyncWrite for WsIo {
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for WsIo<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -74,6 +76,9 @@ impl AsyncWrite for WsIo {
                 Pin::new(&mut self.inner)
                     .start_send(Message::Binary(Bytes::copy_from_slice(data)))
                     .map_err(io::Error::other)?;
+                if let Poll::Ready(Err(err)) = Pin::new(&mut self.inner).poll_flush(cx) {
+                    return Poll::Ready(Err(io::Error::other(err)));
+                }
                 Poll::Ready(Ok(data.len()))
             }
         }

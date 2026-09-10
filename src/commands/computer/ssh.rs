@@ -8,6 +8,8 @@ use russh::client::{self, AuthResult, Handler};
 use russh::keys::PublicKeyOrCertificate;
 use russh::{Channel, ChannelMsg, Disconnect};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio_tungstenite::MaybeTlsStream;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
@@ -107,7 +109,7 @@ pub fn ssh_url(base_url: &str, id: &str) -> Result<String> {
     Ok(url.to_string())
 }
 
-async fn connect(url: &str, auth: &Auth) -> Result<WsIo> {
+async fn connect(url: &str, auth: &Auth) -> Result<WsIo<MaybeTlsStream<TcpStream>>> {
     let mut request = url
         .into_client_request()
         .with_context(|| format!("Invalid SSH URL: {url}"))?;
