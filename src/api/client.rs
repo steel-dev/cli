@@ -27,6 +27,13 @@ pub enum ApiError {
         body: Option<Value>,
     },
 
+    #[error("Steel API request failed ({status}): {message}")]
+    RetryLater {
+        status: u16,
+        message: Cow<'static, str>,
+        seconds: u64,
+    },
+
     #[error(transparent)]
     Other(#[from] reqwest::Error),
 }
@@ -132,6 +139,67 @@ impl SteelClient {
         }
 
         Ok(response_data)
+    }
+
+    pub async fn request_raw(
+        &self,
+        base_url: &str,
+        mode: ApiMode,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Value>,
+        auth: &Auth,
+    ) -> Result<reqwest::Response, ApiError> {
+        if mode == ApiMode::Cloud && auth.api_key.is_none() {
+            return Err(ApiError::MissingAuth);
+        }
+
+        let url = format!("{base_url}{path}");
+        let mut req = self.http.request(method, &url);
+        req = req.header("Content-Type", "application/json");
+        if let Some(key) = &auth.api_key {
+            req = req.header("Steel-Api-Key", key);
+        }
+        if let Some(body) = body {
+            req = req.json(&body);
+        }
+
+        let resp = req.send().await.map_err(|e| ApiError::Unreachable {
+            url: url.clone(),
+            source: e,
+        })?;
+
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(resp);
+        }
+
+        let status_code = status.as_u16();
+        let status_text = status.canonical_reason().unwrap_or("").to_string();
+        let retry_after = resp
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.trim().parse::<u64>().ok());
+        let response_text = resp.text().await.map_err(ApiError::Other)?;
+        let response_data: Value = if response_text.trim().is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_str(&response_text).unwrap_or(Value::String(response_text))
+        };
+        let message = extract_error_message(&response_data, &status_text);
+        if let Some(seconds) = retry_after {
+            return Err(ApiError::RetryLater {
+                status: status_code,
+                message,
+                seconds,
+            });
+        }
+        Err(ApiError::RequestFailed {
+            status: status_code,
+            message,
+            body: Some(response_data),
+        })
     }
 }
 

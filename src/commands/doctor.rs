@@ -215,6 +215,9 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
         }
         Err(ApiError::RequestFailed {
             status, message, ..
+        })
+        | Err(ApiError::RetryLater {
+            status, message, ..
         }) => {
             checks.push(Check {
                 category: "api",
