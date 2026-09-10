@@ -264,6 +264,7 @@ mod tests {
             cursor_id: Some("abc".into()),
             limit: Some(25),
             status: Some("live".into()),
+            ..Default::default()
         });
         assert_eq!(path, "/sessions?cursorId=abc&limit=25&status=live");
     }

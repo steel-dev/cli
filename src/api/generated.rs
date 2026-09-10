@@ -126,6 +126,7 @@ pub struct GetSessionsQuery {
     pub cursor_id: Option<String>,
     pub limit: Option<u16>,
     pub status: Option<String>,
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -137,6 +138,12 @@ pub struct GetSessionLogsQuery {
     pub event_types: Vec<String>,
     pub limit: Option<u16>,
     pub offset: Option<u32>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseAllSessionsQuery {
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -225,6 +232,13 @@ fn build_get_sessions_path(query: &GetSessionsQuery) -> String {
     {
         push_query(&mut path, "status", value.trim());
     }
+    if let Some(value) = query
+        .project_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        push_query(&mut path, "projectId", value.trim());
+    }
     path
 }
 
@@ -269,6 +283,18 @@ fn build_get_session_logs_path(session_id: &str, query: &GetSessionLogsQuery) ->
 
 fn build_release_session_path(session_id: &str) -> String {
     format!("/sessions/{session_id}/release")
+}
+
+fn build_release_all_sessions_path(query: &ReleaseAllSessionsQuery) -> String {
+    let mut path = "/sessions/release".to_string();
+    if let Some(value) = query
+        .project_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        push_query(&mut path, "projectId", value.trim());
+    }
+    path
 }
 
 fn build_get_session_agent_traces_path(
@@ -405,12 +431,13 @@ impl SteelClient {
         base_url: &str,
         mode: ApiMode,
         auth: &Auth,
+        query: &ReleaseAllSessionsQuery,
     ) -> Result<Value, ApiError> {
         self.request(
             base_url,
             mode,
             reqwest::Method::POST,
-            "/sessions/release",
+            &build_release_all_sessions_path(query),
             None,
             auth,
         )
@@ -447,6 +474,7 @@ mod tests {
             cursor_id: Some("abc".into()),
             limit: Some(25),
             status: Some("live".into()),
+            ..Default::default()
         });
         assert_eq!(path, "/sessions?cursorId=abc&limit=25&status=live");
     }
