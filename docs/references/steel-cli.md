@@ -34,6 +34,13 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - `steel computer use`: remember a default computer so other commands need no id.
 - `steel computer exec -- <command>`: run one command; output streams and the exit code is returned.
 - `steel computer ssh`: open an SSH shell, or run a command over SSH with `-- <command>`.
+- `steel computer checkpoint`: save a computer's disk and memory as a checkpoint.
+- `steel computer quota`: show how many computers and checkpoints the account can have.
+
+### Checkpoint Commands
+
+- `steel checkpoint list`, `steel checkpoint get`, `steel checkpoint delete`: inspect and remove checkpoints.
+- `steel checkpoint restore`: start a new computer from a ready checkpoint.
 
 ### Credentials Commands
 

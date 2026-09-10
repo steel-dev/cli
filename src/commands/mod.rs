@@ -1,5 +1,6 @@
 pub mod browser;
 pub mod cache;
+pub mod checkpoint;
 pub mod completion;
 pub mod computer;
 pub mod config;
@@ -297,6 +298,12 @@ pub enum Command {
         command: computer::Command,
     },
 
+    /// Computer checkpoints: list, restore, delete
+    Checkpoint {
+        #[command(subcommand)]
+        command: checkpoint::Command,
+    },
+
     /// One-command onboarding: login + verify + install agent skills
     Init(init::Args),
 
@@ -359,6 +366,7 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Browser(args) => Some(format!("browser.{}", args.command.telemetry_name())),
         Command::Sessions { command } => Some(format!("sessions.{}", command.telemetry_name())),
         Command::Computer { command } => Some(format!("computer.{}", command.telemetry_name())),
+        Command::Checkpoint { command } => Some(format!("checkpoint.{}", command.telemetry_name())),
         Command::Init(_) => Some("init".to_string()),
         Command::Login(_) => Some("login".to_string()),
         Command::Logout(_) => Some("logout".to_string()),
@@ -407,6 +415,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Browser(args) => browser::run(args).await,
         Command::Sessions { command } => sessions::run(command).await,
         Command::Computer { command } => computer::run(command).await,
+        Command::Checkpoint { command } => checkpoint::run(command).await,
         Command::Init(args) => init::run(args).await,
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,
