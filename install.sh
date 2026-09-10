@@ -8,8 +8,9 @@ Installs the Steel CLI binary and, in an interactive terminal, runs
 
 Flags:
   --non-interactive    Skip the interactive `steel init` step (install only)
-  --agent              Run `steel init --agent` (print the onboarding guide
-                       to stdout; intended for AI coding agents)
+  --agent              Run `steel init --agent` (non-interactive: auto-accept
+                       prompts and print agent-friendly output; intended for
+                       AI coding agents)
   --from <name>        Tag the originating coding agent (claude-code, cursor,
                        opencode, codex, ...). Informational only; used for
                        onboarding telemetry. Supports `--from=<name>` too.
@@ -230,8 +231,8 @@ if [ -n "$_completion_shell" ]; then
 fi
 echo ""
 
-# Agent mode just prints the onboarding guide to stdout, which needs no TTY,
-# so it runs regardless of whether the surrounding shell is interactive.
+# Agent mode auto-accepts prompts and needs no TTY, so it runs regardless of
+# whether the surrounding shell is interactive.
 # Human mode drives `dialoguer` prompts, so we only run it when /dev/tty
 # exists.
 if [ "$STEEL_AGENT_MODE" = "yes" ]; then

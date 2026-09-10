@@ -225,6 +225,11 @@ fn classify_error(err: &anyhow::Error) -> (i32, &'static str, Option<&'static st
                 "unreachable",
                 Some("Check your network connection and API URL."),
             ),
+            crate::api::client::ApiError::RetryLater { .. } => (
+                exit_code::API_SERVER,
+                "not_ready",
+                Some("The computer is not ready. Try again shortly."),
+            ),
             crate::api::client::ApiError::RequestFailed { status, .. } => match *status {
                 401 => (
                     exit_code::AUTH,
