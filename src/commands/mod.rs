@@ -17,6 +17,7 @@ pub mod profile;
 pub mod scrape;
 pub mod screenshot;
 pub mod sessions;
+pub mod settings;
 pub mod skills;
 pub mod update;
 
@@ -197,6 +198,7 @@ Other:
   steel login                          Login to Steel (alias: auth)
   steel logout                         Logout from Steel
   steel config                         Show current configuration
+  steel settings                       Change persisted CLI settings
   steel doctor                         Check environment, auth, and connectivity
     --preflight                          Only check auth and API (fast, for agents)
   steel forge [template] [-n <name>]   Scaffold a new project from a template
@@ -332,6 +334,9 @@ pub enum Command {
     /// Show current configuration
     Config(config::Args),
 
+    /// Manage persisted CLI settings
+    Settings(settings::Args),
+
     /// Update to the latest version
     Update(update::Args),
 
@@ -376,6 +381,7 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Dev { command } => Some(format!("dev.{}", command.telemetry_name())),
         Command::Forge(_) => Some("forge".to_string()),
         Command::Config(_) => Some("config".to_string()),
+        Command::Settings(_) => Some("settings".to_string()),
         Command::Update(_) => Some("update".to_string()),
         Command::Cache(_) => Some("cache".to_string()),
         Command::Profile { command } => Some(format!("profile.{}", command.telemetry_name())),
@@ -423,6 +429,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Dev { command } => dev::run(command).await,
         Command::Forge(args) => forge::run(args).await,
         Command::Config(args) => config::run(args).await,
+        Command::Settings(args) => settings::run(args).await,
         Command::Update(args) => update::run(args).await,
         Command::Cache(args) => cache::run(args).await,
         Command::Profile { command } => profile::run(command).await,
@@ -469,6 +476,12 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn settings_command_is_registered() {
+        let cli = Cli::try_parse_from(["steel", "settings"]).unwrap();
+        assert!(matches!(cli.command, Command::Settings(_)));
     }
 
     #[tokio::test]

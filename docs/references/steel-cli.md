@@ -93,17 +93,21 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - Browser session state: `~/.config/steel/browser-session-state.json`
 - Profile metadata: `~/.config/steel/profiles/<name>.json`
 
+## Main Config Values
+
+`~/.config/steel/config.json` supports these persisted values:
+
+| Key | Purpose |
+| --- | --- |
+| `apiKey` | Cloud API key saved by `steel login`. |
+| `name` | Saved account or CLI name associated with login. |
+| `instance` | Default API mode: `"cloud"` or `"local"`. `steel settings` updates this value. |
+| `browser.apiUrl` | Self-hosted Steel API endpoint used in Local mode. |
+| `telemetry.disabled` | Set to `true` to disable telemetry. |
+
+Local mode falls back to `http://localhost:3000/v1` when `browser.apiUrl` and the local endpoint environment variables are unset. Explicit `--local` and `--api-url` flags continue to select self-hosted mode for an invocation.
+
 On the first run where telemetry is enabled, the CLI prints a one-time notice to stderr describing what is collected and how to opt out. The notice is suppressed in JSON/non-TTY output.
-
-Telemetry can be disabled persistently in `config.json` with:
-
-```json
-{
-  "telemetry": {
-    "disabled": true
-  }
-}
-```
 
 ## Environment Variables (Common)
 
