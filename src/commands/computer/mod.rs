@@ -74,9 +74,9 @@ impl Command {
 
 #[derive(Parser)]
 pub struct CreateArgs {
-    /// Template name
+    /// Template name (defaults to the only one the API offers)
     #[arg(long)]
-    pub template: String,
+    pub template: Option<String>,
 
     /// Region, for example us-east
     #[arg(long)]
@@ -89,10 +89,6 @@ pub struct CreateArgs {
     /// Memory in MiB
     #[arg(long = "memory", value_name = "MIB")]
     pub memory_mib: Option<u32>,
-
-    /// Disk in MiB
-    #[arg(long = "disk", value_name = "MIB")]
-    pub disk_mib: Option<u32>,
 
     /// Stop the computer after this many seconds of running time
     #[arg(long = "timeout", value_name = "SECONDS")]
@@ -215,7 +211,6 @@ async fn run_create(args: CreateArgs) -> Result<()> {
         region: args.region,
         vcpu: args.vcpu,
         memory_mib: args.memory_mib,
-        disk_mib: args.disk_mib,
         timeout_seconds: args.timeout_seconds,
         auto_pause: args.auto_pause.then_some(true),
     };

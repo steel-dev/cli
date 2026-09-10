@@ -10,18 +10,20 @@ pub fn computer_path(id: &str) -> String {
 
 #[derive(Debug, Default, Clone)]
 pub struct CreateComputer {
-    pub template: String,
+    pub template: Option<String>,
     pub region: Option<String>,
     pub vcpu: Option<u32>,
     pub memory_mib: Option<u32>,
-    pub disk_mib: Option<u32>,
     pub timeout_seconds: Option<u32>,
     pub auto_pause: Option<bool>,
 }
 
 impl CreateComputer {
     pub fn body(&self) -> Value {
-        let mut body = json!({ "template": self.template });
+        let mut body = json!({});
+        if let Some(template) = &self.template {
+            body["template"] = json!(template);
+        }
         if let Some(region) = &self.region {
             body["region"] = json!(region);
         }
@@ -30,9 +32,6 @@ impl CreateComputer {
         }
         if let Some(memory) = self.memory_mib {
             body["memoryMib"] = json!(memory);
-        }
-        if let Some(disk) = self.disk_mib {
-            body["diskMib"] = json!(disk);
         }
         if let Some(timeout) = self.timeout_seconds {
             body["timeoutSeconds"] = json!(timeout);
@@ -195,18 +194,19 @@ mod tests {
 
     #[test]
     fn create_body_only_carries_given_fields() {
-        let minimal = CreateComputer {
-            template: "steel".into(),
+        assert_eq!(CreateComputer::default().body(), json!({}));
+
+        let named = CreateComputer {
+            template: Some("steel".into()),
             ..Default::default()
         };
-        assert_eq!(minimal.body(), json!({ "template": "steel" }));
+        assert_eq!(named.body(), json!({ "template": "steel" }));
 
         let full = CreateComputer {
-            template: "steel".into(),
+            template: Some("steel".into()),
             region: Some("us-east".into()),
             vcpu: Some(4),
             memory_mib: Some(4096),
-            disk_mib: Some(10240),
             timeout_seconds: Some(600),
             auto_pause: Some(true),
         };
@@ -217,7 +217,6 @@ mod tests {
                 "region": "us-east",
                 "vcpu": 4,
                 "memoryMib": 4096,
-                "diskMib": 10240,
                 "timeoutSeconds": 600,
                 "autoPause": true,
             })
