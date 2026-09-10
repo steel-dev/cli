@@ -1573,7 +1573,6 @@ steel computer create
 ### Parameters
 
 - `--template` (string, optional): Template name (defaults to the only one the API offers)
-- `--region` (string, optional): Region, for example us-east
 - `--vcpu` (string, optional): Number of vCPUs
 - `--memory` (string, optional): Memory in MiB
 - `--timeout` (string, optional): Stop the computer after this many seconds of running time
