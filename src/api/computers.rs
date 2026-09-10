@@ -62,6 +62,23 @@ impl SteelClient {
         .await
     }
 
+    pub async fn get_computer_quota(
+        &self,
+        base_url: &str,
+        mode: ApiMode,
+        auth: &Auth,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::GET,
+            "/computers/quota",
+            None,
+            auth,
+        )
+        .await
+    }
+
     pub async fn get_computer(
         &self,
         base_url: &str,

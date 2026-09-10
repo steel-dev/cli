@@ -102,6 +102,7 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel computer exec](#steel-computer-exec)
 - [steel computer ssh](#steel-computer-ssh)
 - [steel computer checkpoint](#steel-computer-checkpoint)
+- [steel computer quota](#steel-computer-quota)
 - [steel checkpoint](#steel-checkpoint)
 - [steel checkpoint list](#steel-checkpoint-list)
 - [steel checkpoint get](#steel-checkpoint-get)
@@ -1557,6 +1558,7 @@ steel computer
 - `exec`: Run one command in a computer
 - `ssh`: Open an SSH session to a computer
 - `checkpoint`: Save a computer as a checkpoint
+- `quota`: Show how many computers and checkpoints you can have
 
 ## steel computer create
 
@@ -1722,6 +1724,16 @@ steel computer checkpoint
 - `computer_id` (string, optional): Computer ID (defaults to STEEL_COMPUTER_ID or `steel computer use`)
 - `--name` (string, optional): Name for the checkpoint
 - `--wait` (boolean, optional): Wait until the checkpoint is ready
+
+## steel computer quota
+
+Show how many computers and checkpoints you can have
+
+### Usage
+
+```bash
+steel computer quota
+```
 
 ## steel checkpoint
 

@@ -49,6 +49,9 @@ pub enum Command {
 
     /// Save a computer as a checkpoint
     Checkpoint(CheckpointArgs),
+
+    /// Show how many computers and checkpoints you can have
+    Quota,
 }
 
 impl Command {
@@ -64,6 +67,7 @@ impl Command {
             Self::Exec(_) => "exec",
             Self::Ssh(_) => "ssh",
             Self::Checkpoint(_) => "checkpoint",
+            Self::Quota => "quota",
         }
     }
 }
@@ -159,6 +163,7 @@ pub async fn run(command: Command) -> Result<()> {
         Command::Exec(args) => exec::run(args).await,
         Command::Ssh(args) => ssh::run(args).await,
         Command::Checkpoint(args) => run_checkpoint(args).await,
+        Command::Quota => run_quota().await,
     }
 }
 
@@ -306,6 +311,33 @@ async fn run_resume(args: ResumeArgs) -> Result<()> {
         output::success_data(data);
     } else {
         println!("{id} is {}.", status_of(&data));
+    }
+    Ok(())
+}
+
+async fn run_quota() -> Result<()> {
+    let (mode, base_url, auth) = api::resolve_with_auth();
+    let client = SteelClient::new()?;
+    let data = client.get_computer_quota(&base_url, mode, &auth).await?;
+    if output::is_json() {
+        output::success_data(data);
+    } else {
+        let count = |key: &str| data[key].as_u64().unwrap_or(0);
+        println!(
+            "Computers    {}/{}",
+            count("computerCount"),
+            count("computerLimit")
+        );
+        println!(
+            "Running      {}/{}",
+            count("runningCount"),
+            count("runningLimit")
+        );
+        println!(
+            "Checkpoints  {}/{}",
+            count("checkpointCount"),
+            count("checkpointLimit")
+        );
     }
     Ok(())
 }

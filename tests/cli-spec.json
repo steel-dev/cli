@@ -37,6 +37,7 @@
 				{ "name": "get" },
 				{ "name": "list" },
 				{ "name": "pause" },
+				{ "name": "quota" },
 				{ "name": "resume" },
 				{ "name": "ssh" },
 				{ "name": "use" }
