@@ -10,6 +10,7 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::api::client::SteelClient;
 use crate::api::generated::{
     GetSessionAgentLogsQuery, GetSessionAgentTracesQuery, GetSessionLogsQuery, GetSessionsQuery,
+    ReleaseAllSessionsQuery,
 };
 use crate::browser::daemon::client::DaemonClient;
 use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
@@ -196,6 +197,7 @@ async fn run_list(args: ListArgs) -> Result<()> {
                 cursor_id: args.cursor_id,
                 limit: args.limit,
                 status: args.status,
+                project_id: None,
             },
         )
         .await?;
@@ -227,7 +229,7 @@ async fn run_release(args: ReleaseArgs) -> Result<()> {
 
     if args.all {
         let data = client
-            .cli_release_all_sessions(&base_url, mode, &auth)
+            .cli_release_all_sessions(&base_url, mode, &auth, &ReleaseAllSessionsQuery::default())
             .await?;
         if output::is_json() {
             output::success_data(data);

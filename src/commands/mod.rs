@@ -1,6 +1,7 @@
 pub mod browser;
 pub mod cache;
 pub mod completion;
+pub mod computer;
 pub mod config;
 pub mod credentials;
 pub mod describe;
@@ -290,6 +291,12 @@ pub enum Command {
         command: sessions::Command,
     },
 
+    /// Cloud computers: create, run commands, ssh
+    Computer {
+        #[command(subcommand)]
+        command: computer::Command,
+    },
+
     /// One-command onboarding: login + verify + install agent skills
     Init(init::Args),
 
@@ -351,6 +358,7 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Pdf(_) => Some("pdf".to_string()),
         Command::Browser(args) => Some(format!("browser.{}", args.command.telemetry_name())),
         Command::Sessions { command } => Some(format!("sessions.{}", command.telemetry_name())),
+        Command::Computer { command } => Some(format!("computer.{}", command.telemetry_name())),
         Command::Init(_) => Some("init".to_string()),
         Command::Login(_) => Some("login".to_string()),
         Command::Logout(_) => Some("logout".to_string()),
@@ -398,6 +406,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Pdf(args) => pdf::run(args).await,
         Command::Browser(args) => browser::run(args).await,
         Command::Sessions { command } => sessions::run(command).await,
+        Command::Computer { command } => computer::run(command).await,
         Command::Init(args) => init::run(args).await,
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,

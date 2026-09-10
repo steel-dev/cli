@@ -377,6 +377,7 @@ fn error_class(err: &anyhow::Error) -> &'static str {
                 s if s >= 500 => "api_server_error",
                 _ => "api_request_failed",
             },
+            crate::api::client::ApiError::RetryLater { .. } => "api_not_ready",
             crate::api::client::ApiError::Other(_) => "network_error",
         };
     }

@@ -26,6 +26,15 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - `steel profile list`: list all saved Steel browser profiles.
 - `steel profile delete`: delete a saved Steel profile (local metadata only).
 
+### Computer Commands
+
+- `steel computer create`: create a cloud computer from a template.
+- `steel computer list`, `steel computer get`, `steel computer delete`: inspect and remove computers.
+- `steel computer pause`, `steel computer resume`: pause and wake a computer.
+- `steel computer use`: remember a default computer so other commands need no id.
+- `steel computer exec -- <command>`: run one command; output streams and the exit code is returned.
+- `steel computer ssh`: open an SSH shell, or run a command over SSH with `-- <command>`.
+
 ### Credentials Commands
 
 - `steel credentials create`: store a new credential for a given origin.

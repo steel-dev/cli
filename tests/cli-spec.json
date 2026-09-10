@@ -18,6 +18,20 @@
 			]
 		},
 		{ "name": "cache" },
+		{
+			"name": "computer",
+			"subcommands": [
+				{ "name": "create" },
+				{ "name": "delete" },
+				{ "name": "exec" },
+				{ "name": "get" },
+				{ "name": "list" },
+				{ "name": "pause" },
+				{ "name": "resume" },
+				{ "name": "ssh" },
+				{ "name": "use" }
+			]
+		},
 		{ "name": "config" },
 		{
 			"name": "credentials",

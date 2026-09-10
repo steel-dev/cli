@@ -582,7 +582,10 @@ mod tests {
     fn session_timeout_preserves_nonzero() {
         // Sanity: the filter only affects the zero case.
         assert_eq!(get_session_timeout(&json!({"timeout": 1})), Some(1));
-        assert_eq!(get_session_timeout(&json!({"timeout": u64::MAX})), Some(u64::MAX));
+        assert_eq!(
+            get_session_timeout(&json!({"timeout": u64::MAX})),
+            Some(u64::MAX)
+        );
     }
 
     #[test]

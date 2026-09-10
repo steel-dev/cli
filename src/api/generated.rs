@@ -32,6 +32,29 @@ pub struct StreamingMetadata {
 
 pub const CLI_OPERATION_METADATA: &[OperationMetadata] = &[
     OperationMetadata {
+        id: "exec_computer",
+        command: "computer exec",
+        status: "implemented",
+        method: "POST",
+        path: "/v1/computers/{id}/exec",
+        summary: "Run one command in a computer",
+        example: "steel computer exec <computer-id> -- <command>",
+        streaming: None,
+    },
+    OperationMetadata {
+        id: "attach_computer_ssh",
+        command: "computer ssh",
+        status: "implemented",
+        method: "GET",
+        path: "/v1/computers/{id}/ssh",
+        summary: "Open an SSH connection to a computer",
+        example: "steel computer ssh <computer-id>",
+        streaming: Some(StreamingMetadata {
+            transport: "websocket",
+            path: "/v1/computers/{id}/ssh",
+        }),
+    },
+    OperationMetadata {
         id: "get_session_agent_logs",
         command: "sessions agent-logs",
         status: "implemented",
@@ -126,6 +149,7 @@ pub struct GetSessionsQuery {
     pub cursor_id: Option<String>,
     pub limit: Option<u16>,
     pub status: Option<String>,
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -137,6 +161,12 @@ pub struct GetSessionLogsQuery {
     pub event_types: Vec<String>,
     pub limit: Option<u16>,
     pub offset: Option<u32>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseAllSessionsQuery {
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -225,6 +255,13 @@ fn build_get_sessions_path(query: &GetSessionsQuery) -> String {
     {
         push_query(&mut path, "status", value.trim());
     }
+    if let Some(value) = query
+        .project_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        push_query(&mut path, "projectId", value.trim());
+    }
     path
 }
 
@@ -271,6 +308,18 @@ fn build_release_session_path(session_id: &str) -> String {
     format!("/sessions/{session_id}/release")
 }
 
+fn build_release_all_sessions_path(query: &ReleaseAllSessionsQuery) -> String {
+    let mut path = "/sessions/release".to_string();
+    if let Some(value) = query
+        .project_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        push_query(&mut path, "projectId", value.trim());
+    }
+    path
+}
+
 fn build_get_session_agent_traces_path(
     session_id: &str,
     query: &GetSessionAgentTracesQuery,
@@ -308,6 +357,40 @@ fn build_get_session_agent_traces_path(
 }
 
 impl SteelClient {
+    pub async fn cli_exec_computer(
+        &self,
+        base_url: &str,
+        mode: ApiMode,
+        auth: &Auth,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::POST,
+            "/computers/{id}/exec",
+            None,
+            auth,
+        )
+        .await
+    }
+
+    pub async fn cli_attach_computer_ssh(
+        &self,
+        base_url: &str,
+        mode: ApiMode,
+        auth: &Auth,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::GET,
+            "/computers/{id}/ssh",
+            None,
+            auth,
+        )
+        .await
+    }
+
     pub async fn cli_get_session_agent_logs(
         &self,
         base_url: &str,
@@ -405,12 +488,13 @@ impl SteelClient {
         base_url: &str,
         mode: ApiMode,
         auth: &Auth,
+        query: &ReleaseAllSessionsQuery,
     ) -> Result<Value, ApiError> {
         self.request(
             base_url,
             mode,
             reqwest::Method::POST,
-            "/sessions/release",
+            &build_release_all_sessions_path(query),
             None,
             auth,
         )
@@ -447,6 +531,7 @@ mod tests {
             cursor_id: Some("abc".into()),
             limit: Some(25),
             status: Some("live".into()),
+            ..Default::default()
         });
         assert_eq!(path, "/sessions?cursorId=abc&limit=25&status=live");
     }

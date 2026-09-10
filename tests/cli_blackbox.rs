@@ -715,3 +715,66 @@ fn help_flag_exits_with_code_0() {
     let code = output.status.code().expect("should have exit code");
     assert_eq!(code, 0, "--help should exit with code 0, got: {code}");
 }
+
+// ─── Computers ──────────────────────────────────────────────────────
+
+fn run_without_computer_context(args: &[&str]) -> Output {
+    let (mut cmd, _tmp) = steel_cmd();
+    cmd.env_remove("STEEL_COMPUTER_ID");
+    cmd.args(args);
+    cmd.output().expect("failed to execute steel binary")
+}
+
+#[test]
+fn computer_help_lists_subcommands() {
+    let output = run(&["computer", "--help"]);
+    assert!(
+        output.status.success(),
+        "steel computer --help should exit 0"
+    );
+    let out = stdout(&output);
+    for sub in &[
+        "create", "list", "get", "delete", "pause", "resume", "use", "exec", "ssh",
+    ] {
+        assert!(
+            out.contains(sub),
+            "computer help should list '{sub}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn computer_exec_help_shows_expected_flags() {
+    let output = run(&["computer", "exec", "--help"]);
+    assert!(
+        output.status.success(),
+        "steel computer exec --help should exit 0"
+    );
+    let out = stdout(&output);
+    for flag in &["--command", "--cwd", "--env", "--timeout", "ARGV"] {
+        assert!(
+            out.contains(flag),
+            "computer exec help should mention '{flag}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn computer_exec_without_a_computer_explains_how_to_pick_one() {
+    let output = run_without_computer_context(&["computer", "exec", "--", "ls"]);
+    assert!(
+        !output.status.success(),
+        "exec without a computer should fail"
+    );
+    let text = format!("{}{}", stdout(&output), stderr(&output));
+    assert!(
+        text.contains("steel computer use"),
+        "the error should point at `steel computer use`, got: {text}"
+    );
+}
+
+#[test]
+fn computer_use_without_an_id_fails() {
+    let output = run_without_computer_context(&["computer", "use"]);
+    assert!(!output.status.success(), "use without an id should fail");
+}
