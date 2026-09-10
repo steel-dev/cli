@@ -1,4 +1,6 @@
+pub mod checkpoints;
 pub mod client;
+pub mod computers;
 pub mod generated;
 pub mod projects;
 pub mod session;

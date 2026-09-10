@@ -82,6 +82,7 @@ Supported shells: `bash`, `zsh`, `fish`, `powershell`, `elvish`.
 | API tools           | `scrape`, `screenshot`, `pdf`                                                        |
 | Local runtime       | `dev install`, `dev start`, `dev stop`                                               |
 | Credentials         | `credentials list`, `credentials create`, `credentials update`, `credentials delete` |
+| Cloud computers     | `computer create`, `computer exec`, `computer ssh`, `computer list`, `computer use`  |
 | Account and utility | `login`, `logout`, `config`, `settings`, `doctor`, `cache`, `update`, `completion`   |
 
 Full flags and schemas: [CLI reference](docs/cli-reference.md).

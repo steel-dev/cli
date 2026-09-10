@@ -1,6 +1,8 @@
 pub mod browser;
 pub mod cache;
+pub mod checkpoint;
 pub mod completion;
+pub mod computer;
 pub mod config;
 pub mod credentials;
 pub mod describe;
@@ -29,7 +31,7 @@ Global Flags:
 
 Getting Started:
   steel init                           Log in, verify, and install Steel skills into detected agents
-    --agent                              Print the agent onboarding guide to stdout and exit
+    --agent                              Auto-accept prompts and print agent-friendly output
   steel skills list                    List available Steel Skills
   steel skills install --all           Install all Steel Skills through npx skills
   steel skills install <name>          Install a Steel Skill through npx skills
@@ -292,6 +294,18 @@ pub enum Command {
         command: sessions::Command,
     },
 
+    /// Cloud computers: create, run commands, ssh
+    Computer {
+        #[command(subcommand)]
+        command: computer::Command,
+    },
+
+    /// Computer checkpoints: list, restore, delete
+    Checkpoint {
+        #[command(subcommand)]
+        command: checkpoint::Command,
+    },
+
     /// One-command onboarding: login + verify + install agent skills
     Init(init::Args),
 
@@ -356,6 +370,8 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Pdf(_) => Some("pdf".to_string()),
         Command::Browser(args) => Some(format!("browser.{}", args.command.telemetry_name())),
         Command::Sessions { command } => Some(format!("sessions.{}", command.telemetry_name())),
+        Command::Computer { command } => Some(format!("computer.{}", command.telemetry_name())),
+        Command::Checkpoint { command } => Some(format!("checkpoint.{}", command.telemetry_name())),
         Command::Init(_) => Some("init".to_string()),
         Command::Login(_) => Some("login".to_string()),
         Command::Logout(_) => Some("logout".to_string()),
@@ -404,6 +420,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Pdf(args) => pdf::run(args).await,
         Command::Browser(args) => browser::run(args).await,
         Command::Sessions { command } => sessions::run(command).await,
+        Command::Computer { command } => computer::run(command).await,
+        Command::Checkpoint { command } => checkpoint::run(command).await,
         Command::Init(args) => init::run(args).await,
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,
