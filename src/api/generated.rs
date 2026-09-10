@@ -32,6 +32,29 @@ pub struct StreamingMetadata {
 
 pub const CLI_OPERATION_METADATA: &[OperationMetadata] = &[
     OperationMetadata {
+        id: "exec_computer",
+        command: "computer exec",
+        status: "implemented",
+        method: "POST",
+        path: "/v1/computers/{id}/exec",
+        summary: "Run one command in a computer",
+        example: "steel computer exec <computer-id> -- <command>",
+        streaming: None,
+    },
+    OperationMetadata {
+        id: "attach_computer_ssh",
+        command: "computer ssh",
+        status: "implemented",
+        method: "GET",
+        path: "/v1/computers/{id}/ssh",
+        summary: "Open an SSH connection to a computer",
+        example: "steel computer ssh <computer-id>",
+        streaming: Some(StreamingMetadata {
+            transport: "websocket",
+            path: "/v1/computers/{id}/ssh",
+        }),
+    },
+    OperationMetadata {
         id: "get_session_agent_logs",
         command: "sessions agent-logs",
         status: "implemented",
@@ -334,6 +357,40 @@ fn build_get_session_agent_traces_path(
 }
 
 impl SteelClient {
+    pub async fn cli_exec_computer(
+        &self,
+        base_url: &str,
+        mode: ApiMode,
+        auth: &Auth,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::POST,
+            "/computers/{id}/exec",
+            None,
+            auth,
+        )
+        .await
+    }
+
+    pub async fn cli_attach_computer_ssh(
+        &self,
+        base_url: &str,
+        mode: ApiMode,
+        auth: &Auth,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::GET,
+            "/computers/{id}/ssh",
+            None,
+            auth,
+        )
+        .await
+    }
+
     pub async fn cli_get_session_agent_logs(
         &self,
         base_url: &str,

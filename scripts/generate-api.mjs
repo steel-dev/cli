@@ -75,7 +75,7 @@ function collectOperations(spec) {
         requestPath: stripV1(path),
         summary: operation.summary || operation.operationId,
         command: cli.command.join(" "),
-        example: exampleFor(cli.command, operation),
+        example: exampleFor(cli.command, operation, path),
         streaming: cli.follow
           ? {
               transport: cli.follow.transport || "websocket",
@@ -91,15 +91,23 @@ function collectOperations(spec) {
   return operations;
 }
 
-function exampleFor(command, operation) {
+function exampleFor(command, operation, path) {
+  const cli = operation["x-steel-cli"] || {};
+  if (cli.example) return cli.example;
   const base = `steel ${command.join(" ")}`;
+  const id = idPlaceholder(path);
   if (command.includes("list")) return `${base} --status live --limit 20`;
-  if (command.includes("agent-logs")) return `${base} <session-id> --limit 100`;
-  if (operation["x-steel-cli"]?.follow) return `${base} <session-id> --follow`;
+  if (command.includes("agent-logs")) return `${base} ${id} --limit 100`;
+  if (cli.follow) return `${base} ${id} --follow`;
   if (operation.parameters?.some((parameter) => parameter.in === "path" && parameter.name === "id")) {
-    return `${base} <session-id>`;
+    return `${base} ${id}`;
   }
   return base;
+}
+
+function idPlaceholder(path) {
+  const resource = stripV1(path).split("/").filter(Boolean)[0] || "sessions";
+  return `<${resource.replace(/s$/, "")}-id>`;
 }
 
 function rustQueryType(parameter) {

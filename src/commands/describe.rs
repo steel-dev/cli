@@ -578,4 +578,31 @@ mod tests {
                 .any(|x| x == "no-update-check")
         );
     }
+
+    #[test]
+    fn computer_exec_lists_its_api_operation() {
+        let v = describe_path(&["computer", "exec"]);
+        let ops = v["api_operations"].as_array().unwrap();
+        assert_eq!(ops.len(), 1);
+        assert_eq!(ops[0]["operation_id"], "exec_computer");
+        assert_eq!(ops[0]["method"], "POST");
+        assert_eq!(ops[0]["path"], "/v1/computers/{id}/exec");
+        assert_eq!(
+            ops[0]["example"],
+            "steel computer exec <computer-id> -- <command>"
+        );
+        assert!(ops[0].get("streaming").is_none());
+    }
+
+    #[test]
+    fn computer_ssh_is_a_websocket_operation() {
+        let v = describe_path(&["computer", "ssh"]);
+        let ops = v["api_operations"].as_array().unwrap();
+        assert_eq!(ops.len(), 1);
+        assert_eq!(ops[0]["operation_id"], "attach_computer_ssh");
+        assert_eq!(ops[0]["method"], "GET");
+        assert_eq!(ops[0]["example"], "steel computer ssh <computer-id>");
+        assert_eq!(ops[0]["streaming"]["transport"], "websocket");
+        assert_eq!(ops[0]["streaming"]["path"], "/v1/computers/{id}/ssh");
+    }
 }
