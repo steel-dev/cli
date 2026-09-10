@@ -30,20 +30,32 @@ function flatten(node, path = []) {
   return [...own, ...children];
 }
 
+function parameterLine(parameter) {
+  const names = [];
+  if (parameter.short) names.push(`-${parameter.short}`);
+  if (!parameter.positional) names.push(`--${parameter.name}`);
+  if (parameter.positional) names.push(parameter.name);
+  const required = parameter.required ? "required" : "optional";
+  const description = parameter.description ? `: ${parameter.description}` : "";
+  return `- \`${names.join(", ")}\` (${parameter.type}, ${required})${description}`;
+}
+
 function renderParameters(parameters = []) {
   if (!parameters.length) return "";
-  const lines = ["### Parameters", ""];
-  for (const parameter of parameters) {
-    const names = [];
-    if (parameter.short) names.push(`-${parameter.short}`);
-    if (!parameter.positional) names.push(`--${parameter.name}`);
-    if (parameter.positional) names.push(parameter.name);
-    const required = parameter.required ? "required" : "optional";
-    const description = parameter.description ? `: ${parameter.description}` : "";
-    lines.push(`- \`${names.join(", ")}\` (${parameter.type}, ${required})${description}`);
-  }
-  lines.push("");
-  return lines.join("\n");
+  return ["### Parameters", "", ...parameters.map(parameterLine), ""].join("\n");
+}
+
+function renderGlobalOptions(parameters = []) {
+  return [
+    "## Global Options",
+    "",
+    "These options are accepted by every command.",
+    "",
+    ...parameters.map(parameterLine),
+    "- `-h, --help`: Print help for a command",
+    "- `-V, --version`: Print the Steel CLI version",
+    "",
+  ].join("\n");
 }
 
 function renderApiOperations(operations = []) {
@@ -66,12 +78,13 @@ const commands = flatten(root);
 const lines = [
   "# Steel CLI Reference",
   "",
-  "This file is generated from `steel describe --all` and API metadata.",
+  `${root.description}. This file is generated from \`steel describe --all\` and API metadata; regenerate it with \`npm run docs:generate\`.`,
   "",
   "## Table of Contents",
   "",
   ...commands.map((command) => `- [${command.command}](#${slug(command.command)})`),
   "",
+  renderGlobalOptions(root.global_args),
 ];
 
 for (const command of commands) {
