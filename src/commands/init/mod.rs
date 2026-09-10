@@ -1,6 +1,10 @@
+use std::path::Path;
+
 use clap::Parser;
 
 use crate::commands::{doctor, login, skills};
+use crate::config;
+use crate::config::settings::{OnboardingConfig, read_config_from, write_config_to};
 use crate::status;
 
 #[derive(Parser)]
@@ -21,10 +25,11 @@ pub struct Args {
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("Steel CLI setup");
-    if let Ok(from) = std::env::var("STEEL_ONBOARDING_FROM")
-        && !from.is_empty()
+    if let Some(source) =
+        onboarding_source_from_env(std::env::var("STEEL_ONBOARDING_FROM").ok().as_deref())
     {
-        status!("Onboarding source: {from}");
+        status!("Onboarding source: {source}");
+        record_onboarding_source(&source);
     }
     status!("");
 
@@ -90,4 +95,70 @@ async fn install_skills(args: &Args) -> anyhow::Result<()> {
 
 fn is_all_selection(selected: &[String]) -> bool {
     selected.len() == 1 && matches!(selected[0].as_str(), "__all__" | "all")
+}
+
+fn onboarding_source_from_env(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|source| !source.is_empty())
+        .map(str::to_string)
+}
+
+fn record_onboarding_source(source: &str) {
+    let config_path = config::config_path_in(&config::config_dir());
+    let _ = persist_onboarding_source(&config_path, source);
+    crate::telemetry::set_onboarding_source(source);
+}
+
+fn persist_onboarding_source(config_path: &Path, source: &str) -> anyhow::Result<()> {
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut cfg = read_config_from(config_path).unwrap_or_default();
+    cfg.onboarding = Some(OnboardingConfig {
+        source: Some(source.to_string()),
+    });
+    write_config_to(config_path, &cfg)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn onboarding_source_from_env_trims_and_drops_blank() {
+        assert_eq!(
+            onboarding_source_from_env(Some(" claude-code ")).as_deref(),
+            Some("claude-code")
+        );
+        assert_eq!(onboarding_source_from_env(Some("  ")), None);
+        assert_eq!(onboarding_source_from_env(None), None);
+    }
+
+    #[test]
+    fn persist_onboarding_source_creates_config() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("nested").join("config.json");
+
+        persist_onboarding_source(&path, "cursor").unwrap();
+
+        let cfg = read_config_from(&path).unwrap();
+        assert_eq!(cfg.onboarding_source(), Some("cursor"));
+    }
+
+    #[test]
+    fn persist_onboarding_source_preserves_existing_fields() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, r#"{"apiKey":"k","instance":"cloud"}"#).unwrap();
+
+        persist_onboarding_source(&path, "codex").unwrap();
+
+        let cfg = read_config_from(&path).unwrap();
+        assert_eq!(cfg.api_key.as_deref(), Some("k"));
+        assert_eq!(cfg.instance.as_deref(), Some("cloud"));
+        assert_eq!(cfg.onboarding_source(), Some("codex"));
+    }
 }

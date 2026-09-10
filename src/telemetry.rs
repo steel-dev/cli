@@ -31,6 +31,7 @@ struct GlobalTelemetry {
     client: Option<Arc<TelemetryClient>>,
     queue: Vec<QueuedEvent>,
     flusher: Option<FlusherHandle>,
+    onboarding_source: Option<String>,
 }
 
 struct FlusherHandle {
@@ -135,9 +136,10 @@ impl TelemetryClient {
 }
 
 pub fn init_from_env() {
+    let config = crate::config::settings::read_config().ok();
+
     #[cfg(test)]
     let bootstrap = {
-        let config = crate::config::settings::read_config().ok();
         let override_state = TEST_OVERRIDE
             .get_or_init(|| Mutex::new(None))
             .lock()
@@ -156,20 +158,21 @@ pub fn init_from_env() {
     };
 
     #[cfg(not(test))]
-    let bootstrap = {
-        let config = crate::config::settings::read_config().ok();
-        TelemetryClient::from_parts(
-            &config::config_dir(),
-            &TelemetryEnv::from_env(),
-            config.as_ref(),
-        )
-    };
+    let bootstrap = TelemetryClient::from_parts(
+        &config::config_dir(),
+        &TelemetryEnv::from_env(),
+        config.as_ref(),
+    );
 
     let previous_flusher = {
         let mut state = global().lock();
         state.client = bootstrap
             .as_ref()
             .map(|bootstrap| Arc::clone(&bootstrap.client));
+        state.onboarding_source = config
+            .as_ref()
+            .and_then(|config| config.onboarding_source())
+            .map(str::to_string);
         state.queue.clear();
         state.flusher.take()
     };
@@ -248,6 +251,22 @@ pub fn track_event(event: &str, mut properties: Map<String, Value>) {
     track(event, properties);
 }
 
+pub fn set_onboarding_source(source: &str) {
+    let source = source.trim();
+    if source.is_empty() {
+        return;
+    }
+    global().lock().onboarding_source = Some(source.to_string());
+}
+
+fn apply_onboarding_source(properties: &mut Map<String, Value>, source: Option<&str>) {
+    if let Some(source) = source {
+        properties
+            .entry("onboarding_source")
+            .or_insert_with(|| json!(source));
+    }
+}
+
 pub async fn flush_best_effort() {
     let flusher = {
         let mut state = global().lock();
@@ -262,11 +281,12 @@ pub async fn flush_best_effort() {
     let _ = tokio::time::timeout(SHUTDOWN_TIMEOUT, flusher.join).await;
 }
 
-fn track(event: &str, properties: Map<String, Value>) {
+fn track(event: &str, mut properties: Map<String, Value>) {
     let mut state = global().lock();
     if state.client.is_none() {
         return;
     }
+    apply_onboarding_source(&mut properties, state.onboarding_source.as_deref());
     state.queue.push(QueuedEvent {
         event: event.to_string(),
         properties,
@@ -474,6 +494,7 @@ pub fn reset_for_test() {
         let mut state = global().lock();
         state.queue.clear();
         state.client = None;
+        state.onboarding_source = None;
         state.flusher.take()
     };
 
@@ -503,6 +524,28 @@ pub fn set_test_override(config_dir: &Path, host: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn onboarding_source_is_attached_when_known() {
+        let mut properties = Map::new();
+        apply_onboarding_source(&mut properties, Some("claude-code"));
+        assert_eq!(properties["onboarding_source"], json!("claude-code"));
+    }
+
+    #[test]
+    fn onboarding_source_does_not_override_explicit_value() {
+        let mut properties = Map::new();
+        properties.insert("onboarding_source".into(), json!("cursor"));
+        apply_onboarding_source(&mut properties, Some("claude-code"));
+        assert_eq!(properties["onboarding_source"], json!("cursor"));
+    }
+
+    #[test]
+    fn onboarding_source_is_omitted_when_unknown() {
+        let mut properties = Map::new();
+        apply_onboarding_source(&mut properties, None);
+        assert!(!properties.contains_key("onboarding_source"));
+    }
 
     #[test]
     fn telemetry_enabled_by_default() {
