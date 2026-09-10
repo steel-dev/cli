@@ -11,7 +11,6 @@ pub fn computer_path(id: &str) -> String {
 #[derive(Debug, Default, Clone)]
 pub struct CreateComputer {
     pub template: Option<String>,
-    pub region: Option<String>,
     pub vcpu: Option<u32>,
     pub memory_mib: Option<u32>,
     pub timeout_seconds: Option<u32>,
@@ -23,9 +22,6 @@ impl CreateComputer {
         let mut body = json!({});
         if let Some(template) = &self.template {
             body["template"] = json!(template);
-        }
-        if let Some(region) = &self.region {
-            body["region"] = json!(region);
         }
         if let Some(vcpu) = self.vcpu {
             body["vcpu"] = json!(vcpu);
@@ -204,7 +200,6 @@ mod tests {
 
         let full = CreateComputer {
             template: Some("steel".into()),
-            region: Some("us-east".into()),
             vcpu: Some(4),
             memory_mib: Some(4096),
             timeout_seconds: Some(600),
@@ -214,7 +209,6 @@ mod tests {
             full.body(),
             json!({
                 "template": "steel",
-                "region": "us-east",
                 "vcpu": 4,
                 "memoryMib": 4096,
                 "timeoutSeconds": 600,

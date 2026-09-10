@@ -78,10 +78,6 @@ pub struct CreateArgs {
     #[arg(long)]
     pub template: Option<String>,
 
-    /// Region, for example us-east
-    #[arg(long)]
-    pub region: Option<String>,
-
     /// Number of vCPUs
     #[arg(long)]
     pub vcpu: Option<u32>,
@@ -208,7 +204,6 @@ async fn run_create(args: CreateArgs) -> Result<()> {
     let client = SteelClient::new()?;
     let request = CreateComputer {
         template: args.template,
-        region: args.region,
         vcpu: args.vcpu,
         memory_mib: args.memory_mib,
         timeout_seconds: args.timeout_seconds,
@@ -420,13 +415,12 @@ fn print_computers(data: &Value) {
         println!("No computers.");
         return;
     }
-    let rows: Vec<[String; 6]> = computers
+    let rows: Vec<[String; 5]> = computers
         .iter()
         .map(|computer| {
             [
                 computer["id"].as_str().unwrap_or("").to_string(),
                 status_of(computer).to_string(),
-                computer["region"].as_str().unwrap_or("-").to_string(),
                 computer["template"].as_str().unwrap_or("-").to_string(),
                 format!(
                     "{}/{}",
@@ -440,7 +434,7 @@ fn print_computers(data: &Value) {
             ]
         })
         .collect();
-    let header = ["ID", "STATUS", "REGION", "TEMPLATE", "VCPU/MIB", "SINCE"];
+    let header = ["ID", "STATUS", "TEMPLATE", "VCPU/MIB", "SINCE"];
     let widths: Vec<usize> = (0..header.len())
         .map(|column| {
             rows.iter()
@@ -450,7 +444,7 @@ fn print_computers(data: &Value) {
                 .unwrap_or(0)
         })
         .collect();
-    let line = |cells: [&str; 6]| {
+    let line = |cells: [&str; 5]| {
         cells
             .iter()
             .enumerate()
@@ -462,10 +456,7 @@ fn print_computers(data: &Value) {
     };
     println!("{}", line(header));
     for row in &rows {
-        println!(
-            "{}",
-            line([&row[0], &row[1], &row[2], &row[3], &row[4], &row[5]])
-        );
+        println!("{}", line([&row[0], &row[1], &row[2], &row[3], &row[4]]));
     }
 }
 
