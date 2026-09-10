@@ -52,7 +52,7 @@ Browser Sessions:
   steel browser start [--session <name>]      Create or attach to a browser session
     --stealth                            Enable stealth mode (humanize + auto CAPTCHA)
     -p, --proxy <proxy>                  Use residential proxy
-    --session-timeout <ms>               Session timeout
+    --session-timeout <ms>               Session timeout (defaults to browser.sessionTimeoutMs in config.json)
     --session-solve-captcha              Enable manual CAPTCHA solving
     --profile <name>                     Named profile to persist browser state
     --update-profile                     Save state back to profile on session end

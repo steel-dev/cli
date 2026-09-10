@@ -275,7 +275,7 @@ steel browser start
 
 - `--stealth` (boolean, optional): Enable stealth mode (humanize interactions + auto CAPTCHA)
 - `-p, --proxy` (string, optional): Use a residential proxy
-- `--session-timeout` (string, optional): Session timeout in milliseconds (create-time only)
+- `--session-timeout` (string, optional): Session timeout in milliseconds (create-time only; defaults to browser.sessionTimeoutMs in config.json)
 - `--inactivity-timeout` (string, optional): Inactivity timeout in milliseconds: release the session when no CDP command or remote input is received for this long. Defaults to 120000 (2 minutes); pass 0 to disable (create-time only)
 - `--session-solve-captcha` (boolean, optional): Enable manual CAPTCHA solving on new sessions (create-time only)
 - `--profile` (string, optional): Named profile to persist browser state across sessions

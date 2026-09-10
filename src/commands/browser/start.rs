@@ -8,6 +8,7 @@ use crate::browser::daemon::protocol::{
 };
 use crate::browser::lifecycle::sanitize_connect_url;
 use crate::browser::profile_store;
+use crate::config::settings::read_config;
 use crate::status;
 use crate::util::{api, output};
 
@@ -21,7 +22,7 @@ pub struct Args {
     #[arg(short = 'p', long)]
     pub proxy: Option<String>,
 
-    /// Session timeout in milliseconds (create-time only)
+    /// Session timeout in milliseconds (create-time only; defaults to browser.sessionTimeoutMs in config.json)
     #[arg(long = "session-timeout")]
     pub session_timeout: Option<u64>,
 
@@ -60,6 +61,10 @@ pub struct Args {
 
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let (mode, base_url, auth) = api::resolve_with_auth();
+    let configured_session_timeout = read_config()
+        .ok()
+        .and_then(|config| config.browser_session_timeout_ms());
+    let session_timeout = resolve_session_timeout(args.session_timeout, configured_session_timeout);
 
     let session_name = session.unwrap_or("default").to_string();
 
@@ -82,11 +87,11 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let proxy_enabled = args.proxy.is_some();
     let namespace_set = args.namespace.is_some();
     let inactivity_timeout_ms = resolve_inactivity_timeout(args.inactivity_timeout);
-    if let (Some(timeout), Some(inactivity)) = (args.session_timeout, inactivity_timeout_ms)
+    if let (Some(timeout), Some(inactivity)) = (session_timeout, inactivity_timeout_ms)
         && inactivity >= timeout
     {
         eprintln!(
-            "warning: --inactivity-timeout ({inactivity}ms) >= --session-timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
+            "warning: --inactivity-timeout ({inactivity}ms) >= session timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
         );
     }
 
@@ -109,7 +114,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         session_name: session_name.clone(),
         stealth: args.stealth,
         proxy_url: args.proxy,
-        timeout_ms: args.session_timeout,
+        timeout_ms: session_timeout,
         inactivity_timeout_ms,
         headless: args.session_headless,
         region: args.session_region,
@@ -235,6 +240,13 @@ fn humanize_secs(secs: u64) -> String {
     }
 }
 
+const fn resolve_session_timeout(explicit: Option<u64>, configured: Option<u64>) -> Option<u64> {
+    match explicit {
+        Some(timeout) => Some(timeout),
+        None => configured,
+    }
+}
+
 const fn resolve_inactivity_timeout(explicit: Option<u64>) -> Option<u64> {
     match explicit {
         None => Some(DEFAULT_INACTIVITY_TIMEOUT_MS),
@@ -246,6 +258,24 @@ const fn resolve_inactivity_timeout(explicit: Option<u64>) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_timeout_uses_config_when_flag_is_unset() {
+        assert_eq!(resolve_session_timeout(None, Some(900000)), Some(900000));
+    }
+
+    #[test]
+    fn session_timeout_flag_overrides_config() {
+        assert_eq!(
+            resolve_session_timeout(Some(300000), Some(900000)),
+            Some(300000)
+        );
+    }
+
+    #[test]
+    fn session_timeout_explicit_zero_overrides_config() {
+        assert_eq!(resolve_session_timeout(Some(0), Some(900000)), Some(0));
+    }
 
     #[test]
     fn inactivity_default_when_unset() {
