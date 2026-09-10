@@ -114,6 +114,15 @@ pub struct Config {
     pub telemetry: Option<TelemetryConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub computer: Option<ComputerConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub onboarding: Option<OnboardingConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -158,6 +167,14 @@ impl Config {
             .as_ref()
             .and_then(|c| c.default_id.as_deref())
             .filter(|s| !s.trim().is_empty())
+    }
+
+    pub fn onboarding_source(&self) -> Option<&str> {
+        self.onboarding
+            .as_ref()
+            .and_then(|o| o.source.as_deref())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
     }
 }
 
@@ -217,6 +234,9 @@ mod tests {
                 disabled: Some(true),
             }),
             computer: None,
+            onboarding: Some(OnboardingConfig {
+                source: Some("claude-code".into()),
+            }),
         };
 
         write_config_to(&path, &config).unwrap();
@@ -227,6 +247,19 @@ mod tests {
         assert_eq!(loaded.instance.as_deref(), Some("cloud"));
         assert_eq!(loaded.local_api_url(), Some("http://localhost:4000/v1"));
         assert!(loaded.telemetry_disabled());
+        assert_eq!(loaded.onboarding_source(), Some("claude-code"));
+    }
+
+    #[test]
+    fn onboarding_source_ignores_blank_values() {
+        let config = Config {
+            onboarding: Some(OnboardingConfig {
+                source: Some("   ".into()),
+            }),
+            ..Default::default()
+        };
+        assert_eq!(config.onboarding_source(), None);
+        assert_eq!(Config::default().onboarding_source(), None);
     }
 
     #[test]
