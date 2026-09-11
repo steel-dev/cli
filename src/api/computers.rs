@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde_json::{Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
@@ -15,6 +17,8 @@ pub struct CreateComputer {
     pub memory_mib: Option<u32>,
     pub timeout_seconds: Option<u32>,
     pub auto_pause: Option<bool>,
+    pub idle_timeout_seconds: Option<u32>,
+    pub env: BTreeMap<String, String>,
 }
 
 impl CreateComputer {
@@ -34,6 +38,12 @@ impl CreateComputer {
         }
         if let Some(auto_pause) = self.auto_pause {
             body["autoPause"] = json!(auto_pause);
+        }
+        if let Some(idle_timeout) = self.idle_timeout_seconds {
+            body["idleTimeoutSeconds"] = json!(idle_timeout);
+        }
+        if !self.env.is_empty() {
+            body["env"] = json!(self.env);
         }
         body
     }
@@ -258,6 +268,8 @@ mod tests {
             memory_mib: Some(4096),
             timeout_seconds: Some(600),
             auto_pause: Some(true),
+            idle_timeout_seconds: Some(90),
+            env: BTreeMap::from([("TOKEN".into(), "abc".into())]),
         };
         assert_eq!(
             full.body(),
@@ -267,8 +279,19 @@ mod tests {
                 "memoryMib": 4096,
                 "timeoutSeconds": 600,
                 "autoPause": true,
+                "idleTimeoutSeconds": 90,
+                "env": { "TOKEN": "abc" },
             })
         );
+    }
+
+    #[test]
+    fn zero_idle_timeout_is_sent_and_empty_env_is_not() {
+        let request = CreateComputer {
+            idle_timeout_seconds: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(request.body(), json!({ "idleTimeoutSeconds": 0 }));
     }
 
     #[test]
