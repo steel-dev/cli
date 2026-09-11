@@ -164,6 +164,60 @@ impl SteelClient {
         .await
     }
 
+    pub async fn stop_computer(
+        &self,
+        base_url: &str,
+        mode: ApiMode,
+        auth: &Auth,
+        id: &str,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::POST,
+            &format!("{}/stop", computer_path(id)),
+            None,
+            auth,
+        )
+        .await
+    }
+
+    pub async fn start_computer(
+        &self,
+        base_url: &str,
+        mode: ApiMode,
+        auth: &Auth,
+        id: &str,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::POST,
+            &format!("{}/start", computer_path(id)),
+            None,
+            auth,
+        )
+        .await
+    }
+
+    pub async fn restart_computer(
+        &self,
+        base_url: &str,
+        mode: ApiMode,
+        auth: &Auth,
+        id: &str,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            base_url,
+            mode,
+            reqwest::Method::POST,
+            &format!("{}/restart", computer_path(id)),
+            None,
+            auth,
+        )
+        .await
+    }
+
     pub async fn exec_computer(
         &self,
         base_url: &str,

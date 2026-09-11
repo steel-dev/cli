@@ -36,7 +36,16 @@ pub enum Command {
     Pause(IdArgs),
 
     /// Resume a paused computer
-    Resume(ResumeArgs),
+    Resume(LifecycleArgs),
+
+    /// Stop a computer but keep its disk
+    Stop(LifecycleArgs),
+
+    /// Start a stopped computer
+    Start(LifecycleArgs),
+
+    /// Reboot a running computer
+    Restart(LifecycleArgs),
 
     /// Remember a computer as the default for other commands
     Use(UseArgs),
@@ -63,6 +72,9 @@ impl Command {
             Self::Delete(_) => "delete",
             Self::Pause(_) => "pause",
             Self::Resume(_) => "resume",
+            Self::Stop(_) => "stop",
+            Self::Start(_) => "start",
+            Self::Restart(_) => "restart",
             Self::Use(_) => "use",
             Self::Exec(_) => "exec",
             Self::Ssh(_) => "ssh",
@@ -110,11 +122,11 @@ pub struct IdArgs {
 }
 
 #[derive(Parser)]
-pub struct ResumeArgs {
+pub struct LifecycleArgs {
     /// Computer ID (defaults to STEEL_COMPUTER_ID or `steel computer use`)
     pub computer_id: Option<String>,
 
-    /// Wait until the computer is running
+    /// Wait until the computer reaches its new state
     #[arg(long)]
     pub wait: bool,
 }
@@ -151,6 +163,9 @@ pub async fn run(command: Command) -> Result<()> {
         Command::Delete(args) => run_delete(args).await,
         Command::Pause(args) => run_pause(args).await,
         Command::Resume(args) => run_resume(args).await,
+        Command::Stop(args) => run_stop(args).await,
+        Command::Start(args) => run_start(args).await,
+        Command::Restart(args) => run_restart(args).await,
         Command::Use(args) => run_use(args),
         Command::Exec(args) => exec::run(args).await,
         Command::Ssh(args) => ssh::run(args).await,
@@ -287,7 +302,7 @@ async fn run_pause(args: IdArgs) -> Result<()> {
     Ok(())
 }
 
-async fn run_resume(args: ResumeArgs) -> Result<()> {
+async fn run_resume(args: LifecycleArgs) -> Result<()> {
     let id = resolve_computer_id(args.computer_id.as_deref())?;
     let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
@@ -296,6 +311,56 @@ async fn run_resume(args: ResumeArgs) -> Result<()> {
         wait_for(&client, &base_url, mode, &auth, &id, "running").await?
     } else {
         resumed
+    };
+    if output::is_json() {
+        output::success_data(data);
+    } else {
+        println!("{id} is {}.", status_of(&data));
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum Lifecycle {
+    Stop,
+    Start,
+    Restart,
+}
+
+impl Lifecycle {
+    const fn settled(self) -> &'static str {
+        match self {
+            Self::Stop => "stopped",
+            Self::Start | Self::Restart => "running",
+        }
+    }
+}
+
+async fn run_stop(args: LifecycleArgs) -> Result<()> {
+    run_lifecycle(args, Lifecycle::Stop).await
+}
+
+async fn run_start(args: LifecycleArgs) -> Result<()> {
+    run_lifecycle(args, Lifecycle::Start).await
+}
+
+async fn run_restart(args: LifecycleArgs) -> Result<()> {
+    run_lifecycle(args, Lifecycle::Restart).await
+}
+
+async fn run_lifecycle(args: LifecycleArgs, verb: Lifecycle) -> Result<()> {
+    let id = resolve_computer_id(args.computer_id.as_deref())?;
+    let (mode, base_url, auth) = api::resolve_with_auth();
+    let client = SteelClient::new()?;
+    let sent = match verb {
+        Lifecycle::Stop => client.stop_computer(&base_url, mode, &auth, &id).await?,
+        Lifecycle::Start => client.start_computer(&base_url, mode, &auth, &id).await?,
+        Lifecycle::Restart => client.restart_computer(&base_url, mode, &auth, &id).await?,
+    };
+    let data = if args.wait {
+        wait_for(&client, &base_url, mode, &auth, &id, verb.settled()).await?
+    } else {
+        sent
     };
     if output::is_json() {
         output::success_data(data);
