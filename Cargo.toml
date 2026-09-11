@@ -32,7 +32,7 @@ url = "2"
 rusqlite = { version = "0.39", features = ["bundled"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
 aes = "0.8"
-cbc = "0.1"
+cbc = "0.2"
 pbkdf2 = "0.12"
 sha1 = "0.10"
 sha2 = "0.10"
