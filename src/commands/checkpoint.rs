@@ -53,6 +53,10 @@ pub struct RestoreArgs {
     #[arg(long = "auto-pause")]
     pub auto_pause: bool,
 
+    /// Pause after this many seconds without incoming traffic (0 disables it)
+    #[arg(long = "idle-timeout", value_name = "SECONDS")]
+    pub idle_timeout_seconds: Option<u32>,
+
     /// Wait until the computer is running
     #[arg(long)]
     pub wait: bool,
@@ -117,6 +121,7 @@ async fn run_restore(args: RestoreArgs) -> Result<()> {
     let request = RestoreCheckpoint {
         timeout_seconds: args.timeout_seconds,
         auto_pause: args.auto_pause.then_some(true),
+        idle_timeout_seconds: args.idle_timeout_seconds,
     };
     let restored = client
         .restore_checkpoint(&base_url, mode, &auth, &args.checkpoint_id, &request)

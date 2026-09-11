@@ -2,6 +2,7 @@ pub mod exec;
 pub mod ssh;
 pub mod wsio;
 
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -106,6 +107,14 @@ pub struct CreateArgs {
     #[arg(long = "auto-pause")]
     pub auto_pause: bool,
 
+    /// Pause after this many seconds without incoming traffic (0 disables it)
+    #[arg(long = "idle-timeout", value_name = "SECONDS")]
+    pub idle_timeout_seconds: Option<u32>,
+
+    /// Environment variable for the computer, repeatable
+    #[arg(long = "env", value_name = "KEY=VALUE")]
+    pub env: Vec<String>,
+
     /// Wait until the computer is running
     #[arg(long)]
     pub wait: bool,
@@ -203,6 +212,22 @@ pub fn remember_computer(id: Option<&str>) -> Result<()> {
     settings::write_config(&config).context("Failed to save the default computer")
 }
 
+pub fn parse_env(pairs: &[String]) -> Result<BTreeMap<String, String>> {
+    let mut env = BTreeMap::new();
+    for pair in pairs {
+        let Some((name, value)) = pair.split_once('=') else {
+            bail!("--env wants KEY=VALUE, got {pair:?}.");
+        };
+        if name.is_empty() {
+            bail!("--env wants a name before the '=', got {pair:?}.");
+        }
+        if env.insert(name.to_string(), value.to_string()).is_some() {
+            bail!("--env {name} was given twice.");
+        }
+    }
+    Ok(env)
+}
+
 pub fn status_of(computer: &Value) -> &str {
     computer["status"].as_str().unwrap_or("unknown")
 }
@@ -223,6 +248,8 @@ async fn run_create(args: CreateArgs) -> Result<()> {
         memory_mib: args.memory_mib,
         timeout_seconds: args.timeout_seconds,
         auto_pause: args.auto_pause.then_some(true),
+        idle_timeout_seconds: args.idle_timeout_seconds,
+        env: parse_env(&args.env)?,
     };
     let created = client
         .create_computer(&base_url, mode, &auth, &request)
@@ -528,6 +555,18 @@ fn print_computers(data: &Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_env_reads_pairs_and_refuses_bad_ones() {
+        assert!(parse_env(&[]).unwrap().is_empty());
+        let parsed = parse_env(&["A=1".into(), "B=x=y".into(), "C=".into()]).unwrap();
+        assert_eq!(parsed["A"], "1");
+        assert_eq!(parsed["B"], "x=y");
+        assert_eq!(parsed["C"], "");
+        assert!(parse_env(&["NOPE".into()]).is_err());
+        assert!(parse_env(&["=1".into()]).is_err());
+        assert!(parse_env(&["A=1".into(), "A=2".into()]).is_err());
+    }
 
     #[test]
     fn explicit_id_wins_and_blank_ids_are_ignored() {

@@ -13,6 +13,7 @@ pub fn checkpoint_path(id: &str) -> String {
 pub struct RestoreCheckpoint {
     pub timeout_seconds: Option<u32>,
     pub auto_pause: Option<bool>,
+    pub idle_timeout_seconds: Option<u32>,
 }
 
 impl RestoreCheckpoint {
@@ -23,6 +24,9 @@ impl RestoreCheckpoint {
         }
         if let Some(auto_pause) = self.auto_pause {
             body["autoPause"] = json!(auto_pause);
+        }
+        if let Some(idle_timeout) = self.idle_timeout_seconds {
+            body["idleTimeoutSeconds"] = json!(idle_timeout);
         }
         body
     }
@@ -140,10 +144,11 @@ mod tests {
         let request = RestoreCheckpoint {
             timeout_seconds: Some(120),
             auto_pause: Some(true),
+            idle_timeout_seconds: Some(60),
         };
         assert_eq!(
             request.body(),
-            json!({ "timeoutSeconds": 120, "autoPause": true })
+            json!({ "timeoutSeconds": 120, "autoPause": true, "idleTimeoutSeconds": 60 })
         );
     }
 }

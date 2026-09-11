@@ -80,3 +80,49 @@ async fn restart_calls_restart_and_not_start() {
     let text = String::from_utf8_lossy(&output.stdout).to_string();
     assert!(text.contains(&format!("{ID} is running.")));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn create_sends_the_idle_timeout_and_env() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/computers"))
+        .and(wiremock::matchers::body_partial_json(json!({
+            "idleTimeoutSeconds": 120,
+            "env": { "A": "1", "TOKEN": "x=y" }
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "id": ID,
+            "status": "running"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = run_steel(
+        &server,
+        &[
+            "computer",
+            "create",
+            "--idle-timeout",
+            "120",
+            "--env",
+            "A=1",
+            "--env",
+            "TOKEN=x=y",
+        ],
+    )
+    .await;
+
+    assert!(output.status.success());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn create_refuses_an_env_without_an_equals() {
+    let server = MockServer::start().await;
+
+    let output = run_steel(&server, &["computer", "create", "--env", "NOPE"]).await;
+
+    assert!(!output.status.success());
+    let text = String::from_utf8_lossy(&output.stderr).to_string();
+    assert!(text.contains("KEY=VALUE"));
+}
