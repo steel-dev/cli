@@ -101,11 +101,11 @@ pub struct CreateArgs {
     #[arg(long = "memory", value_name = "MIB")]
     pub memory_mib: Option<u32>,
 
-    /// Stop the computer after this many seconds of running time
+    /// Delete the computer after this many seconds of running time
     #[arg(long = "timeout", value_name = "SECONDS")]
     pub timeout_seconds: Option<u32>,
 
-    /// Pause instead of stopping when the timeout is reached
+    /// Pause instead of deleting when the timeout is reached
     #[arg(long = "auto-pause")]
     pub auto_pause: bool,
 

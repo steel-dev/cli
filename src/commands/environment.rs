@@ -68,11 +68,11 @@ pub struct SpecArgs {
     #[arg(long = "disk", value_name = "MIB")]
     pub disk_mib: Option<u32>,
 
-    /// Stop computers after this many seconds of running time
+    /// Delete computers after this many seconds of running time
     #[arg(long = "timeout", value_name = "SECONDS")]
     pub timeout_seconds: Option<u32>,
 
-    /// Pause instead of stopping when the timeout is reached
+    /// Pause instead of deleting when the timeout is reached
     #[arg(long = "auto-pause")]
     pub auto_pause: bool,
 
