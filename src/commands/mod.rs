@@ -8,6 +8,7 @@ pub mod credentials;
 pub mod describe;
 pub mod dev;
 pub mod doctor;
+pub mod environment;
 pub mod forge;
 pub mod init;
 pub mod login;
@@ -16,6 +17,7 @@ pub mod pdf;
 pub mod profile;
 pub mod scrape;
 pub mod screenshot;
+pub mod secret;
 pub mod sessions;
 pub mod skills;
 pub mod update;
@@ -304,6 +306,18 @@ pub enum Command {
         command: checkpoint::Command,
     },
 
+    /// Secrets for computers: list, create, update, delete
+    Secret {
+        #[command(subcommand)]
+        command: secret::Command,
+    },
+
+    /// Reusable computer environments: a spec plus secrets
+    Environment {
+        #[command(subcommand)]
+        command: environment::Command,
+    },
+
     /// One-command onboarding: login + verify + install agent skills
     Init(init::Args),
 
@@ -367,6 +381,10 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Sessions { command } => Some(format!("sessions.{}", command.telemetry_name())),
         Command::Computer { command } => Some(format!("computer.{}", command.telemetry_name())),
         Command::Checkpoint { command } => Some(format!("checkpoint.{}", command.telemetry_name())),
+        Command::Secret { command } => Some(format!("secret.{}", command.telemetry_name())),
+        Command::Environment { command } => {
+            Some(format!("environment.{}", command.telemetry_name()))
+        }
         Command::Init(_) => Some("init".to_string()),
         Command::Login(_) => Some("login".to_string()),
         Command::Logout(_) => Some("logout".to_string()),
@@ -416,6 +434,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Sessions { command } => sessions::run(command).await,
         Command::Computer { command } => computer::run(command).await,
         Command::Checkpoint { command } => checkpoint::run(command).await,
+        Command::Secret { command } => secret::run(command).await,
+        Command::Environment { command } => environment::run(command).await,
         Command::Init(args) => init::run(args).await,
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,

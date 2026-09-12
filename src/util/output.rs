@@ -183,6 +183,34 @@ pub fn success_text(data: Value) {
     }
 }
 
+pub fn print_table(header: &[&str], rows: &[Vec<String>]) {
+    let widths: Vec<usize> = header
+        .iter()
+        .enumerate()
+        .map(|(column, name)| {
+            rows.iter()
+                .map(|row| row.get(column).map_or(0, String::len))
+                .chain(std::iter::once(name.len()))
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+    let line = |cells: Vec<&str>| {
+        cells
+            .iter()
+            .enumerate()
+            .map(|(column, cell)| format!("{cell:<width$}", width = widths[column]))
+            .collect::<Vec<_>>()
+            .join("  ")
+            .trim_end()
+            .to_string()
+    };
+    println!("{}", line(header.to_vec()));
+    for row in rows {
+        println!("{}", line(row.iter().map(String::as_str).collect()));
+    }
+}
+
 /// Format a top-level error for output, then exit. Called from main.
 pub fn handle_error(err: &anyhow::Error) -> ! {
     if let Some(SilentExit(code)) = err.downcast_ref::<SilentExit>() {

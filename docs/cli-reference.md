@@ -98,6 +98,9 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel computer delete](#steel-computer-delete)
 - [steel computer pause](#steel-computer-pause)
 - [steel computer resume](#steel-computer-resume)
+- [steel computer stop](#steel-computer-stop)
+- [steel computer start](#steel-computer-start)
+- [steel computer restart](#steel-computer-restart)
 - [steel computer use](#steel-computer-use)
 - [steel computer exec](#steel-computer-exec)
 - [steel computer ssh](#steel-computer-ssh)
@@ -108,6 +111,18 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel checkpoint get](#steel-checkpoint-get)
 - [steel checkpoint delete](#steel-checkpoint-delete)
 - [steel checkpoint restore](#steel-checkpoint-restore)
+- [steel secret](#steel-secret)
+- [steel secret list](#steel-secret-list)
+- [steel secret create](#steel-secret-create)
+- [steel secret get](#steel-secret-get)
+- [steel secret update](#steel-secret-update)
+- [steel secret delete](#steel-secret-delete)
+- [steel environment](#steel-environment)
+- [steel environment list](#steel-environment-list)
+- [steel environment create](#steel-environment-create)
+- [steel environment get](#steel-environment-get)
+- [steel environment update](#steel-environment-update)
+- [steel environment delete](#steel-environment-delete)
 - [steel init](#steel-init)
 - [steel login](#steel-login)
 - [steel logout](#steel-logout)
@@ -1554,6 +1569,9 @@ steel computer
 - `delete`: Delete a computer
 - `pause`: Pause a running computer
 - `resume`: Resume a paused computer
+- `stop`: Stop a computer but keep its disk
+- `start`: Start a stopped computer
+- `restart`: Reboot a running computer
 - `use`: Remember a computer as the default for other commands
 - `exec`: Run one command in a computer
 - `ssh`: Open an SSH session to a computer
@@ -1577,6 +1595,11 @@ steel computer create
 - `--memory` (string, optional): Memory in MiB
 - `--timeout` (string, optional): Stop the computer after this many seconds of running time
 - `--auto-pause` (boolean, optional): Pause instead of stopping when the timeout is reached
+- `--idle-timeout` (string, optional): Pause after this many seconds without incoming traffic (0 disables it)
+- `--env` (string[], optional): Environment variable for the computer, repeatable
+- `--secret` (string[], optional): Attach a stored secret as an environment variable, repeatable
+- `--environment` (string, optional): Start from an environment; its spec and secrets apply unless overridden here
+- `--project` (string, optional): Project to create the computer in (defaults to the API key's project)
 - `--wait` (boolean, optional): Wait until the computer is running
 - `--use` (boolean, optional): Make the new computer the default for other commands
 
@@ -1645,7 +1668,52 @@ steel computer resume
 ### Parameters
 
 - `computer_id` (string, optional): Computer ID (defaults to STEEL_COMPUTER_ID or `steel computer use`)
-- `--wait` (boolean, optional): Wait until the computer is running
+- `--wait` (boolean, optional): Wait until the computer reaches its new state
+
+## steel computer stop
+
+Stop a computer but keep its disk
+
+### Usage
+
+```bash
+steel computer stop
+```
+
+### Parameters
+
+- `computer_id` (string, optional): Computer ID (defaults to STEEL_COMPUTER_ID or `steel computer use`)
+- `--wait` (boolean, optional): Wait until the computer reaches its new state
+
+## steel computer start
+
+Start a stopped computer
+
+### Usage
+
+```bash
+steel computer start
+```
+
+### Parameters
+
+- `computer_id` (string, optional): Computer ID (defaults to STEEL_COMPUTER_ID or `steel computer use`)
+- `--wait` (boolean, optional): Wait until the computer reaches its new state
+
+## steel computer restart
+
+Reboot a running computer
+
+### Usage
+
+```bash
+steel computer restart
+```
+
+### Parameters
+
+- `computer_id` (string, optional): Computer ID (defaults to STEEL_COMPUTER_ID or `steel computer use`)
+- `--wait` (boolean, optional): Wait until the computer reaches its new state
 
 ## steel computer use
 
@@ -1803,8 +1871,218 @@ steel checkpoint restore
 - `checkpoint_id` (string, required): Checkpoint ID
 - `--timeout` (string, optional): Stop the computer after this many seconds of running time
 - `--auto-pause` (boolean, optional): Pause instead of stopping when the timeout is reached
+- `--idle-timeout` (string, optional): Pause after this many seconds without incoming traffic (0 disables it)
 - `--wait` (boolean, optional): Wait until the computer is running
 - `--use` (boolean, optional): Make the new computer the default for other commands
+
+## steel secret
+
+Secrets for computers: list, create, update, delete
+
+### Usage
+
+```bash
+steel secret
+```
+
+### Subcommands
+
+- `list`: List secrets
+- `create`: Store a new secret
+- `get`: Get one secret's metadata
+- `update`: Rename a secret or replace its value
+- `delete`: Delete a secret
+
+## steel secret list
+
+List secrets
+
+### Usage
+
+```bash
+steel secret list
+```
+
+### Parameters
+
+- `--project` (string, optional): Project to use (defaults to the API key's project)
+
+## steel secret create
+
+Store a new secret
+
+### Usage
+
+```bash
+steel secret create
+```
+
+### Parameters
+
+- `name` (string, required): Secret name, also the environment variable name inside computers
+- `--value` (string, optional): The secret value
+- `--value-stdin` (boolean, optional): Read the secret value from stdin
+- `--project` (string, optional): Project to use (defaults to the API key's project)
+
+## steel secret get
+
+Get one secret's metadata
+
+### Usage
+
+```bash
+steel secret get
+```
+
+### Parameters
+
+- `secret_id` (string, required): Secret ID
+- `--project` (string, optional): Project to use (defaults to the API key's project)
+
+## steel secret update
+
+Rename a secret or replace its value
+
+### Usage
+
+```bash
+steel secret update
+```
+
+### Parameters
+
+- `secret_id` (string, required): Secret ID
+- `--name` (string, optional): New name
+- `--value` (string, optional): New value
+- `--value-stdin` (boolean, optional): Read the new value from stdin
+- `--project` (string, optional): Project to use (defaults to the API key's project)
+
+## steel secret delete
+
+Delete a secret
+
+### Usage
+
+```bash
+steel secret delete
+```
+
+### Parameters
+
+- `secret_id` (string, required): Secret ID
+- `--project` (string, optional): Project to use (defaults to the API key's project)
+
+## steel environment
+
+Reusable computer environments: a spec plus secrets
+
+### Usage
+
+```bash
+steel environment
+```
+
+### Subcommands
+
+- `list`: List environments
+- `create`: Create an environment
+- `get`: Get one environment
+- `update`: Change an environment's name, spec or secrets
+- `delete`: Delete an environment
+
+## steel environment list
+
+List environments
+
+### Usage
+
+```bash
+steel environment list
+```
+
+### Parameters
+
+- `--project` (string, optional): Project to use (defaults to the API key's project)
+
+## steel environment create
+
+Create an environment
+
+### Usage
+
+```bash
+steel environment create
+```
+
+### Parameters
+
+- `name` (string, required): Environment name
+- `--template` (string, optional): Template name
+- `--vcpu` (string, optional): Number of vCPUs
+- `--memory` (string, optional): Memory in MiB
+- `--disk` (string, optional): Disk in MiB
+- `--timeout` (string, optional): Stop computers after this many seconds of running time
+- `--auto-pause` (boolean, optional): Pause instead of stopping when the timeout is reached
+- `--env` (string[], optional): Environment variable for computers, repeatable
+- `--secret` (string[], optional): Attach a stored secret as an environment variable, repeatable
+- `--secret-value` (string[], optional): Store a new secret and attach it, repeatable
+- `--project` (string, optional): Project to use (defaults to the API key's project)
+
+## steel environment get
+
+Get one environment
+
+### Usage
+
+```bash
+steel environment get
+```
+
+### Parameters
+
+- `environment_id` (string, required): Environment ID
+- `--project` (string, optional): Project to use (defaults to the API key's project)
+
+## steel environment update
+
+Change an environment's name, spec or secrets
+
+### Usage
+
+```bash
+steel environment update
+```
+
+### Parameters
+
+- `environment_id` (string, required): Environment ID
+- `--name` (string, optional): New name
+- `--template` (string, optional): Template name
+- `--vcpu` (string, optional): Number of vCPUs
+- `--memory` (string, optional): Memory in MiB
+- `--disk` (string, optional): Disk in MiB
+- `--timeout` (string, optional): Stop computers after this many seconds of running time
+- `--auto-pause` (boolean, optional): Pause instead of stopping when the timeout is reached
+- `--env` (string[], optional): Environment variable for computers, repeatable
+- `--secret` (string[], optional): Attach a stored secret as an environment variable, repeatable
+- `--secret-value` (string[], optional): Store a new secret and attach it, repeatable
+- `--unset-secret` (string[], optional): Detach a secret, repeatable
+- `--project` (string, optional): Project to use (defaults to the API key's project)
+
+## steel environment delete
+
+Delete an environment
+
+### Usage
+
+```bash
+steel environment delete
+```
+
+### Parameters
+
+- `environment_id` (string, required): Environment ID
+- `--project` (string, optional): Project to use (defaults to the API key's project)
 
 ## steel init
 
