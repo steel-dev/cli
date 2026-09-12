@@ -11,9 +11,11 @@ use serde_json::Value;
 
 use crate::api::client::SteelClient;
 use crate::api::computers::CreateComputer;
+use crate::api::secrets::parse_secret_ids;
 use crate::commands::checkpoint;
 use crate::config::settings::{self, ComputerConfig};
 use crate::status;
+use crate::util::pairs::parse_pairs;
 use crate::util::{api, output};
 
 pub const WAIT_POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -115,6 +117,18 @@ pub struct CreateArgs {
     #[arg(long = "env", value_name = "KEY=VALUE")]
     pub env: Vec<String>,
 
+    /// Attach a stored secret as an environment variable, repeatable
+    #[arg(long = "secret", value_name = "NAME=SECRET_ID")]
+    pub secrets: Vec<String>,
+
+    /// Start from an environment; its spec and secrets apply unless overridden here
+    #[arg(long = "environment", value_name = "ENVIRONMENT_ID")]
+    pub environment_id: Option<String>,
+
+    /// Project to create the computer in (defaults to the API key's project)
+    #[arg(long = "project", value_name = "PROJECT_ID")]
+    pub project_id: Option<String>,
+
     /// Wait until the computer is running
     #[arg(long)]
     pub wait: bool,
@@ -213,19 +227,7 @@ pub fn remember_computer(id: Option<&str>) -> Result<()> {
 }
 
 pub fn parse_env(pairs: &[String]) -> Result<BTreeMap<String, String>> {
-    let mut env = BTreeMap::new();
-    for pair in pairs {
-        let Some((name, value)) = pair.split_once('=') else {
-            bail!("--env wants KEY=VALUE, got {pair:?}.");
-        };
-        if name.is_empty() {
-            bail!("--env wants a name before the '=', got {pair:?}.");
-        }
-        if env.insert(name.to_string(), value.to_string()).is_some() {
-            bail!("--env {name} was given twice.");
-        }
-    }
-    Ok(env)
+    parse_pairs("--env", "KEY=VALUE", pairs)
 }
 
 pub fn status_of(computer: &Value) -> &str {
@@ -250,6 +252,9 @@ async fn run_create(args: CreateArgs) -> Result<()> {
         auto_pause: args.auto_pause.then_some(true),
         idle_timeout_seconds: args.idle_timeout_seconds,
         env: parse_env(&args.env)?,
+        secrets: parse_secret_ids(&args.secrets)?,
+        environment_id: args.environment_id,
+        project_id: args.project_id,
     };
     let created = client
         .create_computer(&base_url, mode, &auth, &request)

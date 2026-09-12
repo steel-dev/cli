@@ -19,6 +19,9 @@ pub struct CreateComputer {
     pub auto_pause: Option<bool>,
     pub idle_timeout_seconds: Option<u32>,
     pub env: BTreeMap<String, String>,
+    pub secrets: BTreeMap<String, String>,
+    pub environment_id: Option<String>,
+    pub project_id: Option<String>,
 }
 
 impl CreateComputer {
@@ -44,6 +47,15 @@ impl CreateComputer {
         }
         if !self.env.is_empty() {
             body["env"] = json!(self.env);
+        }
+        if !self.secrets.is_empty() {
+            body["secrets"] = json!(self.secrets);
+        }
+        if let Some(environment) = &self.environment_id {
+            body["environmentId"] = json!(environment);
+        }
+        if let Some(project) = &self.project_id {
+            body["projectId"] = json!(project);
         }
         body
     }
@@ -270,6 +282,12 @@ mod tests {
             auto_pause: Some(true),
             idle_timeout_seconds: Some(90),
             env: BTreeMap::from([("TOKEN".into(), "abc".into())]),
+            secrets: BTreeMap::from([(
+                "API_KEY".into(),
+                "2f1b6f2e-2c6f-4d9a-9c2a-8f4c1e0d7b31".into(),
+            )]),
+            environment_id: Some("9b2d1c5e-1b2a-4c3d-8e4f-5a6b7c8d9e0f".into()),
+            project_id: Some("0c1d2e3f-4a5b-4c6d-8e7f-8091a2b3c4d5".into()),
         };
         assert_eq!(
             full.body(),
@@ -281,6 +299,9 @@ mod tests {
                 "autoPause": true,
                 "idleTimeoutSeconds": 90,
                 "env": { "TOKEN": "abc" },
+                "secrets": { "API_KEY": "2f1b6f2e-2c6f-4d9a-9c2a-8f4c1e0d7b31" },
+                "environmentId": "9b2d1c5e-1b2a-4c3d-8e4f-5a6b7c8d9e0f",
+                "projectId": "0c1d2e3f-4a5b-4c6d-8e7f-8091a2b3c4d5",
             })
         );
     }
