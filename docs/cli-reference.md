@@ -1593,8 +1593,8 @@ steel computer create
 - `--template` (string, optional): Template name (defaults to the only one the API offers)
 - `--vcpu` (string, optional): Number of vCPUs
 - `--memory` (string, optional): Memory in MiB
-- `--timeout` (string, optional): Stop the computer after this many seconds of running time
-- `--auto-pause` (boolean, optional): Pause instead of stopping when the timeout is reached
+- `--timeout` (string, optional): Delete the computer after this many seconds of running time
+- `--auto-pause` (boolean, optional): Pause instead of deleting when the timeout is reached
 - `--idle-timeout` (string, optional): Pause after this many seconds without incoming traffic (0 disables it)
 - `--env` (string[], optional): Environment variable for the computer, repeatable
 - `--secret` (string[], optional): Attach a stored secret as an environment variable, repeatable
@@ -1869,8 +1869,8 @@ steel checkpoint restore
 ### Parameters
 
 - `checkpoint_id` (string, required): Checkpoint ID
-- `--timeout` (string, optional): Stop the computer after this many seconds of running time
-- `--auto-pause` (boolean, optional): Pause instead of stopping when the timeout is reached
+- `--timeout` (string, optional): Delete the computer after this many seconds of running time
+- `--auto-pause` (boolean, optional): Pause instead of deleting when the timeout is reached
 - `--idle-timeout` (string, optional): Pause after this many seconds without incoming traffic (0 disables it)
 - `--wait` (boolean, optional): Wait until the computer is running
 - `--use` (boolean, optional): Make the new computer the default for other commands
@@ -2021,8 +2021,8 @@ steel environment create
 - `--vcpu` (string, optional): Number of vCPUs
 - `--memory` (string, optional): Memory in MiB
 - `--disk` (string, optional): Disk in MiB
-- `--timeout` (string, optional): Stop computers after this many seconds of running time
-- `--auto-pause` (boolean, optional): Pause instead of stopping when the timeout is reached
+- `--timeout` (string, optional): Delete computers after this many seconds of running time
+- `--auto-pause` (boolean, optional): Pause instead of deleting when the timeout is reached
 - `--env` (string[], optional): Environment variable for computers, repeatable
 - `--secret` (string[], optional): Attach a stored secret as an environment variable, repeatable
 - `--secret-value` (string[], optional): Store a new secret and attach it, repeatable
@@ -2061,8 +2061,8 @@ steel environment update
 - `--vcpu` (string, optional): Number of vCPUs
 - `--memory` (string, optional): Memory in MiB
 - `--disk` (string, optional): Disk in MiB
-- `--timeout` (string, optional): Stop computers after this many seconds of running time
-- `--auto-pause` (boolean, optional): Pause instead of stopping when the timeout is reached
+- `--timeout` (string, optional): Delete computers after this many seconds of running time
+- `--auto-pause` (boolean, optional): Pause instead of deleting when the timeout is reached
 - `--env` (string[], optional): Environment variable for computers, repeatable
 - `--secret` (string[], optional): Attach a stored secret as an environment variable, repeatable
 - `--secret-value` (string[], optional): Store a new secret and attach it, repeatable
