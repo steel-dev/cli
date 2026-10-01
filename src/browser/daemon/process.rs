@@ -107,15 +107,30 @@ pub fn spawn_daemon(
 
     let params_json = serde_json::to_string(params)?;
 
-    let child = std::process::Command::new(exe)
+    let mut command = std::process::Command::new(exe);
+    command
         .args(["__daemon", "--session-name", session_name])
         .env("STEEL_DAEMON_PARAMS", params_json)
         .stdin(std::process::Stdio::null())
         .stdout(log.try_clone()?)
-        .stderr(log)
-        .spawn()?;
+        .stderr(log);
+    isolate_from_terminal_signals(&mut command);
+    let child = command.spawn()?;
 
     Ok(child)
+}
+
+/// Start the process in its own process group. Ctrl-C in the terminal then does not kill
+/// the daemon while its parent (for example `steel agent`) is in the foreground, so the
+/// daemon can still release its session when it is told to stop.
+fn isolate_from_terminal_signals(command: &mut std::process::Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    #[cfg(not(unix))]
+    let _ = command;
 }
 
 /// Wait until the daemon socket is connectable.
@@ -279,6 +294,24 @@ mod tests {
     }
 
     // ── validate_session_name ────────────────────────────────────────
+
+    #[cfg(unix)]
+    #[test]
+    #[allow(unsafe_code)]
+    fn daemon_command_runs_in_own_process_group() {
+        let mut cmd = std::process::Command::new("sleep");
+        cmd.arg("5");
+        isolate_from_terminal_signals(&mut cmd);
+        let mut child = cmd.spawn().unwrap();
+        let pid = child.id() as libc::pid_t;
+        // SAFETY: getpgid only reads process state.
+        let child_group = unsafe { libc::getpgid(pid) };
+        let own_group = unsafe { libc::getpgid(0) };
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert_eq!(child_group, pid);
+        assert_ne!(child_group, own_group);
+    }
 
     #[test]
     fn valid_session_names() {

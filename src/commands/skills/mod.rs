@@ -606,7 +606,7 @@ fn agent_paths_for_skill(name: &str) -> Vec<AgentPath> {
         .collect()
 }
 
-pub(crate) fn is_skill_installed(name: &str) -> bool {
+fn is_skill_installed(name: &str) -> bool {
     agent_paths_for_skill(name)
         .iter()
         .any(|path| path.installed)

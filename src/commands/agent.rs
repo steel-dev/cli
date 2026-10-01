@@ -9,7 +9,6 @@ use serde_json::json;
 
 use crate::browser::daemon::process;
 use crate::commands::browser::start;
-use crate::commands::skills;
 use crate::status;
 
 /// Inactivity timeout for the agent session. Agents can think for minutes between browser
@@ -69,6 +68,14 @@ impl AgentKind {
         }
     }
 
+    /// Agent name that `npx skills -a` expects.
+    const fn skills_id(self) -> &'static str {
+        match self {
+            Self::Claude => "claude-code",
+            Self::Codex => "codex",
+        }
+    }
+
     const fn other(self) -> Self {
         match self {
             Self::Claude => Self::Codex,
@@ -84,7 +91,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let path_env = std::env::var_os("PATH");
     let kind = resolve_agent(args.agent, path_env.as_deref())?;
     let prompt = args.prompt.join(" ");
-    let skill_installed = skills::is_skill_installed(BROWSER_SKILL);
+    let cwd = std::env::current_dir()?;
+    let skill_path = find_skill(kind, dirs::home_dir().as_deref(), &cwd);
 
     let session = if args.no_session {
         None
@@ -92,9 +100,12 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         Some(start_session().await?)
     };
 
-    print_banner(kind, &args, session.as_ref(), skill_installed);
+    print_banner(kind, &args, session.as_ref(), skill_path.as_deref());
 
-    let preamble = build_preamble(session.as_ref().map(|s| s.name.as_str()), skill_installed);
+    let preamble = build_preamble(
+        session.as_ref().map(|s| s.name.as_str()),
+        skill_path.as_deref(),
+    );
     let agent_argv = build_agent_args(
         kind,
         &prompt,
@@ -108,7 +119,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     properties.insert("agent".into(), json!(kind.program()));
     properties.insert("session".into(), json!(session.is_some()));
     properties.insert("yolo".into(), json!(args.yolo));
-    properties.insert("skill_installed".into(), json!(skill_installed));
+    properties.insert("skill_installed".into(), json!(skill_path.is_some()));
     crate::telemetry::track_event("agent_started", properties);
 
     let result = run_agent(kind, &agent_argv, session.as_ref()).await;
@@ -216,8 +227,25 @@ fn is_executable(path: &Path) -> bool {
     path.is_file()
 }
 
+/// Find the `steel-browser` skill file that this agent reads. A project skill wins over a
+/// home skill. Skills installed only for other agents do not count.
+fn find_skill(kind: AgentKind, home: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
+    let skill_dirs: &[&str] = match kind {
+        AgentKind::Claude => &[".claude/skills"],
+        AgentKind::Codex => &[".agents/skills", ".codex/skills"],
+    };
+    let roots = std::iter::once(cwd).chain(home);
+    roots
+        .flat_map(|root| {
+            skill_dirs
+                .iter()
+                .map(move |dir| root.join(dir).join(BROWSER_SKILL).join("SKILL.md"))
+        })
+        .find(|path| path.is_file())
+}
+
 /// Instructions added to the prompt so the agent uses Steel for web work.
-fn build_preamble(session: Option<&str>, skill_installed: bool) -> String {
+fn build_preamble(session: Option<&str>, skill_path: Option<&Path>) -> String {
     let mut text = String::from(
         "You run inside `steel agent` in unattended mode. No person will answer questions. \
 Complete the task on your own and finish with a short summary of the result.\n\n\
@@ -225,9 +253,10 @@ Use the Steel CLI (`steel`) for all web browsing. It controls a real Steel cloud
 Do not use other browser tools.\n",
     );
 
-    if skill_installed {
+    if let Some(path) = skill_path {
         text.push_str(&format!(
-            "Load the `{BROWSER_SKILL}` skill for the full Steel command reference.\n"
+            "Read the `{BROWSER_SKILL}` skill at `{}` for the full Steel command reference.\n",
+            path.display()
         ));
     } else {
         text.push_str(
@@ -244,9 +273,9 @@ Do not use other browser tools.\n",
 
     match session {
         Some(name) => text.push_str(&format!(
-            "\nA browser session named `{name}` is already running, and `steel browser` commands \
-use it by default. Do not start, stop, or replace browser sessions. `steel agent` stops this \
-session when you finish.\n"
+            "\nA browser session named `{name}` is already running. Add `--session {name}` to \
+every `steel browser` command. Do not start, stop, or replace browser sessions. `steel agent` \
+stops this session when you finish.\n"
         )),
         None => text.push_str(
             "\nStart a browser session with `steel browser start --session <name>` and stop it \
@@ -304,7 +333,7 @@ fn print_banner(
     kind: AgentKind,
     args: &Args,
     session: Option<&AgentSession>,
-    skill_installed: bool,
+    skill_path: Option<&Path>,
 ) {
     let mut lines = vec![format!(
         "steel agent: running {} unattended with these defaults:",
@@ -347,12 +376,13 @@ fn print_banner(
     };
     lines.push(format!("  access:  {access}"));
 
-    let skill = if skill_installed {
-        format!("{BROWSER_SKILL} skill")
-    } else {
-        format!(
-            "{BROWSER_SKILL} skill not installed, basic commands added to the prompt [steel skills install {BROWSER_SKILL}]"
-        )
+    let skill = match skill_path {
+        Some(path) => format!("{BROWSER_SKILL} skill at {}", path.display()),
+        None => format!(
+            "{BROWSER_SKILL} skill not installed for {}, basic commands added to the prompt [steel skills install {BROWSER_SKILL} -a {}]",
+            kind.label(),
+            kind.skills_id()
+        ),
     };
     lines.push(format!("  steel:   {skill}"));
     lines.push("  extra agent flags go after `--`".to_string());
@@ -534,18 +564,65 @@ mod tests {
     }
 
     #[test]
-    fn preamble_names_session_and_skill() {
-        let text = build_preamble(Some("agent-abc123"), true);
+    fn preamble_names_session_and_skill_path() {
+        let text = build_preamble(Some("agent-abc123"), Some(Path::new("/h/SKILL.md")));
         assert!(text.contains("`agent-abc123` is already running"));
-        assert!(text.contains("`steel-browser` skill"));
+        assert!(text.contains("Add `--session agent-abc123` to every `steel browser` command"));
+        assert!(text.contains("skill at `/h/SKILL.md`"));
         assert!(!text.contains("steel browser navigate"));
     }
 
     #[test]
     fn preamble_without_skill_or_session_inlines_commands() {
-        let text = build_preamble(None, false);
+        let text = build_preamble(None, None);
         assert!(text.contains("steel browser navigate <url>"));
         assert!(text.contains("steel browser start --session"));
+    }
+
+    fn write_skill(root: &Path, rel: &str) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "skill").unwrap();
+    }
+
+    #[test]
+    fn skill_for_another_agent_does_not_count() {
+        let home = tempfile::tempdir().unwrap();
+        let cwd = tempfile::tempdir().unwrap();
+        write_skill(home.path(), ".cursor/rules/steel-browser.mdc");
+        write_skill(home.path(), ".claude/skills/steel-browser/SKILL.md");
+        assert_eq!(
+            find_skill(AgentKind::Codex, Some(home.path()), cwd.path()),
+            None
+        );
+    }
+
+    #[test]
+    fn finds_skill_for_each_agent() {
+        let home = tempfile::tempdir().unwrap();
+        let cwd = tempfile::tempdir().unwrap();
+        write_skill(home.path(), ".claude/skills/steel-browser/SKILL.md");
+        write_skill(home.path(), ".agents/skills/steel-browser/SKILL.md");
+        assert_eq!(
+            find_skill(AgentKind::Claude, Some(home.path()), cwd.path()),
+            Some(home.path().join(".claude/skills/steel-browser/SKILL.md"))
+        );
+        assert_eq!(
+            find_skill(AgentKind::Codex, Some(home.path()), cwd.path()),
+            Some(home.path().join(".agents/skills/steel-browser/SKILL.md"))
+        );
+    }
+
+    #[test]
+    fn project_skill_wins_over_home_skill() {
+        let home = tempfile::tempdir().unwrap();
+        let cwd = tempfile::tempdir().unwrap();
+        write_skill(home.path(), ".agents/skills/steel-browser/SKILL.md");
+        write_skill(cwd.path(), ".agents/skills/steel-browser/SKILL.md");
+        assert_eq!(
+            find_skill(AgentKind::Codex, Some(home.path()), cwd.path()),
+            Some(cwd.path().join(".agents/skills/steel-browser/SKILL.md"))
+        );
     }
 
     #[test]
