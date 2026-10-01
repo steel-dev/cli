@@ -74,8 +74,9 @@ steel browser start --local --session "$SESSION_NAME"
   authenticate (`steel login`) or export `STEEL_API_KEY`.
 - `Failed to reach Steel session API ...`:
   check endpoint flags/env and runtime availability.
-- Existing session not reused:
-  verify exact `--session` spelling and same mode (cloud/local).
+- `Session "<name>" is not running...`:
+  the session expired or the name is misspelled. Check `steel browser sessions`,
+  then run `steel browser start --session <name>`.
 - Stale state:
   `steel browser stop --all`, then start a new named session.
 

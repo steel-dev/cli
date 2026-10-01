@@ -403,6 +403,46 @@ fn browser_start_without_auth_json_mode_surfaces_error() {
     );
 }
 
+#[test]
+fn browser_action_with_missing_named_session_fails_without_starting_one() {
+    let (mut cmd, tmp) = steel_cmd();
+    cmd.args([
+        "--json",
+        "browser",
+        "navigate",
+        "https://example.com",
+        "--session",
+        "missing",
+    ]);
+    let output = cmd.output().expect("failed to execute steel binary");
+    assert!(!output.status.success());
+
+    let out = stdout(&output);
+    let parsed: serde_json::Value = serde_json::from_str(out.trim())
+        .unwrap_or_else(|_| panic!("expected valid JSON, got: {out}"));
+    let error_msg = parsed["error"].as_str().unwrap_or("");
+    assert!(
+        error_msg.contains("steel browser start --session missing"),
+        "error should say how to start the session, got: {error_msg}"
+    );
+    assert!(
+        !tmp.path().join("daemon-missing.log").exists(),
+        "no daemon should be spawned for a missing named session"
+    );
+}
+
+#[test]
+fn browser_action_without_session_warns_before_starting_default() {
+    let output = run(&["--json", "browser", "navigate", "https://example.com"]);
+    assert!(!output.status.success());
+
+    let err = stderr(&output);
+    assert!(
+        err.contains("warning: session \"default\" is not running"),
+        "stderr should warn that a default session is being started, got: {err}"
+    );
+}
+
 // ─── Environment variable contracts ─────────────────────────────────
 
 #[test]
