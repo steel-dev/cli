@@ -11,7 +11,6 @@ use crate::browser::daemon::process;
 use crate::browser::daemon::protocol::{
     DEFAULT_INACTIVITY_TIMEOUT_MS, DaemonCommand, DaemonCreateParams,
 };
-use crate::status;
 use crate::util::{api, output};
 
 // ── Shared arg types ────────────────────────────────────────────────
@@ -393,7 +392,7 @@ pub struct FillArgs {
     /// Element selector or ref
     pub selector: String,
     /// Value to fill
-    #[arg(trailing_var_arg = true, num_args = 1..)]
+    #[arg(num_args = 1..)]
     pub value: Vec<String>,
 }
 
@@ -402,7 +401,7 @@ pub struct TypeArgs {
     /// Element selector or ref
     pub selector: String,
     /// Text to type
-    #[arg(trailing_var_arg = true, num_args = 1..)]
+    #[arg(num_args = 1..)]
     pub text: Vec<String>,
     /// Clear the field before typing
     #[arg(long)]
@@ -443,7 +442,7 @@ pub struct SetValueArgs {
     /// Element selector or ref
     pub selector: String,
     /// Value to set
-    #[arg(trailing_var_arg = true, num_args = 1..)]
+    #[arg(num_args = 1..)]
     pub value: Vec<String>,
 }
 
@@ -641,7 +640,7 @@ pub struct SetHeadersArgs {
 #[derive(Parser)]
 pub struct SetUserAgentArgs {
     /// User agent string
-    #[arg(trailing_var_arg = true, num_args = 1..)]
+    #[arg(num_args = 1..)]
     pub user_agent: Vec<String>,
 }
 
@@ -1240,7 +1239,13 @@ async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
         return Ok(client);
     }
 
-    status!("Starting browser session...");
+    if let Some(name) = session_name {
+        anyhow::bail!(
+            "Session \"{name}\" is not running. It may have expired. Run `steel browser start --session {name}` to start a new one."
+        );
+    }
+
+    eprintln!("warning: session \"default\" is not running; starting a new one");
 
     let (mode, base_url, auth) = api::resolve_with_auth();
     let params = DaemonCreateParams {

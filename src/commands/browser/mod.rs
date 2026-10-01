@@ -77,3 +77,91 @@ pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
         Command::Action(action) => action::run(action, session.as_deref()).await,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::action::{ActionCommand, SetCommand};
+    use super::{BrowserArgs, Command};
+    use crate::commands::{self, Cli};
+
+    fn parse(args: &[&str]) -> BrowserArgs {
+        let argv = ["steel", "browser"].into_iter().chain(args.iter().copied());
+        match Cli::try_parse_from(argv).unwrap().command {
+            commands::Command::Browser(browser) => browser,
+            _ => panic!("expected browser command"),
+        }
+    }
+
+    #[test]
+    fn session_after_fill_value_is_a_flag() {
+        let args = parse(&["fill", "@e1", "herman", "miller", "--session", "repro"]);
+        assert_eq!(args.session.as_deref(), Some("repro"));
+        let Command::Action(ActionCommand::Fill(fill)) = args.command else {
+            panic!("expected fill");
+        };
+        assert_eq!(fill.value, ["herman", "miller"]);
+    }
+
+    #[test]
+    fn flags_after_type_text_are_flags() {
+        let args = parse(&[
+            "type",
+            "@e1",
+            "hello",
+            "--clear",
+            "--delay",
+            "50",
+            "--session",
+            "repro",
+        ]);
+        assert_eq!(args.session.as_deref(), Some("repro"));
+        let Command::Action(ActionCommand::Type(typed)) = args.command else {
+            panic!("expected type");
+        };
+        assert_eq!(typed.text, ["hello"]);
+        assert!(typed.clear);
+        assert_eq!(typed.delay, Some(50));
+    }
+
+    #[test]
+    fn session_after_setvalue_value_is_a_flag() {
+        let args = parse(&["setvalue", "@e1", "42", "--session", "repro"]);
+        assert_eq!(args.session.as_deref(), Some("repro"));
+        let Command::Action(ActionCommand::SetValue(set)) = args.command else {
+            panic!("expected setvalue");
+        };
+        assert_eq!(set.value, ["42"]);
+    }
+
+    #[test]
+    fn session_after_user_agent_is_a_flag() {
+        let args = parse(&[
+            "set",
+            "useragent",
+            "Mozilla/5.0",
+            "Test",
+            "--session",
+            "repro",
+        ]);
+        assert_eq!(args.session.as_deref(), Some("repro"));
+        let Command::Action(ActionCommand::Set {
+            command: SetCommand::UserAgent(ua),
+        }) = args.command
+        else {
+            panic!("expected set useragent");
+        };
+        assert_eq!(ua.user_agent, ["Mozilla/5.0", "Test"]);
+    }
+
+    #[test]
+    fn double_dash_keeps_flag_like_text() {
+        let args = parse(&["fill", "@e1", "--", "--session", "repro"]);
+        assert_eq!(args.session, None);
+        let Command::Action(ActionCommand::Fill(fill)) = args.command else {
+            panic!("expected fill");
+        };
+        assert_eq!(fill.value, ["--session", "repro"]);
+    }
+}
