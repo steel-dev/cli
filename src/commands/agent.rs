@@ -40,6 +40,10 @@ pub struct Args {
     #[arg(long)]
     pub yolo: bool,
 
+    /// Show the full Codex progress log. Claude Code always prints only its answer
+    #[arg(long)]
+    pub verbose: bool,
+
     /// Arguments passed to the agent unchanged (put them after `--`)
     #[arg(last = true)]
     pub agent_args: Vec<String>,
@@ -94,13 +98,23 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
     let skill_path = find_skill(kind, dirs::home_dir().as_deref(), &cwd);
 
+    let run_name = new_session_name();
     let session = if args.no_session {
         None
     } else {
-        Some(start_session().await?)
+        Some(start_session(&run_name).await?)
     };
+    // Codex writes its progress log to stderr and its answer to stdout.
+    let log_path = (kind == AgentKind::Codex && !args.verbose)
+        .then(|| std::env::temp_dir().join(format!("steel-{run_name}.log")));
 
-    print_banner(kind, &args, session.as_ref(), skill_path.as_deref());
+    print_banner(
+        kind,
+        &args,
+        session.as_ref(),
+        skill_path.as_deref(),
+        log_path.as_deref(),
+    );
 
     let preamble = build_preamble(
         session.as_ref().map(|s| s.name.as_str()),
@@ -122,7 +136,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     properties.insert("skill_installed".into(), json!(skill_path.is_some()));
     crate::telemetry::track_event("agent_started", properties);
 
-    let result = run_agent(kind, &agent_argv, session.as_ref()).await;
+    let result = run_agent(kind, &agent_argv, session.as_ref(), log_path.as_deref()).await;
 
     if let Some(ref session) = session {
         if args.keep_session {
@@ -145,8 +159,7 @@ struct AgentSession {
     live_url: Option<String>,
 }
 
-async fn start_session() -> anyhow::Result<AgentSession> {
-    let name = new_session_name();
+async fn start_session(name: &str) -> anyhow::Result<AgentSession> {
     status!("Starting browser session \"{name}\"...");
     let info = start::create_session(
         start::Args {
@@ -162,11 +175,11 @@ async fn start_session() -> anyhow::Result<AgentSession> {
             namespace: None,
             credentials: false,
         },
-        &name,
+        name,
     )
     .await?;
     Ok(AgentSession {
-        name,
+        name: name.to_string(),
         live_url: info.viewer_url,
     })
 }
@@ -259,16 +272,16 @@ Do not use other browser tools.\n",
             path.display()
         ));
     } else {
-        text.push_str(
-            "Run `steel browser --help` for the full command reference. The main commands are:\n\
-  steel browser navigate <url>\n\
-  steel browser snapshot -i          (list interactive elements)\n\
-  steel browser click <selector>\n\
-  steel browser fill <selector> <value>\n\
-  steel browser get text <selector>\n\
-  steel browser screenshot -o <path>\n\
-  steel scrape <url>                 (get page content without a session)\n",
-        );
+        text.push_str(concat!(
+            "Run `steel browser --help` for the full command reference. The main commands are:\n",
+            "  steel browser navigate <url>\n",
+            "  steel browser snapshot -i          (list interactive elements)\n",
+            "  steel browser click <selector>\n",
+            "  steel browser fill <selector> <value>\n",
+            "  steel browser get text <selector>\n",
+            "  steel browser screenshot -o <path>\n",
+            "  steel scrape <url>                 (get page content without a session)\n",
+        ));
     }
 
     match session {
@@ -334,6 +347,7 @@ fn print_banner(
     args: &Args,
     session: Option<&AgentSession>,
     skill_path: Option<&Path>,
+    log_path: Option<&Path>,
 ) {
     let mut lines = vec![format!(
         "steel agent: running {} unattended with these defaults:",
@@ -385,6 +399,16 @@ fn print_banner(
         ),
     };
     lines.push(format!("  steel:   {skill}"));
+    if kind == AgentKind::Codex {
+        let output = match log_path {
+            Some(path) => format!(
+                "final answer only, log in {} [--verbose for the full log]",
+                path.display()
+            ),
+            None => "full log (--verbose)".to_string(),
+        };
+        lines.push(format!("  output:  {output}"));
+    }
     lines.push("  extra agent flags go after `--`".to_string());
 
     // The banner goes to stderr even in JSON mode, so stdout is the agent's output only.
@@ -395,9 +419,15 @@ async fn run_agent(
     kind: AgentKind,
     argv: &[String],
     session: Option<&AgentSession>,
+    log_path: Option<&Path>,
 ) -> anyhow::Result<()> {
     let mut command = tokio::process::Command::new(kind.program());
     command.args(argv);
+    // Unattended: nobody types input, and an open stdin makes agents wait for it.
+    command.stdin(std::process::Stdio::null());
+    if let Some(path) = log_path {
+        command.stderr(std::fs::File::create(path)?);
+    }
     // The agent must use this `steel` binary, because it created the session.
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
@@ -423,10 +453,28 @@ async fn run_agent(
     };
 
     if status.success() {
-        Ok(())
-    } else {
-        anyhow::bail!("{} exited with {status}", kind.program())
+        return Ok(());
     }
+    match log_path {
+        Some(path) => {
+            let log = std::fs::read_to_string(path).unwrap_or_default();
+            eprintln!("{}", last_lines(&log, LOG_TAIL_LINES));
+            anyhow::bail!(
+                "{} exited with {status}. Full log: {}",
+                kind.program(),
+                path.display()
+            )
+        }
+        None => anyhow::bail!("{} exited with {status}", kind.program()),
+    }
+}
+
+/// Number of log lines shown when the agent fails.
+const LOG_TAIL_LINES: usize = 20;
+
+fn last_lines(text: &str, count: usize) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    lines[lines.len().saturating_sub(count)..].join("\n")
 }
 
 #[cfg(test)]
@@ -575,7 +623,11 @@ mod tests {
     #[test]
     fn preamble_without_skill_or_session_inlines_commands() {
         let text = build_preamble(None, None);
-        assert!(text.contains("steel browser navigate <url>"));
+        assert!(
+            text.contains("\n  steel browser navigate <url>\n"),
+            "{text}"
+        );
+        assert!(text.contains("\n  steel scrape <url>  "), "{text}");
         assert!(text.contains("steel browser start --session"));
     }
 
@@ -623,6 +675,13 @@ mod tests {
             find_skill(AgentKind::Codex, Some(home.path()), cwd.path()),
             Some(cwd.path().join(".agents/skills/steel-browser/SKILL.md"))
         );
+    }
+
+    #[test]
+    fn last_lines_keeps_the_end() {
+        assert_eq!(last_lines("a\nb\nc\n", 2), "b\nc");
+        assert_eq!(last_lines("a", 5), "a");
+        assert_eq!(last_lines("", 5), "");
     }
 
     #[test]

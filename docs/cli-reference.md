@@ -2118,6 +2118,7 @@ steel agent
 - `--no-session` (boolean, optional): Do not start a browser session before the agent runs
 - `--keep-session` (boolean, optional): Keep the browser session running after the agent exits
 - `--yolo` (boolean, optional): Give the agent all tools with no approval prompts and no sandbox
+- `--verbose` (boolean, optional): Show the full Codex progress log. Claude Code always prints only its answer
 - `agent_args` (string[], optional): Arguments passed to the agent unchanged (put them after `--`)
 
 ## steel login
