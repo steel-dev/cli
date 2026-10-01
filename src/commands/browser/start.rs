@@ -59,9 +59,17 @@ pub struct Args {
 }
 
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
+    let info = create_session(args, session.unwrap_or("default")).await?;
+    display_session_info(&info);
+    Ok(())
+}
+
+/// Create a fresh browser session with a daemon under `session_name` and return its info.
+/// Replaces an existing session with the same name.
+pub async fn create_session(args: Args, session_name: &str) -> anyhow::Result<SessionInfo> {
     let (mode, base_url, auth) = api::resolve_with_auth();
 
-    let session_name = session.unwrap_or("default").to_string();
+    let session_name = session_name.to_string();
 
     // Resolve profile
     let mut resolved_profile_id = None;
@@ -153,9 +161,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     properties.insert("inactivity_timeout_ms".into(), json!(inactivity_timeout_ms));
     crate::telemetry::track_event("browser_session_started", properties);
 
-    display_session_info(&info);
-
-    Ok(())
+    Ok(info)
 }
 
 async fn get_session_info(client: &mut DaemonClient) -> anyhow::Result<SessionInfo> {

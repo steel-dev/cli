@@ -124,6 +124,7 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel environment update](#steel-environment-update)
 - [steel environment delete](#steel-environment-delete)
 - [steel init](#steel-init)
+- [steel agent](#steel-agent)
 - [steel login](#steel-login)
 - [steel logout](#steel-logout)
 - [steel credentials](#steel-credentials)
@@ -2099,6 +2100,25 @@ steel init
 - `--agent` (boolean, optional): Run in agent mode: auto-accept interactive prompts and print agent-friendly output. Designed for AI coding agents
 - `--skills` (string[], optional): Open the Steel skills installer flow. With no value, lets you choose skills interactively
 - `--no-skills` (boolean, optional): Skip Steel skill installation
+
+## steel agent
+
+Run Claude Code or Codex unattended on a task, with a Steel browser session
+
+### Usage
+
+```bash
+steel agent
+```
+
+### Parameters
+
+- `prompt` (string[], required): Task for the agent, in natural language
+- `--agent` (enum, optional): Coding agent to run. Default: the first one found on PATH (claude, then codex)
+- `--no-session` (boolean, optional): Do not start a browser session before the agent runs
+- `--keep-session` (boolean, optional): Keep the browser session running after the agent exits
+- `--yolo` (boolean, optional): Give the agent all tools with no approval prompts and no sandbox
+- `agent_args` (string[], optional): Arguments passed to the agent unchanged (put them after `--`)
 
 ## steel login
 

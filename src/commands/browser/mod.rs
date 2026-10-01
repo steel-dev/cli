@@ -11,7 +11,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 pub struct BrowserArgs {
     /// Named session to target
-    #[arg(long, global = true)]
+    #[arg(long, global = true, env = "STEEL_SESSION")]
     pub session: Option<String>,
 
     #[command(subcommand)]

@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod browser;
 pub mod cache;
 pub mod checkpoint;
@@ -37,6 +38,10 @@ Getting Started:
   steel skills install --all           Install all Steel Skills through npx skills
   steel skills install <name>          Install a Steel Skill through npx skills
   steel skills doctor                  Check skills installer, auth, manifest, and paths
+  steel agent \"<task>\"                 Run Claude Code or Codex unattended with a Steel browser
+    --agent <claude|codex>               Agent to run (default: first found on PATH)
+    --no-session / --keep-session        Skip the browser session, or keep it after exit
+    --yolo                               All tools, no approvals, no sandbox
 
 Quick Actions:
   steel scrape <url>                   Scrape webpage content (markdown by default)
@@ -321,6 +326,9 @@ pub enum Command {
     /// One-command onboarding: login + verify + install agent skills
     Init(init::Args),
 
+    /// Run Claude Code or Codex unattended on a task, with a Steel browser session
+    Agent(agent::Args),
+
     /// Login to Steel CLI
     #[command(alias = "auth")]
     Login(login::Args),
@@ -386,6 +394,7 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
             Some(format!("environment.{}", command.telemetry_name()))
         }
         Command::Init(_) => Some("init".to_string()),
+        Command::Agent(_) => Some("agent".to_string()),
         Command::Login(_) => Some("login".to_string()),
         Command::Logout(_) => Some("logout".to_string()),
         Command::Credentials { command } => {
@@ -437,6 +446,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Secret { command } => secret::run(command).await,
         Command::Environment { command } => environment::run(command).await,
         Command::Init(args) => init::run(args).await,
+        Command::Agent(args) => agent::run(args).await,
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,
         Command::Credentials { command } => credentials::run(command).await,
