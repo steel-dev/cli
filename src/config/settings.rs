@@ -137,6 +137,8 @@ pub struct ComputerConfig {
 pub struct BrowserConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -153,6 +155,14 @@ impl Config {
             .as_ref()
             .and_then(|b| b.api_url.as_deref())
             .filter(|s| !s.trim().is_empty())
+    }
+
+    /// Extract the default browser session timeout from config.browser.sessionTimeoutMs.
+    pub fn browser_session_timeout_ms(&self) -> Option<u64> {
+        self.browser
+            .as_ref()
+            .and_then(|b| b.session_timeout_ms)
+            .filter(|timeout| *timeout > 0)
     }
 
     pub fn telemetry_disabled(&self) -> bool {
@@ -229,6 +239,7 @@ mod tests {
             instance: Some("cloud".into()),
             browser: Some(BrowserConfig {
                 api_url: Some("http://localhost:4000/v1".into()),
+                session_timeout_ms: Some(3_600_000),
             }),
             telemetry: Some(TelemetryConfig {
                 disabled: Some(true),
@@ -246,6 +257,7 @@ mod tests {
         assert_eq!(loaded.name.as_deref(), Some("CLI"));
         assert_eq!(loaded.instance.as_deref(), Some("cloud"));
         assert_eq!(loaded.local_api_url(), Some("http://localhost:4000/v1"));
+        assert_eq!(loaded.browser_session_timeout_ms(), Some(3_600_000));
         assert!(loaded.telemetry_disabled());
         assert_eq!(loaded.onboarding_source(), Some("claude-code"));
     }
@@ -279,13 +291,14 @@ mod tests {
         let path = dir.path().join("config.json");
         std::fs::write(
             &path,
-            r#"{"apiKey":"k","name":"n","instance":"cloud","browser":{"apiUrl":"http://x"},"telemetry":{"disabled":true}}"#,
+            r#"{"apiKey":"k","name":"n","instance":"cloud","browser":{"apiUrl":"http://x","sessionTimeoutMs":900000},"telemetry":{"disabled":true}}"#,
         )
         .unwrap();
 
         let config = read_config_from(&path).unwrap();
         assert_eq!(config.api_key.as_deref(), Some("k"));
         assert_eq!(config.local_api_url(), Some("http://x"));
+        assert_eq!(config.browser_session_timeout_ms(), Some(900000));
         assert!(config.telemetry_disabled());
     }
 
@@ -307,10 +320,12 @@ mod tests {
         let config = Config {
             browser: Some(BrowserConfig {
                 api_url: Some("  ".into()),
+                session_timeout_ms: Some(0),
             }),
             ..Default::default()
         };
         assert_eq!(config.local_api_url(), None);
+        assert_eq!(config.browser_session_timeout_ms(), None);
     }
 
     #[test]

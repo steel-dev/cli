@@ -33,9 +33,13 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
 
     if let Some(ref cfg) = config
         && let Some(ref browser) = cfg.browser
-        && let Some(ref url) = browser.api_url
     {
-        println!("browser.apiUrl: {url}");
+        if let Some(ref url) = browser.api_url {
+            println!("browser.apiUrl: {url}");
+        }
+        if let Some(timeout_ms) = cfg.browser_session_timeout_ms() {
+            println!("browser.sessionTimeoutMs: {timeout_ms}");
+        }
     }
 
     if let Some(ref cfg) = config {
