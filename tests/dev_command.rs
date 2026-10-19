@@ -10,6 +10,7 @@ use std::process::Command;
 
 fn steel_cmd() -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_steel"));
+    cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     // Suppress update checks so they don't interfere with output.
     cmd.arg("--no-update-check");
     cmd
