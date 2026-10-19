@@ -113,8 +113,6 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub telemetry: Option<TelemetryConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub computer: Option<ComputerConfig>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub onboarding: Option<OnboardingConfig>,
 }
 
@@ -123,13 +121,6 @@ pub struct Config {
 pub struct OnboardingConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ComputerConfig {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -160,13 +151,6 @@ impl Config {
             .as_ref()
             .and_then(|t| t.disabled)
             .unwrap_or(false)
-    }
-
-    pub fn default_computer_id(&self) -> Option<&str> {
-        self.computer
-            .as_ref()
-            .and_then(|c| c.default_id.as_deref())
-            .filter(|s| !s.trim().is_empty())
     }
 
     pub fn onboarding_source(&self) -> Option<&str> {
@@ -233,7 +217,6 @@ mod tests {
             telemetry: Some(TelemetryConfig {
                 disabled: Some(true),
             }),
-            computer: None,
             onboarding: Some(OnboardingConfig {
                 source: Some("claude-code".into()),
             }),
