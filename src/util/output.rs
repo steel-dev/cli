@@ -256,7 +256,7 @@ fn classify_error(err: &anyhow::Error) -> (i32, &'static str, Option<&'static st
             crate::api::client::ApiError::RetryLater { .. } => (
                 exit_code::API_SERVER,
                 "not_ready",
-                Some("The computer is not ready. Try again shortly."),
+                Some("The API asked to retry later. Try again shortly."),
             ),
             crate::api::client::ApiError::RequestFailed { status, .. } => match *status {
                 401 => (

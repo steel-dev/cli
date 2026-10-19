@@ -58,6 +58,8 @@ function pascalCase(value) {
     .join("");
 }
 
+const EXCLUDED_COMMAND_GROUPS = new Set(["computer", "checkpoint", "secret", "environment"]);
+
 function stripV1(path) {
   return path.startsWith("/v1/") ? path.slice(3) : path;
 }
@@ -68,6 +70,7 @@ function collectOperations(spec) {
     for (const [method, operation] of Object.entries(pathItem || {})) {
       const cli = operation["x-steel-cli"];
       if (!operation.operationId || !cli?.command) continue;
+      if (EXCLUDED_COMMAND_GROUPS.has(cli.command[0])) continue;
       operations.push({
         id: operation.operationId,
         method: method.toUpperCase(),
