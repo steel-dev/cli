@@ -51,6 +51,87 @@ Alternatives:
 
 After install, either restart your shell or run `export PATH="$HOME/.steel/bin:$PATH"`.
 
+### Agent setup and first use
+
+```bash
+curl -fsS https://setup.steel.dev | sh -s -- --agent --from opencode
+```
+
+Use `claude-code`, `codex`, `cursor`, `opencode`, or `pi` as the target. Agent
+setup installs `steel-browser` globally for that target without asking the user
+to choose a skill. Other skills remain available through `steel skills install`.
+Skill installation uses Node.js/npm and git; npm enforces the selected `skills`
+package's current engine requirement. The native CLI itself needs neither Node
+nor the `@steel-dev/cli` npm migration shim. Older npm releases contain the
+legacy Node CLI; do not use either as a fallback for native CLI reachability.
+
+An installer cannot change the parent agent's environment. Use the native path
+in **each** subsequent tool command instead of repairing PATH manually:
+
+```bash
+"$HOME/.steel/bin/steel" --version
+"$HOME/.steel/bin/steel" init --agent --from opencode
+```
+
+The target is saved, so interrupted setup can rerun `init --agent` without
+`--from`. A failed stage returns nonzero with a next action. Pending device
+authorization returns an explicit pending/incomplete result; approve the displayed
+code in a browser on any machine, then rerun setup or `login --resume`.
+No localhost callback or copying credentials into the conversation is needed.
+
+#### Device authorization
+
+Device authorization uses a browser handoff and saves a pending request, so it can
+be resumed without a localhost callback:
+
+```bash
+"$HOME/.steel/bin/steel" login --no-wait --no-browser
+# Approve the displayed code in a browser, then:
+"$HOME/.steel/bin/steel" login --resume --no-browser
+"$HOME/.steel/bin/steel" doctor --preflight
+```
+
+The authentication service configuration is intentionally explicit: set
+`STEEL_AUTH_ISSUER`, `STEEL_AUTH_AUDIENCE`, and `STEEL_API_URL` before the first
+device login using values supplied by your Steel deployment. The issuer, token
+audience, and product API transport are separate settings; `--api-url` selects
+self-hosted/local mode and is not a substitute for the product transport.
+Existing API-key automation remains supported without device-login settings.
+
+Settings and pending authorization survive subsequent commands in private
+`auth.json` under `STEEL_CONFIG_DIR` (default `~/.config/steel`). Inconsistent
+environment overrides fail closed rather than sending tokens to another API. The
+client sends product access tokens using `Authorization: Bearer`; API keys still
+use `Steel-Api-Key`. Browser CDP uses session connection credentials returned by
+the product API, never a product access token disguised as an API key.
+
+Secret state is written atomically with private Unix permissions. A cross-process
+lock serializes polling, refresh rotation, and logout. If refresh is interrupted
+after it may have reached the issuer, the client refuses to replay the rotating
+token and asks for reauthorization. Normal `logout` revokes the refresh grant;
+`logout --local-only` is explicit offline recovery and does not revoke the server
+grant or already-issued access tokens.
+
+Agent init returns the handoff immediately and checks a saved request when it is
+due. Human login waits in bounded increments; interruption does not lose the
+request or backoff. `--resume` never silently creates a replacement for an
+expired or denied request. A token or `doctor --preflight` result proves neither
+browser capacity nor CDP connectivity.
+
+After installation, load `steel-browser` through the client's supported skill
+mechanism. Setup reports loading and task completion as unverified, not ready.
+As a separate task, ask:
+
+> Use Steel to open https://books.toscrape.com/, find A Light in the Attic,
+> open its detail page, and tell me its price and availability.
+
+Omit an explicit session timeout to use the API's account-compatible default.
+Verify the answer independently and stop/release the session. Session creation
+and a successful CLI command do not prove task success.
+
+The public installer uses the latest stable release. Source changes require a
+release before the installer can provide them.
+
 ## Shell Completions
 
 Shell completions are installed automatically by `install.sh`. To regenerate or install manually:

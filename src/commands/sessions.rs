@@ -383,7 +383,16 @@ async fn follow_if_live(
     let url = build_ws_url(base_url, mode, auth, stream_kind, session_id)?;
     status!("Following live session {session_id}. Press Ctrl-C to stop.");
 
-    let (ws_stream, _) = connect_async(url.as_str()).await.with_context(|| {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mut request = url.as_str().into_client_request()?;
+    if auth.access_token.is_some() {
+        crate::config::device::validate_websocket_transport(base_url, &url)?;
+        let token = crate::config::device::access_token_for(base_url).await?;
+        request
+            .headers_mut()
+            .insert("Authorization", format!("Bearer {token}").parse()?);
+    }
+    let (ws_stream, _) = connect_async(request).await.with_context(|| {
         format!(
             "Failed to connect to live {} stream",
             stream_label(stream_kind)
@@ -416,7 +425,7 @@ fn build_ws_url(
     session_id: &str,
 ) -> Result<String> {
     let ws_base_url = std::env::var("STEEL_WS_URL").unwrap_or_else(|_| {
-        if mode == ApiMode::Cloud {
+        if mode == ApiMode::Cloud && auth.access_token.is_none() {
             "wss://connect.steel.dev".to_string()
         } else {
             base_url.to_string()
@@ -615,6 +624,7 @@ mod tests {
             &Auth {
                 api_key: Some("sk_test".into()),
                 source: crate::config::auth::AuthSource::Env,
+                access_token: None,
             },
             StreamKind::Traces,
             "sess",
@@ -634,6 +644,7 @@ mod tests {
             &Auth {
                 api_key: Some("sk_test".into()),
                 source: crate::config::auth::AuthSource::Env,
+                access_token: None,
             },
             StreamKind::Logs,
             "sess",

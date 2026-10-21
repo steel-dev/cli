@@ -216,6 +216,7 @@ mod tests {
         let auth = Auth {
             api_key: Some("test-key".into()),
             source: AuthSource::Env,
+            access_token: None,
         };
 
         let data = client

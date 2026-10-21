@@ -31,8 +31,8 @@ Global Flags:
   --api-url <url>                        Explicit self-hosted API endpoint URL
 
 Getting Started:
-  steel init                           Log in, verify, and install Steel skills into detected agents
-    --agent                              Auto-accept prompts and print agent-friendly output
+  steel init                           Log in, verify, and install Steel skills
+    --agent --from <client>               Non-interactive setup with resumable device handoff
   steel skills list                    List available Steel Skills
   steel skills install --all           Install all Steel Skills through npx skills
   steel skills install <name>          Install a Steel Skill through npx skills
@@ -410,7 +410,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
 
     crate::util::output::init(cli.json);
     crate::util::api::init(cli.local, cli.api_url);
-    crate::telemetry::init_from_env();
+    let onboarding_source = match &cli.command {
+        Command::Init(args) => args.from.as_deref(),
+        _ => None,
+    };
+    crate::telemetry::init_from_env_with_source(onboarding_source);
 
     if let Some(ref context) = telemetry_context {
         crate::telemetry::track_command_started(context);

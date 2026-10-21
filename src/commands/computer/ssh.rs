@@ -51,7 +51,7 @@ impl Handler for Client {
 pub async fn run(args: Args) -> Result<()> {
     let id = resolve_computer_id(args.computer_id.as_deref())?;
     let (mode, base_url, auth) = api::resolve_with_auth();
-    if mode == ApiMode::Cloud && auth.api_key.is_none() {
+    if mode == ApiMode::Cloud && !auth.has_credentials() {
         return Err(ApiError::MissingAuth.into());
     }
     let url = ssh_url(&base_url, &id)?;
@@ -121,6 +121,15 @@ async fn connect(url: &str, auth: &Auth) -> Result<WsIo<MaybeTlsStream<TcpStream
         request.headers_mut().insert(
             "Steel-Api-Key",
             HeaderValue::from_str(key.trim()).context("The API key is not a valid header value")?,
+        );
+    }
+    if auth.access_token.is_some() {
+        let (_, base) = api::resolve();
+        crate::config::device::validate_websocket_transport(&base, url)?;
+        let token = crate::config::device::access_token_for(&base).await?;
+        request.headers_mut().insert(
+            "Authorization",
+            HeaderValue::from_str(&format!("Bearer {token}")).context("Invalid Bearer header")?,
         );
     }
     let (stream, response) = connect_async(request)

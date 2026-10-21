@@ -264,6 +264,108 @@ pub async fn install_names(names: &[String], yes: bool) -> anyhow::Result<()> {
     install_names_with_options(names, None, false, yes).await
 }
 
+pub fn validate_setup_agent(source: Option<&str>) -> anyhow::Result<&str> {
+    match source {
+        Some(agent @ ("claude-code" | "codex" | "cursor" | "opencode" | "pi")) => Ok(agent),
+        _ => anyhow::bail!(
+            "Setup blocked: select a skill target with init --agent --from <claude-code|codex|cursor|opencode|pi>. The target is preserved when setup resumes."
+        ),
+    }
+}
+
+pub fn setup_load_action(agent: &str) -> &'static str {
+    match agent {
+        "opencode" => "OpenCode: call the skill tool with id steel-browser.",
+        "claude-code" => "Claude Code: invoke /steel-browser.",
+        "codex" => "Codex: invoke $steel-browser.",
+        "cursor" => {
+            "Cursor: invoke /steel-browser in Agent chat. If it is not discovered, start a new Agent session to rescan skills."
+        }
+        "pi" => {
+            "Pi: use /reload in the running client after installation, then /skill:steel-browser."
+        }
+        _ => "Load steel-browser with your client's supported skill mechanism.",
+    }
+}
+
+pub fn check_install_prerequisites() -> anyhow::Result<()> {
+    for program in ["node", "npx", "git"] {
+        if !ProcessCommand::new(program)
+            .arg("--version")
+            .output()
+            .is_ok_and(|output| output.status.success())
+        {
+            anyhow::bail!(
+                "Setup blocked at skill prerequisites: `{program}` is unavailable. The native Steel binary needs no Node.js, but the skills installer needs Node.js/npm and git. Install them in the agent tool environment, then rerun init --agent. npm will enforce the selected skills package's current Node engine requirement; no runtime is installed automatically."
+            );
+        }
+    }
+    Ok(())
+}
+
+pub async fn install_setup_names(names: &[String], agent: &str) -> anyhow::Result<()> {
+    let manifest = load_manifest(false).await?;
+    for name in names {
+        ensure_known_skill(&manifest, name)?;
+        if !manifest.skills[name]
+            .agents
+            .iter()
+            .any(|target| target == agent)
+        {
+            anyhow::bail!("Skill {name} does not support {agent}; choose a compatible skill.");
+        }
+    }
+    install_names_with_options(names, Some(agent), true, true).await?;
+    for name in names {
+        let path = setup_skill_path(agent, name)?;
+        fs::read_to_string(&path)
+            .with_context(|| format!("Skill installer succeeded but {name} is not readable at {}. Rerun init --agent after resolving the install path.", path.display()))?;
+        status!(
+            "Skill installed at {} (client loading still unverified)",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+pub async fn install_setup_all(agent: &str) -> anyhow::Result<()> {
+    let manifest = load_manifest(false).await?;
+    let names = manifest
+        .skills
+        .iter()
+        .filter(|(_, meta)| meta.cli.include && meta.agents.iter().any(|target| target == agent))
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    install_setup_names(&names, agent).await
+}
+
+fn setup_skill_path(agent: &str, name: &str) -> anyhow::Result<PathBuf> {
+    let home = dirs::home_dir().context("Cannot find home directory for skill installation")?;
+    let claude_home = std::env::var("CLAUDE_CONFIG_DIR")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".claude"));
+    Ok(global_skill_path(&home, &claude_home, agent, name))
+}
+
+fn global_skill_path(
+    home: &std::path::Path,
+    claude_home: &std::path::Path,
+    agent: &str,
+    name: &str,
+) -> PathBuf {
+    let root = match agent {
+        "claude-code" => claude_home.join("skills"),
+        // skills 1.7.2 installs universal clients in the canonical shared
+        // root, not their agent-specific globalSkillsDir. Verified with real
+        // installs: OpenCode and Cursor discover this compatibility location.
+        _ => home.join(".agents/skills"),
+    };
+    root.join(name).join("SKILL.md")
+}
+
 pub async fn install_all(yes: bool) -> anyhow::Result<()> {
     install_all_with_options(None, false, yes).await
 }
@@ -404,7 +506,7 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
     let auth = crate::config::auth::resolve_auth();
     let agent_paths = agent_paths_for(&manifest);
     let installed_count = agent_paths.iter().filter(|path| path.installed).count();
-    let has_fail = !npx_ok || auth.api_key.is_none();
+    let has_fail = !npx_ok || !auth.has_credentials() || installed_count == 0;
 
     if output::is_json() {
         output::success_data(json!({
@@ -412,21 +514,26 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
             "checks": {
                 "manifest": manifest_ok,
                 "npx": npx_ok,
-                "auth": auth.api_key.is_some(),
+                "auth": auth.has_credentials(),
                 "installed_paths": installed_count,
             },
             "paths": agent_paths,
+            "skill_loading": "unverified",
         }));
     } else {
         println!("Steel Skills Doctor\n");
         println!("Manifest reachable: {}", yes_no(manifest_ok));
         println!("npx available: {}", yes_no(npx_ok));
-        println!("Steel auth configured: {}", yes_no(auth.api_key.is_some()));
+        println!("Steel auth configured: {}", yes_no(auth.has_credentials()));
         println!("Installed Steel skill paths detected: {installed_count}");
+        println!("Client skill loading: unverified (load steel-browser in the selected client)");
+        if installed_count == 0 {
+            println!("Fix: run `steel init --agent --from <client>` to install steel-browser.");
+        }
         if !npx_ok {
             println!("\nFix: install Node.js/npm so `npx skills` is available.");
         }
-        if auth.api_key.is_none() {
+        if !auth.has_credentials() {
             println!("Fix: run `steel login` or set STEEL_API_KEY.");
         }
         if !manifest_ok {
@@ -561,49 +668,38 @@ fn agent_paths_for(manifest: &Manifest) -> Vec<AgentPath> {
 }
 
 fn agent_paths_for_skill(name: &str) -> Vec<AgentPath> {
-    let Some(home) = dirs::home_dir() else {
-        return Vec::new();
-    };
-
-    let paths = [
-        (
-            "Claude Code",
-            home.join(".claude")
-                .join("skills")
-                .join(name)
-                .join("SKILL.md"),
-        ),
-        (
-            "Cursor",
-            home.join(".cursor")
-                .join("rules")
-                .join(format!("{name}.mdc")),
-        ),
-        (
-            "OpenCode",
-            home.join(".config")
-                .join("opencode")
-                .join("agents")
-                .join(format!("{name}.md")),
-        ),
-        (
-            "Codex/Pi",
-            home.join(".agents")
-                .join("skills")
-                .join(name)
-                .join("SKILL.md"),
-        ),
-    ];
-
-    paths
+    let mut paths: Vec<_> = ["claude-code", "cursor", "opencode", "codex", "pi"]
         .into_iter()
+        .filter_map(|agent| setup_skill_path(agent, name).ok().map(|path| (agent, path)))
         .map(|(agent, path)| AgentPath {
             agent,
             skill: name.to_string(),
             installed: path.exists(),
             path,
         })
-        .collect()
+        .collect();
+    // Keep detecting native global roots used by older/manual installs too.
+    if let Some(home) = dirs::home_dir() {
+        let config_home = std::env::var("XDG_CONFIG_HOME")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".config"));
+        for (agent, root) in [
+            ("cursor", home.join(".cursor/skills")),
+            ("opencode", config_home.join("opencode/skills")),
+        ] {
+            let path = root.join(name).join("SKILL.md");
+            paths.push(AgentPath {
+                agent,
+                skill: name.to_string(),
+                installed: path.is_file(),
+                path,
+            });
+        }
+    }
+    paths
 }
 
 fn is_skill_installed(name: &str) -> bool {
@@ -620,10 +716,19 @@ fn npx_available() -> bool {
 }
 
 fn run_npx(args: &[&str]) -> anyhow::Result<()> {
-    let status = ProcessCommand::new("npx").args(args).status();
+    check_install_prerequisites()?;
+    let status = ProcessCommand::new("npx")
+        .arg("--yes")
+        .args(args)
+        // Respect the package's actual engine metadata rather than guessing a
+        // historical minimum. Unsupported Node must fail, not warn and continue.
+        .env("npm_config_engine_strict", "true")
+        .status();
     match status {
         Ok(status) if status.success() => Ok(()),
-        Ok(status) => Err(anyhow::anyhow!("npx exited with status {status}")),
+        Ok(status) => Err(anyhow::anyhow!(
+            "skills installer exited with status {status}. If npm reports EBADENGINE, install a Node.js version satisfying the Required engine printed above in the agent environment and rerun init --agent. Otherwise resolve the installer error above and retry."
+        )),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(anyhow::anyhow!(
             "`npx` was not found. Install Node.js/npm, then run `npx skills add {REPO_SPEC} --skill <name>`."
         )),
@@ -666,5 +771,38 @@ mod tests {
         let manifest = fallback_manifest();
         let err = ensure_known_skill(&manifest, "missing").unwrap_err();
         assert!(err.to_string().contains("steel-browser"));
+    }
+
+    #[test]
+    fn setup_targets_are_explicit() {
+        for agent in ["claude-code", "cursor", "opencode", "codex", "pi"] {
+            assert_eq!(validate_setup_agent(Some(agent)).unwrap(), agent);
+        }
+        assert!(validate_setup_agent(None).is_err());
+        assert!(validate_setup_agent(Some("unknown")).is_err());
+    }
+
+    #[test]
+    fn global_paths_match_skills_installer_not_rules_or_agents() {
+        let home = std::path::Path::new("/isolated");
+        let claude = home.join("custom-claude");
+        for (agent, expected) in [
+            (
+                "claude-code",
+                "/isolated/custom-claude/skills/steel-browser/SKILL.md",
+            ),
+            ("cursor", "/isolated/.agents/skills/steel-browser/SKILL.md"),
+            (
+                "opencode",
+                "/isolated/.agents/skills/steel-browser/SKILL.md",
+            ),
+            ("codex", "/isolated/.agents/skills/steel-browser/SKILL.md"),
+            ("pi", "/isolated/.agents/skills/steel-browser/SKILL.md"),
+        ] {
+            assert_eq!(
+                global_skill_path(home, &claude, agent, "steel-browser"),
+                PathBuf::from(expected)
+            );
+        }
     }
 }

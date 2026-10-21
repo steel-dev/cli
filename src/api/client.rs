@@ -13,6 +13,9 @@ pub enum ApiError {
     #[error("Missing Steel API key. Run `steel login` or set `STEEL_API_KEY`.")]
     MissingAuth,
 
+    #[error("{0}")]
+    DeviceAuth(#[source] anyhow::Error),
+
     #[error("Failed to reach Steel API at {url}.")]
     Unreachable {
         url: String,
@@ -83,6 +86,24 @@ pub struct SteelClient {
 }
 
 impl SteelClient {
+    pub(crate) async fn authorize(
+        &self,
+        req: reqwest::RequestBuilder,
+        base_url: &str,
+        auth: &Auth,
+    ) -> Result<reqwest::RequestBuilder, ApiError> {
+        if auth.access_token.is_some() {
+            let token = crate::config::device::access_token_for(base_url)
+                .await
+                .map_err(ApiError::DeviceAuth)?;
+            return Ok(req.bearer_auth(token));
+        }
+        Ok(if let Some(key) = &auth.api_key {
+            req.header("Steel-Api-Key", key)
+        } else {
+            req
+        })
+    }
     pub fn new() -> Result<Self, reqwest::Error> {
         let http = Client::builder().user_agent("steel-cli").build()?;
         Ok(Self { http })
@@ -100,7 +121,7 @@ impl SteelClient {
         auth: &Auth,
     ) -> Result<Value, ApiError> {
         // Cloud mode requires auth
-        if mode == ApiMode::Cloud && auth.api_key.is_none() {
+        if mode == ApiMode::Cloud && !auth.has_credentials() {
             return Err(ApiError::MissingAuth);
         }
 
@@ -109,9 +130,7 @@ impl SteelClient {
         let mut req = self.http.request(method, &url);
         req = req.header("Content-Type", "application/json");
 
-        if let Some(key) = &auth.api_key {
-            req = req.header("Steel-Api-Key", key);
-        }
+        req = self.authorize(req, base_url, auth).await?;
 
         if let Some(body) = body {
             req = req.json(&body);
@@ -156,16 +175,14 @@ impl SteelClient {
         body: Option<Value>,
         auth: &Auth,
     ) -> Result<reqwest::Response, ApiError> {
-        if mode == ApiMode::Cloud && auth.api_key.is_none() {
+        if mode == ApiMode::Cloud && !auth.has_credentials() {
             return Err(ApiError::MissingAuth);
         }
 
         let url = format!("{base_url}{path}");
         let mut req = self.http.request(method, &url);
         req = req.header("Content-Type", "application/json");
-        if let Some(key) = &auth.api_key {
-            req = req.header("Steel-Api-Key", key);
-        }
+        req = self.authorize(req, base_url, auth).await?;
         if let Some(body) = body {
             req = req.json(&body);
         }
@@ -273,6 +290,7 @@ mod tests {
         let auth = Auth {
             api_key: None,
             source: crate::config::auth::AuthSource::None,
+            access_token: None,
         };
 
         let result = client
@@ -296,6 +314,7 @@ mod tests {
         let auth = Auth {
             api_key: None,
             source: crate::config::auth::AuthSource::None,
+            access_token: None,
         };
 
         let result = client

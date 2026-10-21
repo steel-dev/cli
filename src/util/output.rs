@@ -243,6 +243,13 @@ pub fn handle_error(err: &anyhow::Error) -> ! {
 fn classify_error(err: &anyhow::Error) -> (i32, &'static str, Option<&'static str>) {
     if let Some(api_err) = err.downcast_ref::<crate::api::client::ApiError>() {
         match api_err {
+            crate::api::client::ApiError::DeviceAuth(_) => (
+                exit_code::AUTH,
+                "device_auth_failed",
+                Some(
+                    "Check the saved issuer, audience and API transport; resume login or reauthorize as directed.",
+                ),
+            ),
             crate::api::client::ApiError::MissingAuth => (
                 exit_code::AUTH,
                 "auth_required",

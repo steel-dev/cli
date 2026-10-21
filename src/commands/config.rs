@@ -14,7 +14,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
     let auth = auth::resolve_auth();
     let config = read_config().ok();
 
-    if auth.api_key.is_none() && config.is_none() {
+    if !auth.has_credentials() && config.is_none() {
         println!("You are not logged in. Please run `steel login` to authenticate.");
         return Ok(());
     }
@@ -27,6 +27,14 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         };
         println!("apiKey: {masked}");
         println!("source: {}", auth.source);
+    }
+    if auth.access_token.is_some() {
+        println!("source: device (Bearer; token redacted)");
+        if let Some(settings) = crate::config::device::saved_settings()? {
+            println!("auth.issuer: {}", settings.issuer);
+            println!("auth.audience: {}", settings.audience);
+            println!("api.transport: {}", settings.api_base_url);
+        }
     }
 
     print_project_info(&auth).await;
@@ -50,7 +58,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
 /// so `steel config` stays usable offline.
 async fn print_project_info(auth: &Auth) {
     let (mode, base_url) = crate::util::api::resolve();
-    if mode != ApiMode::Cloud || auth.api_key.is_none() {
+    if mode != ApiMode::Cloud || !auth.has_credentials() {
         return;
     }
     let Ok(client) = SteelClient::new() else {

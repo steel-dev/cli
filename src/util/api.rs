@@ -37,7 +37,20 @@ pub fn resolve() -> (ApiMode, String) {
     let env_vars = EnvVars::from_env();
     let config = crate::config::settings::read_config().ok();
     let local_config_url = config.as_ref().and_then(|c| c.local_api_url());
-    let base_url = mode.resolve_base_url(api_url(), &env_vars, local_config_url);
+    let base_url = if mode == ApiMode::Cloud
+        && env_vars
+            .steel_api_url
+            .as_deref()
+            .is_none_or(|s| s.trim().is_empty())
+    {
+        crate::config::device::saved_settings()
+            .ok()
+            .flatten()
+            .map(|s| s.api_base_url)
+            .unwrap_or_else(|| mode.resolve_base_url(api_url(), &env_vars, local_config_url))
+    } else {
+        mode.resolve_base_url(api_url(), &env_vars, local_config_url)
+    };
     (mode, base_url)
 }
 

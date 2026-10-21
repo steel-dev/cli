@@ -136,7 +136,12 @@ impl TelemetryClient {
 }
 
 pub fn init_from_env() {
+    init_from_env_with_source(None);
+}
+
+pub fn init_from_env_with_source(source: Option<&str>) {
     let config = crate::config::settings::read_config().ok();
+    let env_source = std::env::var("STEEL_ONBOARDING_FROM").ok();
 
     #[cfg(test)]
     let bootstrap = {
@@ -169,10 +174,13 @@ pub fn init_from_env() {
         state.client = bootstrap
             .as_ref()
             .map(|bootstrap| Arc::clone(&bootstrap.client));
-        state.onboarding_source = config
-            .as_ref()
-            .and_then(|config| config.onboarding_source())
-            .map(str::to_string);
+        state.onboarding_source = resolve_onboarding_source(
+            source,
+            env_source.as_deref(),
+            config
+                .as_ref()
+                .and_then(|config| config.onboarding_source()),
+        );
         state.queue.clear();
         state.flusher.take()
     };
@@ -199,6 +207,19 @@ pub fn init_from_env() {
         emit_first_run_notice();
         track_event("install_created", Map::new());
     }
+}
+
+fn resolve_onboarding_source(
+    explicit: Option<&str>,
+    env: Option<&str>,
+    saved: Option<&str>,
+) -> Option<String> {
+    [explicit, env, saved]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 fn emit_first_run_notice() {
@@ -388,6 +409,7 @@ fn error_class(err: &anyhow::Error) -> &'static str {
     if let Some(api_err) = err.downcast_ref::<crate::api::client::ApiError>() {
         return match api_err {
             crate::api::client::ApiError::MissingAuth => "auth_required",
+            crate::api::client::ApiError::DeviceAuth(_) => "device_auth_failed",
             crate::api::client::ApiError::Unreachable { .. } => "network_unreachable",
             crate::api::client::ApiError::RequestFailed { status, .. } => match *status {
                 401 => "api_unauthorized",
@@ -524,6 +546,23 @@ pub fn set_test_override(config_dir: &Path, host: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn setup_source_is_available_before_first_install_event() {
+        assert_eq!(
+            resolve_onboarding_source(Some("pi"), Some("opencode"), Some("codex")).as_deref(),
+            Some("pi")
+        );
+        assert_eq!(
+            resolve_onboarding_source(None, Some(" opencode "), None).as_deref(),
+            Some("opencode")
+        );
+        assert_eq!(
+            resolve_onboarding_source(None, Some(" "), Some("cursor")).as_deref(),
+            Some("cursor")
+        );
+        assert_eq!(resolve_onboarding_source(None, None, None), None);
+    }
 
     #[test]
     fn onboarding_source_is_attached_when_known() {

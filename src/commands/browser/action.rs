@@ -1250,6 +1250,7 @@ async fn ensure_daemon(session_name: Option<&str>) -> Result<DaemonClient> {
     let (mode, base_url, auth) = api::resolve_with_auth();
     let params = DaemonCreateParams {
         api_key: auth.api_key,
+        device_auth: auth.access_token.is_some(),
         base_url,
         mode,
         session_name: name.to_string(),

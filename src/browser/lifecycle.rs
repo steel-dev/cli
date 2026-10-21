@@ -404,14 +404,19 @@ fn is_terminal_captcha_status(status: &str) -> bool {
     matches!(status, "solved" | "failed" | "none")
 }
 
-/// Sanitize connect URL for display (mask API key).
+/// Display metadata only: never expose credentials from a connection URL.
 pub fn sanitize_connect_url(url: &str) -> String {
     if let Ok(mut parsed) = url::Url::parse(url) {
+        let _ = parsed.set_username("");
+        let _ = parsed.set_password(None);
         let pairs: Vec<(String, String)> = parsed
             .query_pairs()
             .map(|(k, v)| {
-                if k == "apiKey" && v.len() > 7 {
-                    (k.to_string(), format!("{}...", &v[..7]))
+                if matches!(
+                    k.to_ascii_lowercase().as_str(),
+                    "apikey" | "api_key" | "token" | "access_token"
+                ) {
+                    (k.to_string(), "[redacted]".to_string())
                 } else {
                     (k.to_string(), v.to_string())
                 }
@@ -427,7 +432,7 @@ pub fn sanitize_connect_url(url: &str) -> String {
 
         parsed.to_string()
     } else {
-        url.to_string()
+        "[redacted connection URL]".to_string()
     }
 }
 
@@ -509,8 +514,37 @@ mod tests {
     fn sanitize_masks_api_key() {
         let url = "wss://connect.steel.dev?apiKey=sk-12345678&sessionId=s1";
         let sanitized = sanitize_connect_url(url);
-        assert!(sanitized.contains("sk-1234..."));
+        assert!(!sanitized.contains("sk-1234"));
         assert!(sanitized.contains("sessionId=s1"));
+    }
+
+    #[test]
+    fn sanitize_masks_session_tokens_short_keys_and_userinfo() {
+        for key in ["x", "sensitive-api-key", "秘密鍵"] {
+            let raw = format!(
+                "wss://user:password@connect.steel.dev?apiKey={key}&token=sensitive-session-token&access_token=other-secret&sessionId=s1"
+            );
+            let sanitized = sanitize_connect_url(&raw);
+            assert!(!sanitized.contains("sensitive-session-token"));
+            assert!(!sanitized.contains("other-secret"));
+            assert!(!sanitized.contains("user:password"));
+            let parsed = url::Url::parse(&sanitized).unwrap();
+            let pairs: Vec<_> = parsed.query_pairs().collect();
+            assert!(
+                pairs
+                    .iter()
+                    .any(|(k, v)| k == "apiKey" && v == "[redacted]")
+            );
+            assert!(pairs.iter().any(|(k, v)| k == "sessionId" && v == "s1"));
+        }
+    }
+
+    #[test]
+    fn malformed_connection_url_is_not_echoed() {
+        assert_eq!(
+            sanitize_connect_url("not a URL?token=secret"),
+            "[redacted connection URL]"
+        );
     }
 
     #[test]

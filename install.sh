@@ -8,12 +8,12 @@ Installs the Steel CLI binary and, in an interactive terminal, runs
 
 Flags:
   --non-interactive    Skip the interactive `steel init` step (install only)
-  --agent              Run `steel init --agent` (non-interactive: auto-accept
-                       prompts and print agent-friendly output; intended for
-                       AI coding agents)
+  --agent              Run `steel init --agent` (non-interactive: install the
+                       target's browser skill and report failed stages;
+                       intended for AI coding agents)
   --from <name>        Tag the originating coding agent (claude-code, cursor,
-                       opencode, codex, ...). Informational only; used for
-                       onboarding telemetry. Supports `--from=<name>` too.
+                       opencode, codex, pi). Selects the skill install target
+                       and onboarding telemetry. Supports `--from=<name>` too.
 
 REQUIRES: curl
 INSTALLS TO: ~/.steel/bin
@@ -112,7 +112,18 @@ fi
 
 echo "Installing steel binary..."
 
-STEEL_CLI_NO_MODIFY_PATH=1 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steel-dev/cli/releases/latest/download/steel-cli-installer.sh | STEEL_CLI_NO_MODIFY_PATH=1 sh > /dev/null 2>&1
+# Download separately: POSIX pipelines otherwise hide curl failures, and hiding
+# the installer's stderr makes a failed stage impossible to diagnose.
+_installer=$(mktemp)
+trap 'rm -f "$_installer"' EXIT HUP INT TERM
+if ! curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steel-dev/cli/releases/latest/download/steel-cli-installer.sh -o "$_installer"; then
+    echo "Setup blocked: could not download the binary installer. Check network access to GitHub and retry." >&2
+    exit 1
+fi
+if ! STEEL_CLI_NO_MODIFY_PATH=1 sh "$_installer"; then
+    echo "Setup blocked: binary installation failed. Resolve the installer error above and retry." >&2
+    exit 1
+fi
 
 INSTALL_DIR="$HOME/.steel/bin"
 
@@ -152,6 +163,16 @@ if [ -n "${SHELL:-}" ]; then
 fi
 
 STEEL_BIN="$INSTALL_DIR/steel"
+if [ ! -x "$STEEL_BIN" ]; then
+    echo "Setup blocked: installer did not create an executable at $STEEL_BIN. Retry installation." >&2
+    exit 1
+fi
+
+# Print before init: authorization or prerequisites may interrupt setup.
+echo "Native CLI: $STEEL_BIN"
+"$STEEL_BIN" --version
+echo 'For every subsequent agent tool call, invoke "$HOME/.steel/bin/steel" directly.'
+echo 'No shell reload or PATH export is needed for that command. Do not reinstall @steel-dev/cli through npm to repair native CLI reachability.'
 
 # --- Shell completions (best-effort; never fatal) ---------------------
 _install_completion_file() {
@@ -236,7 +257,11 @@ echo ""
 # Human mode drives `dialoguer` prompts, so we only run it when /dev/tty
 # exists.
 if [ "$STEEL_AGENT_MODE" = "yes" ]; then
-    "$STEEL_BIN" init --agent
+    if ! "$STEEL_BIN" init --agent; then
+        echo 'Setup incomplete. Follow the failed-stage guidance above, then resume with:' >&2
+        echo '  "$HOME/.steel/bin/steel" init --agent' >&2
+        exit 1
+    fi
 elif [ "$STEEL_NON_INTERACTIVE" != "yes" ]; then
     "$STEEL_BIN" init </dev/tty
 fi
@@ -244,8 +269,8 @@ fi
 if [ "$STEEL_AGENT_MODE" = "yes" ]; then
     cat << 'EOF'
 
-Add the Steel binary to PATH for this session:
-  export PATH="$HOME/.steel/bin:$PATH"
+Use the native CLI in subsequent tool calls (PATH-independent):
+  "$HOME/.steel/bin/steel" --version
 
 EOF
 else

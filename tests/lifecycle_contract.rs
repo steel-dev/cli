@@ -21,6 +21,7 @@ fn cloud_auth() -> Auth {
     Auth {
         api_key: Some("sk-test-key-12345678".to_string()),
         source: AuthSource::Env,
+        access_token: None,
     }
 }
 
@@ -28,6 +29,7 @@ const fn local_auth() -> Auth {
     Auth {
         api_key: None,
         source: AuthSource::None,
+        access_token: None,
     }
 }
 
@@ -151,7 +153,7 @@ fn sanitize_masks_api_key_in_url() {
     let sanitized = sanitize_connect_url(url);
 
     assert!(
-        sanitized.contains("sk-1234..."),
+        sanitized.contains("%5Bredacted%5D"),
         "Expected masked key, got: {sanitized}"
     );
     assert!(
@@ -165,13 +167,38 @@ fn sanitize_masks_api_key_in_url() {
 }
 
 #[test]
-fn sanitize_preserves_short_api_key() {
-    // Keys with 7 or fewer chars are not masked (threshold check)
+fn device_credentials_are_not_injected_into_gateway_connect_urls() {
+    let auth = Auth {
+        api_key: None,
+        access_token: Some("api-audience-fixture".to_string()),
+        source: AuthSource::Device,
+    };
+    let signed = "wss://gateway.example.test/?sessionId=s1&token=session-signed-fixture";
+    let summary = to_session_summary(
+        &json!({"id":"s1","connectUrl":signed}),
+        ApiMode::Cloud,
+        None,
+        &auth,
+    )
+    .unwrap();
+    assert_eq!(summary.connect_url.as_deref(), Some(signed));
+    assert!(
+        !summary
+            .connect_url
+            .unwrap()
+            .contains("api-audience-fixture")
+    );
+    let missing = to_session_summary(&json!({"id":"s1"}), ApiMode::Cloud, None, &auth).unwrap();
+    assert!(missing.connect_url.is_none());
+}
+
+#[test]
+fn sanitize_redacts_short_api_key() {
     let url = "wss://connect.steel.dev?apiKey=short&sessionId=s1";
     let sanitized = sanitize_connect_url(url);
     assert!(
-        sanitized.contains("apiKey=short"),
-        "Short key should not be masked, got: {sanitized}"
+        !sanitized.contains("apiKey=short"),
+        "Short key should also be masked, got: {sanitized}"
     );
 }
 
@@ -186,7 +213,7 @@ fn sanitize_handles_url_without_api_key() {
 fn sanitize_handles_invalid_url() {
     let url = "not a valid url";
     let sanitized = sanitize_connect_url(url);
-    assert_eq!(sanitized, url);
+    assert_eq!(sanitized, "[redacted connection URL]");
 }
 
 // ===========================================================================
@@ -271,6 +298,7 @@ fn to_session_summary_passes_name_through() {
 fn daemon_create_params_json_roundtrip() {
     let params = DaemonCreateParams {
         api_key: Some("sk-test-key".to_string()),
+        device_auth: false,
         base_url: "https://api.steel.dev/v1".to_string(),
         mode: ApiMode::Cloud,
         session_name: "work".to_string(),
@@ -312,6 +340,7 @@ fn daemon_create_params_minimal_roundtrip() {
     let params = DaemonCreateParams {
         api_key: None,
         base_url: "http://localhost:3000/v1".to_string(),
+        device_auth: false,
         mode: ApiMode::Local,
         session_name: "default".to_string(),
         stealth: false,
@@ -340,6 +369,7 @@ fn daemon_create_params_minimal_roundtrip() {
 fn daemon_create_params_to_create_options() {
     let params = DaemonCreateParams {
         api_key: Some("sk-key".to_string()),
+        device_auth: false,
         base_url: "https://api.steel.dev/v1".to_string(),
         mode: ApiMode::Cloud,
         session_name: "test".to_string(),

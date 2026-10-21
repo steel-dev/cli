@@ -31,6 +31,7 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
     let api_client = SteelClient::new()?;
     let auth = Auth {
         api_key: params.api_key.clone(),
+        access_token: params.device_auth.then(String::new),
         source: AuthSource::Env,
     };
     let options = params.to_create_options();
@@ -58,8 +59,13 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
     let cdp_url = match summary.connect_url {
         Some(ref url) => url.clone(),
         None => {
+            let _ = api_client
+                .release_session(&params.base_url, params.mode, &summary.id, &auth)
+                .await;
             cleanup(&session_name);
-            return Err(anyhow::anyhow!("Session has no CDP connect URL"));
+            return Err(anyhow::anyhow!(
+                "Session has no CDP connect URL; release attempted. Device tokens are not API keys and cannot be appended as apiKey"
+            ));
         }
     };
 

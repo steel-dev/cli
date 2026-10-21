@@ -9,11 +9,21 @@ use crate::status;
 const ENV_KEY_WARNING: &str = "warning: STEEL_API_KEY is set in your environment and will still be used for authentication. Run `unset STEEL_API_KEY` to fully log out.";
 
 #[derive(Parser)]
-pub struct Args {}
+pub struct Args {
+    /// Forget local device credentials without server revocation (offline recovery)
+    #[arg(long)]
+    pub local_only: bool,
+}
 
-pub async fn run(_args: Args) -> anyhow::Result<()> {
+pub async fn run(args: Args) -> anyhow::Result<()> {
+    let device_cleared = crate::config::device::logout(args.local_only).await?;
+    if args.local_only {
+        eprintln!(
+            "Local credentials removed only. Revoke the device on the auth account page; existing JWTs remain valid until expiry."
+        );
+    }
     let env_key_set = env_key_present(std::env::var("STEEL_API_KEY").ok().as_deref());
-    let cleared = clear_saved_login(&config::config_path())?;
+    let cleared = clear_saved_login(&config::config_path())? || device_cleared;
 
     match (cleared, env_key_set) {
         (true, _) => status!("Successfully logged out. Have a great day!"),
@@ -24,6 +34,11 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
     if env_key_set {
         status!("{ENV_KEY_WARNING}");
     }
+    crate::util::output::success_data(serde_json::json!({
+        "status": if cleared { "logged_out" } else { "no_saved_credentials" },
+        "local_only": args.local_only,
+        "environment_api_key_still_active": env_key_set,
+    }));
 
     Ok(())
 }

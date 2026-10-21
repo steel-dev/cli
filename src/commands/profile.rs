@@ -161,12 +161,12 @@ fn resolve_name(positional: Option<String>, flag: Option<String>) -> anyhow::Res
         .ok_or_else(|| anyhow::anyhow!("Profile name is required."))
 }
 
-fn resolve_api() -> anyhow::Result<(String, String)> {
+fn resolve_api() -> anyhow::Result<(crate::config::auth::Auth, String)> {
     let (_, base_url, auth) = api::resolve_with_auth();
-    let api_key = auth.api_key.ok_or_else(|| {
-        anyhow::anyhow!("Not authenticated. Run `steel login` or set STEEL_API_KEY.")
-    })?;
-    Ok((api_key, base_url))
+    if !auth.has_credentials() {
+        anyhow::bail!("Not authenticated. Run steel login or set STEEL_API_KEY");
+    }
+    Ok((auth, base_url))
 }
 
 fn parse_browser(name: &str) -> anyhow::Result<profile_porter::BrowserId> {
