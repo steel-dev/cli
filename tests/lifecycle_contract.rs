@@ -1,7 +1,7 @@
 //! Integration tests for browser session lifecycle contracts.
 //!
 //! Pure-function tests for `to_session_summary`, `sanitize_connect_url`, and
-//! connect-URL injection logic.  Also covers daemon protocol types
+//! API-returned connection URLs. Also covers daemon protocol types
 //! (`DaemonCreateParams`, `SessionInfo`, `GetSessionInfo`) and
 //! `list_daemon_names()`.
 
@@ -10,53 +10,24 @@ use tempfile::TempDir;
 
 use steel_cli::browser::daemon::protocol::{DaemonCommand, DaemonCreateParams, SessionInfo};
 use steel_cli::browser::lifecycle::*;
-use steel_cli::config::auth::{Auth, AuthSource};
 use steel_cli::config::settings::ApiMode;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-fn cloud_auth() -> Auth {
-    Auth {
-        api_key: Some("sk-test-key-12345678".to_string()),
-        source: AuthSource::Env,
-        access_token: None,
-    }
-}
-
-const fn local_auth() -> Auth {
-    Auth {
-        api_key: None,
-        source: AuthSource::None,
-        access_token: None,
-    }
-}
-
 // ===========================================================================
-// Connect URL Contract: injects apiKey into connect URL for cloud mode
+// Connect URL Contract: use API-returned URLs without adding credentials
 // ===========================================================================
 
 #[test]
-fn injects_api_key_into_connect_url_for_cloud() {
+fn preserves_token_only_connect_url_for_cloud() {
     let session = json!({
         "id": "sess-1",
         "status": "live",
         "isLive": true,
-        "websocketUrl": "wss://connect.steel.dev?sessionId=sess-1",
+        "websocketUrl": "wss://connect.steel.dev?sessionId=sess-1&token=synthetic-connect-token",
     });
-    let auth = cloud_auth();
-    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, None).unwrap();
 
     let url = summary.connect_url.unwrap();
-    assert!(
-        url.contains("apiKey=sk-test-key-12345678"),
-        "Expected apiKey in URL, got: {url}"
-    );
-    assert!(
-        url.contains("sessionId=sess-1"),
-        "Expected sessionId preserved in URL, got: {url}"
-    );
+    assert_eq!(url, session["websocketUrl"].as_str().unwrap());
 }
 
 #[test]
@@ -67,8 +38,7 @@ fn does_not_inject_api_key_for_local_mode() {
         "isLive": true,
         "websocketUrl": "ws://localhost:3000/ws?sessionId=sess-1",
     });
-    let auth = cloud_auth();
-    let summary = to_session_summary(&session, ApiMode::Local, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Local, None).unwrap();
 
     let url = summary.connect_url.unwrap();
     assert!(
@@ -78,18 +48,17 @@ fn does_not_inject_api_key_for_local_mode() {
 }
 
 #[test]
-fn does_not_duplicate_api_key_if_already_present() {
+fn preserves_api_returned_credentials() {
     let session = json!({
         "id": "sess-1",
         "status": "live",
         "isLive": true,
         "websocketUrl": "wss://connect.steel.dev?apiKey=existing-key&sessionId=sess-1",
     });
-    let auth = cloud_auth();
-    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, None).unwrap();
 
     let url = summary.connect_url.unwrap();
-    // Should keep existing key, not inject a second one
+    // Do not rewrite credentials supplied by the API.
     assert!(url.contains("apiKey=existing-key"));
     let count = url.matches("apiKey").count();
     assert_eq!(
@@ -99,32 +68,18 @@ fn does_not_duplicate_api_key_if_already_present() {
 }
 
 // ===========================================================================
-// Connect URL Contract: fallback builds wss://connect.steel.dev URL
+// Connect URL Contract: missing URLs must not synthesize API-key fallbacks
 // ===========================================================================
 
 #[test]
-fn builds_fallback_connect_url_when_not_provided() {
+fn no_fallback_connect_url_for_cloud_mode() {
     let session = json!({
         "id": "sess-1",
         "status": "live",
         "isLive": true,
     });
-    let auth = cloud_auth();
-    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
-
-    let url = summary.connect_url.unwrap();
-    assert!(
-        url.starts_with("wss://connect.steel.dev"),
-        "Expected fallback URL, got: {url}"
-    );
-    assert!(
-        url.contains("apiKey=sk-test-key-12345678"),
-        "Expected apiKey in fallback URL, got: {url}"
-    );
-    assert!(
-        url.contains("sessionId=sess-1"),
-        "Expected sessionId in fallback URL, got: {url}"
-    );
+    let summary = to_session_summary(&session, ApiMode::Cloud, None).unwrap();
+    assert!(summary.connect_url.is_none());
 }
 
 #[test]
@@ -134,8 +89,7 @@ fn no_fallback_connect_url_for_local_mode() {
         "status": "live",
         "isLive": true,
     });
-    let auth = local_auth();
-    let summary = to_session_summary(&session, ApiMode::Local, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Local, None).unwrap();
 
     assert!(
         summary.connect_url.is_none(),
@@ -201,8 +155,7 @@ fn viewer_url_defaults_to_cloud_url() {
         "status": "live",
         "isLive": true,
     });
-    let auth = cloud_auth();
-    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, None).unwrap();
 
     assert_eq!(
         summary.viewer_url.as_deref(),
@@ -217,8 +170,7 @@ fn viewer_url_none_for_local_without_explicit() {
         "status": "live",
         "isLive": true,
     });
-    let auth = local_auth();
-    let summary = to_session_summary(&session, ApiMode::Local, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Local, None).unwrap();
 
     assert!(summary.viewer_url.is_none());
 }
@@ -231,8 +183,7 @@ fn viewer_url_uses_api_response_when_present() {
         "isLive": true,
         "sessionViewerUrl": "https://custom-viewer.example.com/view/sess-1",
     });
-    let auth = cloud_auth();
-    let summary = to_session_summary(&session, ApiMode::Cloud, None, &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, None).unwrap();
 
     assert_eq!(
         summary.viewer_url.as_deref(),
@@ -247,8 +198,7 @@ fn viewer_url_uses_api_response_when_present() {
 #[test]
 fn to_session_summary_requires_id() {
     let session = json!({"status": "live"});
-    let auth = cloud_auth();
-    let result = to_session_summary(&session, ApiMode::Cloud, None, &auth);
+    let result = to_session_summary(&session, ApiMode::Cloud, None);
     assert!(result.is_err());
 }
 
@@ -259,8 +209,7 @@ fn to_session_summary_passes_name_through() {
         "status": "live",
         "isLive": true,
     });
-    let auth = cloud_auth();
-    let summary = to_session_summary(&session, ApiMode::Cloud, Some("my-session"), &auth).unwrap();
+    let summary = to_session_summary(&session, ApiMode::Cloud, Some("my-session")).unwrap();
     assert_eq!(summary.name.as_deref(), Some("my-session"));
 }
 

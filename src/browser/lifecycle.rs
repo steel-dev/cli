@@ -203,33 +203,11 @@ pub fn to_session_summary(
     session: &Value,
     mode: ApiMode,
     name: Option<&str>,
-    auth: &Auth,
 ) -> anyhow::Result<SessionSummary> {
     let session_id = get_session_id(session)
         .ok_or_else(|| anyhow::anyhow!("Session response did not contain an id."))?;
 
-    let mut connect_url = get_connect_url(session);
-
-    // Fallback: build connect URL for cloud mode
-    if connect_url.is_none()
-        && mode == ApiMode::Cloud
-        && let Some(ref api_key) = auth.api_key
-    {
-        connect_url = Some(format!(
-            "wss://connect.steel.dev?apiKey={api_key}&sessionId={session_id}"
-        ));
-    }
-
-    // Inject apiKey into connect URL for cloud mode
-    if let Some(ref url) = connect_url
-        && mode == ApiMode::Cloud
-        && let Some(ref api_key) = auth.api_key
-        && !url.contains("apiKey=")
-        && let Ok(mut parsed) = url::Url::parse(url)
-    {
-        parsed.query_pairs_mut().append_pair("apiKey", api_key);
-        connect_url = Some(parsed.to_string());
-    }
+    let connect_url = get_connect_url(session);
 
     Ok(SessionSummary {
         id: session_id.clone(),

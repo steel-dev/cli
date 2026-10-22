@@ -52,7 +52,7 @@ pub async fn run(session_name: String, params: DaemonCreateParams) -> Result<()>
         }
     };
 
-    let summary = match to_session_summary(&session, params.mode, Some(&session_name), &auth) {
+    let summary = match to_session_summary(&session, params.mode, Some(&session_name)) {
         Ok(s) => s,
         Err(e) => {
             cleanup(&session_name);

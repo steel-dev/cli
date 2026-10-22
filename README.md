@@ -72,7 +72,8 @@ Use a separate `STEEL_CONFIG_DIR` for testing. Auth context, pending authorizati
 and credentials are saved privately in its `auth.json`; credentials are never
 silently retargeted when an override changes. Device access tokens use Bearer
 authorization and refresh automatically; API keys still use `Steel-Api-Key`.
-CDP uses session-scoped credentials returned by the API, not the device token.
+CDP uses the connection URL returned by the API without appending an API key or
+device token. A missing connection URL is an error, not a synthesized fallback.
 
 `steel doctor --preflight` checks product API access. `steel logout` revokes the
 saved refresh grant before deleting local state. `--local-only` explicitly forgets
