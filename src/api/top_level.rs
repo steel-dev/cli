@@ -318,6 +318,7 @@ mod tests {
         Auth {
             api_key: Some("test-key".into()),
             source: AuthSource::Env,
+            access_token: None,
         }
     }
 

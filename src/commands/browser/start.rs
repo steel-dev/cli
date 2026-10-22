@@ -104,6 +104,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     // Build params and spawn daemon
     let params = DaemonCreateParams {
         api_key: auth.api_key,
+        device_auth: auth.access_token.is_some(),
         base_url,
         mode,
         session_name: session_name.clone(),

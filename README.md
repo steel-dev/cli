@@ -51,6 +51,35 @@ Alternatives:
 
 After install, either restart your shell or run `export PATH="$HOME/.steel/bin:$PATH"`.
 
+### Device login
+
+`steel login` shows a short code and authorization URL; approve in a browser on
+any machine. `steel login --resume` continues the saved request after interruption.
+Non-interactive commands return promptly while approval is pending. Repeat
+`steel init` after approval to continue setup. API keys remain supported, with
+`STEEL_API_KEY` taking precedence for existing automation.
+
+The defaults are production values. These settings may be independently overridden
+for a test environment; an audience is an exact resource identifier, not an API URL:
+
+| Setting | Default |
+| --- | --- |
+| `STEEL_AUTH_ISSUER` | `https://auth.steel.dev` |
+| `STEEL_AUTH_AUDIENCE` | `https://api.steel.dev` |
+| `STEEL_API_URL` | `https://api.steel.dev/v1` |
+
+Use a separate `STEEL_CONFIG_DIR` for testing. Auth context, pending authorization
+and credentials are saved privately in its `auth.json`; credentials are never
+silently retargeted when an override changes. Device access tokens use Bearer
+authorization and refresh automatically; API keys still use `Steel-Api-Key`.
+CDP uses session-scoped credentials returned by the API, not the device token.
+
+`steel doctor --preflight` checks product API access. `steel logout` revokes the
+saved refresh grant before deleting local state. `--local-only` explicitly forgets
+local state when offline or recovering an interrupted refresh; revoke that device
+in your account as well. Issued access JWTs can remain valid until expiry.
+Do not paste or log access/refresh tokens, device codes or signed connection URLs.
+
 ## Shell Completions
 
 Shell completions are installed automatically by `install.sh`. To regenerate or install manually:

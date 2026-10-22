@@ -12,6 +12,8 @@ pub const DEFAULT_INACTIVITY_TIMEOUT_MS: u64 = 120_000;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DaemonCreateParams {
     pub api_key: Option<String>,
+    #[serde(default)]
+    pub device_auth: bool,
     pub base_url: String,
     pub mode: ApiMode,
     pub session_name: String,

@@ -388,6 +388,7 @@ fn error_class(err: &anyhow::Error) -> &'static str {
     if let Some(api_err) = err.downcast_ref::<crate::api::client::ApiError>() {
         return match api_err {
             crate::api::client::ApiError::MissingAuth => "auth_required",
+            crate::api::client::ApiError::DeviceAuth(_) => "device_auth_failed",
             crate::api::client::ApiError::Unreachable { .. } => "network_unreachable",
             crate::api::client::ApiError::RequestFailed { status, .. } => match *status {
                 401 => "api_unauthorized",

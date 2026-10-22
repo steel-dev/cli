@@ -6,6 +6,7 @@ use crate::config::settings;
 pub enum AuthSource {
     Env,
     Config,
+    Device,
     None,
 }
 
@@ -14,15 +15,32 @@ impl std::fmt::Display for AuthSource {
         match self {
             Self::Env => write!(f, "env (STEEL_API_KEY)"),
             Self::Config => write!(f, "config"),
+            Self::Device => write!(f, "device (Bearer)"),
             Self::None => write!(f, "none"),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Auth {
     pub api_key: Option<String>,
+    pub access_token: Option<String>,
     pub source: AuthSource,
+}
+
+impl Auth {
+    pub const fn has_credentials(&self) -> bool {
+        self.api_key.is_some() || self.access_token.is_some()
+    }
+}
+
+impl std::fmt::Debug for Auth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Auth")
+            .field("source", &self.source)
+            .field("configured", &self.has_credentials())
+            .finish()
+    }
 }
 
 /// Resolve API key with explicit inputs (testable).
@@ -36,6 +54,7 @@ pub fn resolve_auth_with(env_api_key: Option<&str>, config_api_key: Option<&str>
         if !trimmed.is_empty() {
             return Auth {
                 api_key: Some(trimmed.to_string()),
+                access_token: None,
                 source: AuthSource::Env,
             };
         }
@@ -47,6 +66,7 @@ pub fn resolve_auth_with(env_api_key: Option<&str>, config_api_key: Option<&str>
         if !trimmed.is_empty() {
             return Auth {
                 api_key: Some(trimmed.to_string()),
+                access_token: None,
                 source: AuthSource::Config,
             };
         }
@@ -54,6 +74,7 @@ pub fn resolve_auth_with(env_api_key: Option<&str>, config_api_key: Option<&str>
 
     Auth {
         api_key: None,
+        access_token: None,
         source: AuthSource::None,
     }
 }
@@ -71,7 +92,18 @@ pub fn resolve_auth() -> Auth {
     let env_key = std::env::var("STEEL_API_KEY").ok();
     let config_key = read_api_key_from_config(&super::config_path());
 
-    resolve_auth_with(env_key.as_deref(), config_key.as_deref())
+    let explicit = resolve_auth_with(env_key.as_deref(), None);
+    if explicit.has_credentials() {
+        return explicit;
+    }
+    if let Some(token) = super::device::saved_access_token() {
+        return Auth {
+            api_key: None,
+            access_token: Some(token),
+            source: AuthSource::Device,
+        };
+    }
+    resolve_auth_with(None, config_key.as_deref())
 }
 
 #[cfg(test)]

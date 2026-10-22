@@ -404,7 +404,7 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
     let auth = crate::config::auth::resolve_auth();
     let agent_paths = agent_paths_for(&manifest);
     let installed_count = agent_paths.iter().filter(|path| path.installed).count();
-    let has_fail = !npx_ok || auth.api_key.is_none();
+    let has_fail = !npx_ok || !auth.has_credentials();
 
     if output::is_json() {
         output::success_data(json!({
@@ -412,7 +412,7 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
             "checks": {
                 "manifest": manifest_ok,
                 "npx": npx_ok,
-                "auth": auth.api_key.is_some(),
+                "auth": auth.has_credentials(),
                 "installed_paths": installed_count,
             },
             "paths": agent_paths,
@@ -421,12 +421,12 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
         println!("Steel Skills Doctor\n");
         println!("Manifest reachable: {}", yes_no(manifest_ok));
         println!("npx available: {}", yes_no(npx_ok));
-        println!("Steel auth configured: {}", yes_no(auth.api_key.is_some()));
+        println!("Steel auth configured: {}", yes_no(auth.has_credentials()));
         println!("Installed Steel skill paths detected: {installed_count}");
         if !npx_ok {
             println!("\nFix: install Node.js/npm so `npx skills` is available.");
         }
-        if auth.api_key.is_none() {
+        if !auth.has_credentials() {
             println!("Fix: run `steel login` or set STEEL_API_KEY.");
         }
         if !manifest_ok {

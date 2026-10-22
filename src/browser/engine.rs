@@ -27,7 +27,10 @@ pub struct BrowserEngine {
 impl BrowserEngine {
     /// Connect to an existing browser via CDP endpoint.
     pub async fn connect(cdp_url: &str) -> Result<Self> {
-        let manager = BrowserManager::connect_cdp(cdp_url)
+        // Ensure root URLs with queries produce GET /?... rather than GET ?...
+        // in the native HTTP URI parser, matching browser URL serialization.
+        let normalized = url::Url::parse(cdp_url)?.to_string();
+        let manager = BrowserManager::connect_cdp(&normalized)
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
         Ok(Self {

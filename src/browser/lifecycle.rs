@@ -404,14 +404,19 @@ fn is_terminal_captcha_status(status: &str) -> bool {
     matches!(status, "solved" | "failed" | "none")
 }
 
-/// Sanitize connect URL for display (mask API key).
+/// Connection URLs are display metadata, not a credential export.
 pub fn sanitize_connect_url(url: &str) -> String {
     if let Ok(mut parsed) = url::Url::parse(url) {
+        let _ = parsed.set_username("");
+        let _ = parsed.set_password(None);
         let pairs: Vec<(String, String)> = parsed
             .query_pairs()
             .map(|(k, v)| {
-                if k == "apiKey" && v.len() > 7 {
-                    (k.to_string(), format!("{}...", &v[..7]))
+                if matches!(
+                    k.to_ascii_lowercase().as_str(),
+                    "apikey" | "api_key" | "token" | "access_token"
+                ) {
+                    (k.to_string(), "[redacted]".to_string())
                 } else {
                     (k.to_string(), v.to_string())
                 }
@@ -427,7 +432,7 @@ pub fn sanitize_connect_url(url: &str) -> String {
 
         parsed.to_string()
     } else {
-        url.to_string()
+        "[redacted connection URL]".to_string()
     }
 }
 
@@ -509,7 +514,7 @@ mod tests {
     fn sanitize_masks_api_key() {
         let url = "wss://connect.steel.dev?apiKey=sk-12345678&sessionId=s1";
         let sanitized = sanitize_connect_url(url);
-        assert!(sanitized.contains("sk-1234..."));
+        assert!(!sanitized.contains("sk-1234"));
         assert!(sanitized.contains("sessionId=s1"));
     }
 
