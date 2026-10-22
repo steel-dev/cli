@@ -203,33 +203,11 @@ pub fn to_session_summary(
     session: &Value,
     mode: ApiMode,
     name: Option<&str>,
-    auth: &Auth,
 ) -> anyhow::Result<SessionSummary> {
     let session_id = get_session_id(session)
         .ok_or_else(|| anyhow::anyhow!("Session response did not contain an id."))?;
 
-    let mut connect_url = get_connect_url(session);
-
-    // Fallback: build connect URL for cloud mode
-    if connect_url.is_none()
-        && mode == ApiMode::Cloud
-        && let Some(ref api_key) = auth.api_key
-    {
-        connect_url = Some(format!(
-            "wss://connect.steel.dev?apiKey={api_key}&sessionId={session_id}"
-        ));
-    }
-
-    // Inject apiKey into connect URL for cloud mode
-    if let Some(ref url) = connect_url
-        && mode == ApiMode::Cloud
-        && let Some(ref api_key) = auth.api_key
-        && !url.contains("apiKey=")
-        && let Ok(mut parsed) = url::Url::parse(url)
-    {
-        parsed.query_pairs_mut().append_pair("apiKey", api_key);
-        connect_url = Some(parsed.to_string());
-    }
+    let connect_url = get_connect_url(session);
 
     Ok(SessionSummary {
         id: session_id.clone(),
@@ -404,14 +382,19 @@ fn is_terminal_captcha_status(status: &str) -> bool {
     matches!(status, "solved" | "failed" | "none")
 }
 
-/// Sanitize connect URL for display (mask API key).
+/// Connection URLs are display metadata, not a credential export.
 pub fn sanitize_connect_url(url: &str) -> String {
     if let Ok(mut parsed) = url::Url::parse(url) {
+        let _ = parsed.set_username("");
+        let _ = parsed.set_password(None);
         let pairs: Vec<(String, String)> = parsed
             .query_pairs()
             .map(|(k, v)| {
-                if k == "apiKey" && v.len() > 7 {
-                    (k.to_string(), format!("{}...", &v[..7]))
+                if matches!(
+                    k.to_ascii_lowercase().as_str(),
+                    "apikey" | "api_key" | "token" | "access_token"
+                ) {
+                    (k.to_string(), "[redacted]".to_string())
                 } else {
                     (k.to_string(), v.to_string())
                 }
@@ -427,7 +410,7 @@ pub fn sanitize_connect_url(url: &str) -> String {
 
         parsed.to_string()
     } else {
-        url.to_string()
+        "[redacted connection URL]".to_string()
     }
 }
 
@@ -509,7 +492,7 @@ mod tests {
     fn sanitize_masks_api_key() {
         let url = "wss://connect.steel.dev?apiKey=sk-12345678&sessionId=s1";
         let sanitized = sanitize_connect_url(url);
-        assert!(sanitized.contains("sk-1234..."));
+        assert!(!sanitized.contains("sk-1234"));
         assert!(sanitized.contains("sessionId=s1"));
     }
 

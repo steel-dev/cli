@@ -966,7 +966,7 @@ pub fn package_profile(
 
 pub async fn upload_profile_to_steel(
     zip_buffer: Vec<u8>,
-    api_key: &str,
+    auth: &crate::config::auth::Auth,
     api_base: &str,
 ) -> Result<String> {
     let part = reqwest::multipart::Part::bytes(zip_buffer)
@@ -975,10 +975,10 @@ pub async fn upload_profile_to_steel(
     let form = reqwest::multipart::Form::new().part("userDataDir", part);
 
     let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{api_base}/profiles"))
-        .header("Steel-Api-Key", api_key)
-        .multipart(form)
+    let request = client.post(format!("{api_base}/profiles")).multipart(form);
+    let res = crate::api::client::SteelClient::new()?
+        .authorize(request, api_base, auth)
+        .await?
         .send()
         .await?;
 
@@ -1003,7 +1003,7 @@ pub async fn upload_profile_to_steel(
 pub async fn update_profile_on_steel(
     profile_id: &str,
     zip_buffer: Vec<u8>,
-    api_key: &str,
+    auth: &crate::config::auth::Auth,
     api_base: &str,
 ) -> Result<()> {
     let part = reqwest::multipart::Part::bytes(zip_buffer)
@@ -1012,10 +1012,12 @@ pub async fn update_profile_on_steel(
     let form = reqwest::multipart::Form::new().part("userDataDir", part);
 
     let client = reqwest::Client::new();
-    let res = client
+    let request = client
         .patch(format!("{api_base}/profiles/{profile_id}"))
-        .header("Steel-Api-Key", api_key)
-        .multipart(form)
+        .multipart(form);
+    let res = crate::api::client::SteelClient::new()?
+        .authorize(request, api_base, auth)
+        .await?
         .send()
         .await?;
 
