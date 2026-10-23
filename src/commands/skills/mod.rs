@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 use std::time::Duration;
 
@@ -564,8 +564,25 @@ fn agent_paths_for_skill(name: &str) -> Vec<AgentPath> {
     let Some(home) = dirs::home_dir() else {
         return Vec::new();
     };
+    let config_home = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| home.join(".config"));
+    agent_paths_for_skill_with(
+        name,
+        &home,
+        &config_home,
+        std::env::current_dir().ok().as_deref(),
+    )
+}
 
-    let paths = [
+fn agent_paths_for_skill_with(
+    name: &str,
+    home: &Path,
+    config_home: &Path,
+    cwd: Option<&Path>,
+) -> Vec<AgentPath> {
+    let mut paths = vec![
         (
             "Claude Code",
             home.join(".claude")
@@ -580,13 +597,6 @@ fn agent_paths_for_skill(name: &str) -> Vec<AgentPath> {
                 .join(format!("{name}.mdc")),
         ),
         (
-            "OpenCode",
-            home.join(".config")
-                .join("opencode")
-                .join("agents")
-                .join(format!("{name}.md")),
-        ),
-        (
             "Codex/Pi",
             home.join(".agents")
                 .join("skills")
@@ -595,12 +605,36 @@ fn agent_paths_for_skill(name: &str) -> Vec<AgentPath> {
         ),
     ];
 
+    let mut opencode_sources = vec![config_home.join("opencode").join("skills")];
+    if let Some(cwd) = cwd {
+        // Stop at the nearest Git worktree root (including .git files). Without
+        // a repository, only the active directory is a project source.
+        let root = cwd
+            .ancestors()
+            .find(|dir| dir.join(".git").exists())
+            .unwrap_or(cwd);
+        for dir in cwd.ancestors() {
+            for source in [".opencode", ".agents", ".claude"] {
+                opencode_sources.push(dir.join(source).join("skills"));
+            }
+            if dir == root {
+                break;
+            }
+        }
+    }
+    // OpenCode supports both directory skills and root-level Markdown skills.
+    // Agent definitions under opencode/agents are not installed skills.
+    for source in opencode_sources {
+        paths.push(("OpenCode", source.join(name).join("SKILL.md")));
+        paths.push(("OpenCode", source.join(format!("{name}.md"))));
+    }
+
     paths
         .into_iter()
         .map(|(agent, path)| AgentPath {
             agent,
             skill: name.to_string(),
-            installed: path.exists(),
+            installed: path.is_file(),
             path,
         })
         .collect()
