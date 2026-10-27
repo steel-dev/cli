@@ -46,6 +46,7 @@ impl Drop for Fixture {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[allow(unsafe_code)] // read-only process-group query for our own daemon PID
 async fn device_auth_uses_bearer_and_normalizes_root_query_before_native_cdp() {
     use std::os::unix::fs::PermissionsExt;
     let api = MockServer::start().await;
@@ -132,6 +133,18 @@ async fn device_auth_uses_bearer_and_normalizes_root_query_before_native_cdp() {
         start.status.success(),
         "{}",
         String::from_utf8_lossy(&start.stdout)
+    );
+    let daemon_pid: libc::pid_t =
+        std::fs::read_to_string(fixture.home.path().join("daemon-test.pid"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+    // SAFETY: getpgid only queries the known child process; it sends no signal.
+    let daemon_group = unsafe { libc::getpgid(daemon_pid) };
+    assert_eq!(
+        daemon_group, daemon_pid,
+        "daemon must have its own group to survive shell-tool cleanup"
     );
     assert_eq!(
         *seen.lock().unwrap(),
