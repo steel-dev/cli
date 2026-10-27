@@ -1,3 +1,4 @@
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -107,7 +108,10 @@ pub fn spawn_daemon(
 
     let params_json = serde_json::to_string(params)?;
 
+    // Shell tools may clean up their process group when a command returns.
+    // Keep the daemon reachable by subsequent CLI invocations in other tools.
     let child = std::process::Command::new(exe)
+        .process_group(0)
         .args(["__daemon", "--session-name", session_name])
         .env("STEEL_DAEMON_PARAMS", params_json)
         .stdin(std::process::Stdio::null())
