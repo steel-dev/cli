@@ -39,7 +39,7 @@ sha2 = "0.10"
 hmac = "0.12"
 
 # Browser engine
-browser-engine = { git = "https://github.com/steel-dev/agent-browser", rev = "07d622e0f1aaf09beb5cb1c6081e9ceaec440a95", package = "agent-browser" }
+browser-engine = { git = "https://github.com/steel-dev/agent-browser", rev = "0d1839094671dcbfa8279f06fc29c87a940b7bf4", package = "agent-browser" }
 aes-gcm = "0.10"
 getrandom = "0.4"
 
