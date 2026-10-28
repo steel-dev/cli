@@ -83,7 +83,7 @@ dependencies = [
 [[package]]
 name = "agent-browser"
 version = "0.25.0"
-source = "git+https://github.com/steel-dev/agent-browser?branch=as-lib#eb8e722560432a2ad0229604d3db82c16cda1253"
+source = "git+https://github.com/steel-dev/agent-browser?rev=07d622e0f1aaf09beb5cb1c6081e9ceaec440a95#07d622e0f1aaf09beb5cb1c6081e9ceaec440a95"
 dependencies = [
  "aes-gcm 0.10.3",
  "async-trait",
