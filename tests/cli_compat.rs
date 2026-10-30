@@ -280,9 +280,9 @@ fn pdf_flags() {
 
 #[test]
 fn browser_session_flag() {
-    // --session is a global flag on the browser command, propagated to all subcommands
+    // --session and --diff are global flags on the browser command, propagated to all subcommands
     let cmd = get_subcommand(&root_cmd(), &["browser"]);
-    assert_flags(&cmd, &[flag_val("session")], "browser");
+    assert_flags(&cmd, &[flag_val("session"), flag("diff")], "browser");
 }
 
 #[test]

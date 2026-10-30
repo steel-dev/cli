@@ -38,12 +38,9 @@ sha1 = "0.10"
 sha2 = "0.10"
 hmac = "0.12"
 
-# Browser engine
-browser-engine = { git = "https://github.com/steel-dev/agent-browser", branch = "as-lib", package = "agent-browser" }
 aes-gcm = "0.10"
 getrandom = "0.4"
 
-libc = "0.2"
 tempfile = "3"
 jiff = "0.2"
 parking_lot = "0.12"
@@ -54,8 +51,6 @@ futures-util = "0.3.32"
 
 [dev-dependencies]
 wiremock = "0.6"
-proptest = "1"
-proptest-derive = "0.8"
 
 [lints.rust]
 unsafe_code = "deny"

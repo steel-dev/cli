@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
 use crate::api::projects::{environment_label, parse_projects, resolve_current_project};
-use crate::browser::daemon::process;
+use crate::browser::state::{self, BrowserSession};
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
 use crate::util::output;
@@ -34,7 +34,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     } else {
         let (auth_api, version) =
             tokio::join!(check_auth_and_api(mode, &base_url, &auth), check_version(),);
-        let sessions = check_sessions();
+        let sessions = check_sessions(&state::list());
         let mut all = auth_api;
         all.extend(sessions);
         all.extend(version);
@@ -268,47 +268,16 @@ fn project_check(data: Option<&Value>) -> Option<Check> {
     })
 }
 
-fn check_sessions() -> Vec<Check> {
-    let names = process::list_daemon_names();
-    let mut active = Vec::new();
-    let mut cleaned = Vec::new();
-
-    for name in &names {
-        if process::is_daemon_alive(name) {
-            active.push(name.clone());
-        } else {
-            process::cleanup_stale(name);
-            cleaned.push(name.clone());
-        }
-    }
-
-    let mut checks = Vec::new();
-
-    if !cleaned.is_empty() {
-        checks.push(Check {
-            category: "sessions",
-            name: format!(
-                "{} stale daemon(s) cleaned up ({})",
-                cleaned.len(),
-                cleaned.join(", ")
-            ),
-            status: "pass",
-            detail: json!({"cleaned": cleaned}),
-            fix: None,
-            transient: false,
-        });
-    }
-
-    checks.push(Check {
+fn check_sessions(sessions: &[BrowserSession]) -> Vec<Check> {
+    let names: Vec<&str> = sessions.iter().map(|s| s.name.as_str()).collect();
+    vec![Check {
         category: "sessions",
-        name: format!("{} active session(s)", active.len()),
+        name: format!("{} local browser session(s)", names.len()),
         status: "pass",
-        detail: json!({"active": active, "count": active.len()}),
+        detail: json!({"active": names, "count": names.len()}),
         fix: None,
         transient: false,
-    });
-
-    checks
+    }]
 }
 
 async fn check_version() -> Vec<Check> {
@@ -528,9 +497,8 @@ mod tests {
 
     #[test]
     fn check_sessions_empty() {
-        // When no daemons exist, should return a single pass check
-        let checks = check_sessions();
+        let checks = check_sessions(&[]);
         assert!(checks.iter().all(|c| c.status == "pass"));
-        assert!(checks.iter().any(|c| c.name.contains("0 active")));
+        assert!(checks.iter().any(|c| c.name.contains("0 local")));
     }
 }

@@ -1,276 +1,160 @@
-# Steel Browser Commands (Synced + Transformed)
+# Steel Browser Commands
 
-> Generated file. Do not edit manually.
-> Source: https://raw.githubusercontent.com/vercel-labs/agent-browser/b59dc4c82c0583b60849d110f27982fac85f1a07/skills/agent-browser/references/commands.md
-> Pinned commit: `b59dc4c82c0583b60849d110f27982fac85f1a07`
-> Generated at: 2026-02-26T00:37:52.138Z
+Every `steel browser` action sends one request to the session's commands API (`POST /v1/sessions/{id}/commands`). The browser engine runs next to Chrome inside the session, so the CLI keeps no process running between commands.
 
-## Notes
+## Sessions
 
-- Upstream `agent-browser` command-prefix usage is transformed to `steel browser` for migration-friendly examples.
-- Runtime-specific env vars and config names (for example `AGENT_BROWSER_*`) are preserved as upstream runtime details.
-- Steel-native lifecycle commands (`steel browser start|stop|sessions|live`) are documented in `./steel-browser.md`.
+```bash
+steel browser start [--session <name>]   # create a session (default name: default)
+steel browser sessions                   # list local sessions that are still live
+steel browser live                       # print the live viewer URL
+steel browser stop [--session <name>]    # release the session (-a for all)
+steel browser close                      # same as stop (aliases: quit, exit)
+```
 
-# Command Reference (Steel Browser Adaptation)
-
-Complete reference for all steel browser commands. For quick start and common patterns, see SKILL.md.
+- Actions without `--session` use the `default` session. It starts on first use.
+- `--session <name>` targets a named session. A session ID also works, so you can drive a session that the SDK, the MCP server, or the dashboard created.
+- New sessions are released after 10 minutes without commands. Change this with `steel browser start --inactivity-timeout <ms>`. `0` turns it off.
+- The CLI keeps each session in `~/.config/steel/browser-sessions/<name>.json`: the session ID, the last operation id, the current tab, the event cursor, and the last snapshot.
 
 ## Navigation
 
 ```bash
-steel browser open <url>      # Navigate to URL (aliases: goto, navigate)
-                              # Supports: https://, http://, file://, about:, data://
-                              # Auto-prepends https:// if no protocol given
-steel browser back            # Go back
-steel browser forward         # Go forward
-steel browser reload          # Reload page
-steel browser close           # Close browser (aliases: quit, exit)
-steel browser connect 9222    # Connect to browser via CDP port
+steel browser open <url>         # aliases: navigate, goto. Adds https:// when the scheme is missing
+steel browser open <url> --wait-until networkidle
+steel browser back
+steel browser forward
+steel browser reload
 ```
 
-## Snapshot (page analysis)
+`open` waits up to 15 seconds for the page to load.
+
+## Snapshot and refs
 
 ```bash
-steel browser snapshot            # Full accessibility tree
-steel browser snapshot -i         # Interactive elements only (recommended)
-steel browser snapshot -c         # Compact output
-steel browser snapshot -d 3       # Limit depth to 3
-steel browser snapshot -s "#main" # Scope to CSS selector
+steel browser snapshot           # full accessibility tree
+steel browser snapshot -i        # interactive elements only (recommended)
+steel browser snapshot -c        # lines with refs or values, and their ancestors
+steel browser snapshot -d 3      # limit depth
 ```
 
-## Interactions (use @refs from snapshot)
+Snapshot lines carry refs such as `[ref=e5]`. Pass a ref (`e5`, `@e5`) or a CSS selector wherever a command takes `<sel>`.
+
+- A ref names one element. It fails with `stale_ref` when the element left the page or now shows different content. Take a new snapshot then.
+- A ref knows its tab, so commands on refs work on any tab.
+
+## Interaction
 
 ```bash
-steel browser click @e1           # Click
-steel browser click @e1 --new-tab # Click and open in new tab
-steel browser dblclick @e1        # Double-click
-steel browser focus @e1           # Focus element
-steel browser fill @e2 "text"     # Clear and type
-steel browser type @e2 "text"     # Type without clearing
-steel browser press Enter         # Press key (alias: key)
-steel browser press Control+a     # Key combination
-steel browser keydown Shift       # Hold key down
-steel browser keyup Shift         # Release key
-steel browser hover @e1           # Hover
-steel browser check @e1           # Check checkbox
-steel browser uncheck @e1         # Uncheck checkbox
-steel browser select @e1 "value"  # Select dropdown option
-steel browser select @e1 "a" "b"  # Select multiple options
-steel browser scroll down 500     # Scroll page (default: down 300px)
-steel browser scrollintoview @e1  # Scroll element into view (alias: scrollinto)
-steel browser drag @e1 @e2        # Drag and drop
-steel browser upload @e1 file.pdf # Upload files
+steel browser click <sel>              # --count 2 for a double-click
+steel browser dblclick <sel>
+steel browser fill <sel> <value>       # replace the value
+steel browser type <sel> <text>        # type key by key; --clear, --delay <ms>
+steel browser press <key>              # Enter, Tab, Escape, Control+a (alias: key)
+steel browser keydown <key>            # hold a key; keyup releases it
+steel browser keyup <key>
+steel browser hover <sel>
+steel browser focus <sel>
+steel browser check <sel>
+steel browser uncheck <sel>
+steel browser select <sel> <value...>
+steel browser clear <sel>
+steel browser selectall <sel>
+steel browser scroll [up|down|left|right] [px]   # -s <sel> scrolls an element
+steel browser drag <source> <target>
+steel browser upload <sel> <file...>   # local files are uploaded to the session first
+steel browser mouse click <x> <y>      # move, down, up, click, wheel; --button, --clicks, --dx, --dy
 ```
 
-## Get Information
+Add `--diff` to any command to print what it changed on the page, compared with your last snapshot.
+
+## Reading the page
 
 ```bash
-steel browser get text @e1        # Get element text
-steel browser get html @e1        # Get innerHTML
-steel browser get value @e1       # Get input value
-steel browser get attr @e1 href   # Get attribute
-steel browser get title           # Get page title
-steel browser get url             # Get current URL
-steel browser get count ".item"   # Count matching elements
-steel browser get box @e1         # Get bounding box
-steel browser get styles @e1      # Get computed styles (font, color, bg, etc.)
+steel browser get text <sel>       # visible text of an element
+steel browser get html <sel>       # inner HTML of an element
+steel browser get markdown [sel]   # main content of an element or the page as Markdown
+steel browser get value <sel>
+steel browser get attr <sel> <name>
+steel browser get url
+steel browser get title
+steel browser get count <sel>
+steel browser get box <sel>
+steel browser is visible|enabled|checked <sel>
+steel browser find <value>         # CSS by default; --by role|text|label|placeholder|alt|title|testid, --name, --exact
+steel browser content              # page HTML
+steel browser eval <script>        # run JavaScript and print its value
+steel browser screenshot           # -o <path>, --full, --selector <sel>, --format, --quality
+steel browser pdf -o page.pdf      # headless sessions only
 ```
 
-## Check State
+## Waiting
 
 ```bash
-steel browser is visible @e1      # Check if visible
-steel browser is enabled @e1      # Check if enabled
-steel browser is checked @e1      # Check if checked
+steel browser wait 2000                         # fixed time in ms (at most 30000)
+steel browser wait --selector <sel> [--state visible|hidden|attached|detached]
+steel browser wait --text "Welcome"
+steel browser wait --url checkout               # contains; use * for patterns
+steel browser wait --load networkidle           # load, domcontentloaded, networkidle
+steel browser wait --download [-o <path>]       # wait for a download and save it
 ```
 
-## Screenshots and PDF
+`--timeout <ms>` sets the limit (default 30000, at most 50000).
+
+## Tabs
 
 ```bash
-steel browser screenshot          # Save to temporary directory
-steel browser screenshot path.png # Save to specific path
-steel browser screenshot --full   # Full page
-steel browser pdf output.pdf      # Save as PDF
+steel browser tab list           # * marks the current tab
+steel browser tab new [url]      # open a tab and switch to it
+steel browser tab switch t2
+steel browser tab close [t2]     # the current tab if omitted
 ```
 
-## Video Recording
+Commands without a ref run on the current tab. When a page opens a tab, the CLI prints `Tab t3 opened from t1` and stays on the current tab.
+
+## Dialogs and long commands
 
 ```bash
-steel browser record start ./demo.webm    # Start recording
-steel browser click @e1                   # Perform actions
-steel browser record stop                 # Stop and save video
-steel browser record restart ./take2.webm # Stop current + start new
+steel browser dialog accept [d-2]      # or dismiss; --text answers a prompt
+steel browser status x-7               # wait for a command that is still running
+steel browser cancel x-7               # stop it
 ```
 
-## Wait
+Dialogs stay open until you answer them. A command that opens one prints the dialog id.
+
+## Batch
 
 ```bash
-steel browser wait @e1                     # Wait for element
-steel browser wait 2000                    # Wait milliseconds
-steel browser wait --text "Success"        # Wait for text (or -t)
-steel browser wait --url "**/dashboard"    # Wait for URL pattern (or -u)
-steel browser wait --load networkidle      # Wait for network idle (or -l)
-steel browser wait --fn "window.ready"     # Wait for JS condition (or -f)
+steel browser batch "fill e3 Seoul" "fill e4 Tokyo" "click e5" "snapshot -i"
 ```
 
-## Mouse Control
+Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, `cancel`, and `close` must run on their own.
 
-```bash
-steel browser mouse move 100 200      # Move mouse
-steel browser mouse down left         # Press button
-steel browser mouse up left           # Release button
-steel browser mouse wheel 100         # Scroll wheel
-```
+## Retries and output
 
-## Semantic Locators (alternative to refs)
+- The CLI sends a random `Idempotency-Key` and the last operation id. If the API cannot reach the browser, it retries with the same key, so the command never runs twice.
+- When a command's response is lost, run the same command again. You get the stored result instead of a second run, with the note `This is the stored result of an earlier run`.
+- Text output prints the result. Notes about dialogs, new tabs, downloads, and replays go to stderr.
+- `--json` (or piped output) prints the engine response under `data`, with any `notices`.
+- A failed command exits with code 1 and prints the engine error code, such as `stale_ref`, `not_actionable`, or `tab_required`.
 
-```bash
-steel browser find role button click --name "Submit"
-steel browser find text "Sign In" click
-steel browser find text "Sign In" click --exact      # Exact match only
-steel browser find label "Email" fill "user@test.com"
-steel browser find placeholder "Search" type "query"
-steel browser find alt "Logo" click
-steel browser find title "Close" click
-steel browser find testid "submit-btn" click
-steel browser find first ".item" click
-steel browser find last ".item" click
-steel browser find nth 2 "a" hover
-```
+## Removed in 0.6
 
-## Browser Settings
+| Command | Instead |
+|---|---|
+| `cookies` | `eval "document.cookie"`; keep logins with `start --profile <name>` |
+| `storage` | `eval "localStorage.getItem('key')"` |
+| `set viewport/geo/offline/headers/useragent` | not supported on a running session |
+| `highlight` | `screenshot --selector <sel>` |
+| `bringtofront` | not needed; commands bring their tab to the front |
+| `diff snapshot`, `diff screenshot` | `--diff` on any command |
+| `scrollintoview` | `hover <sel>`, or `scroll --selector <container>` |
+| `setvalue` | `fill` |
+| `get styles` | `eval "getComputedStyle(...)"` |
+| `click --new-tab`, `click --button` | `get attr <sel> href` + `tab new <url>`; `get box` + `mouse click` |
+| `snapshot --selector`, `snapshot --urls` | `get text/html <sel>`; `get attr <ref> href` |
+| `screenshot --annotate` | `snapshot -i` |
+| `wait --function` | `wait --text`, `--selector`, or `--url` |
+| `navigate --header` | not supported |
 
-```bash
-steel browser set viewport 1920 1080          # Set viewport size
-steel browser set device "iPhone 14"          # Emulate device
-steel browser set geo 37.7749 -122.4194       # Set geolocation (alias: geolocation)
-steel browser set offline on                  # Toggle offline mode
-steel browser set headers '{"X-Key":"v"}'     # Extra HTTP headers
-steel browser set credentials user pass       # HTTP basic auth (alias: auth)
-steel browser set media dark                  # Emulate color scheme
-steel browser set media light reduced-motion  # Light mode + reduced motion
-```
-
-## Cookies and Storage
-
-```bash
-steel browser cookies                     # Get all cookies
-steel browser cookies set name value      # Set cookie
-steel browser cookies clear               # Clear cookies
-steel browser storage local               # Get all localStorage
-steel browser storage local key           # Get specific key
-steel browser storage local set k v       # Set value
-steel browser storage local clear         # Clear all
-```
-
-## Network
-
-```bash
-steel browser network route <url>              # Intercept requests
-steel browser network route <url> --abort      # Block requests
-steel browser network route <url> --body '{}'  # Mock response
-steel browser network unroute [url]            # Remove routes
-steel browser network requests                 # View tracked requests
-steel browser network requests --filter api    # Filter requests
-```
-
-## Tabs and Windows
-
-```bash
-steel browser tab                 # List tabs
-steel browser tab new [url]       # New tab
-steel browser tab 2               # Switch to tab by index
-steel browser tab close           # Close current tab
-steel browser tab close 2         # Close tab by index
-steel browser window new          # New window
-```
-
-## Frames
-
-```bash
-steel browser frame "#iframe"     # Switch to iframe
-steel browser frame main          # Back to main frame
-```
-
-## Dialogs
-
-```bash
-steel browser dialog accept [text]  # Accept dialog
-steel browser dialog dismiss        # Dismiss dialog
-```
-
-## JavaScript
-
-```bash
-steel browser eval "document.title"          # Simple expressions only
-steel browser eval -b "<base64>"             # Any JavaScript (base64 encoded)
-steel browser eval --stdin                   # Read script from stdin
-```
-
-Use `-b`/`--base64` or `--stdin` for reliable execution. Shell escaping with nested quotes and special characters is error-prone.
-
-```bash
-# Base64 encode your script, then:
-steel browser eval -b "ZG9jdW1lbnQucXVlcnlTZWxlY3RvcignW3NyYyo9Il9uZXh0Il0nKQ=="
-
-# Or use stdin with heredoc for multiline scripts:
-cat <<'EOF' | steel browser eval --stdin
-const links = document.querySelectorAll('a');
-Array.from(links).map(a => a.href);
-EOF
-```
-
-## State Management
-
-```bash
-steel browser state save auth.json    # Save cookies, storage, auth state
-steel browser state load auth.json    # Restore saved state
-```
-
-## Global Options
-
-```bash
-steel browser --session <name> ...    # Isolated browser session
-steel browser --json ...              # JSON output for parsing
-steel browser --headed ...            # Show browser window (not headless)
-steel browser --full ...              # Full page screenshot (-f)
-steel browser --cdp <port> ...        # Connect via Chrome DevTools Protocol
-steel browser -p <provider> ...       # Cloud browser provider (--provider)
-steel browser --proxy <url> ...       # Use proxy server
-steel browser --proxy-bypass <hosts>  # Hosts to bypass proxy
-steel browser --headers <json> ...    # HTTP headers scoped to URL's origin
-steel browser --executable-path <p>   # Custom browser executable
-steel browser --extension <path> ...  # Load browser extension (repeatable)
-steel browser --ignore-https-errors   # Ignore SSL certificate errors
-steel browser --help                  # Show help (-h)
-steel browser --version               # Show version (-V)
-steel browser <command> --help        # Show detailed help for a command
-```
-
-## Debugging
-
-```bash
-steel browser --headed open example.com   # Show browser window
-steel browser --cdp 9222 snapshot         # Connect via CDP port
-steel browser connect 9222                # Alternative: connect command
-steel browser console                     # View console messages
-steel browser console --clear             # Clear console
-steel browser errors                      # View page errors
-steel browser errors --clear              # Clear errors
-steel browser highlight @e1               # Highlight element
-steel browser trace start                 # Start recording trace
-steel browser trace stop trace.zip        # Stop and save trace
-steel browser profiler start              # Start Chrome DevTools profiling
-steel browser profiler stop trace.json    # Stop and save profile
-```
-
-## Environment Variables
-
-```bash
-AGENT_BROWSER_SESSION="mysession"            # Default session name
-AGENT_BROWSER_EXECUTABLE_PATH="/path/chrome" # Custom browser path
-AGENT_BROWSER_EXTENSIONS="/ext1,/ext2"       # Comma-separated extension paths
-AGENT_BROWSER_PROVIDER="browserbase"         # Cloud browser provider
-AGENT_BROWSER_STREAM_PORT="9223"             # WebSocket streaming port
-AGENT_BROWSER_HOME="/path/to/agent-browser"  # Custom install location
-```
+These commands still parse in 0.6 and print the alternative.

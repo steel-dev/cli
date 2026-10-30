@@ -431,9 +431,6 @@ mod tests {
         assert!(names.contains(&"browser"));
         assert!(names.contains(&"scrape"));
         assert!(names.contains(&"login"));
-
-        // Hidden __daemon should not appear
-        assert!(!names.contains(&"__daemon"));
     }
 
     #[test]
@@ -460,14 +457,12 @@ mod tests {
         assert_eq!(selector["required"], true);
         assert_eq!(selector["positional"], true);
 
-        let button = params.iter().find(|p| p["name"] == "button").unwrap();
-        assert_eq!(button["type"], "string");
-        assert_eq!(button["required"], false);
-        assert_eq!(button["positional"], false);
+        let count = params.iter().find(|p| p["name"] == "count").unwrap();
+        assert_eq!(count["required"], false);
+        assert_eq!(count["positional"], false);
 
-        let new_tab = params.iter().find(|p| p["name"] == "new-tab").unwrap();
-        assert_eq!(new_tab["type"], "boolean");
-        assert_eq!(new_tab["required"], false);
+        assert!(params.iter().all(|p| p["name"] != "new-tab"));
+        assert!(params.iter().all(|p| p["name"] != "button"));
     }
 
     #[test]

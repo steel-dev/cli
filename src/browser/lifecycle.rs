@@ -545,9 +545,8 @@ mod tests {
     #[test]
     fn session_timeout_zero_collapses_to_none() {
         // Self-hosted server returns `timeout: 0` to mean "no expiry".
-        // The daemon treats this as None; otherwise its deadline
-        // arithmetic resolves to "already past expiry" on the first
-        // loop tick and the Unix listener drops (CLI sees ECONNRESET).
+        // Treating it as None keeps the remaining-time math from reporting
+        // the session as already expired.
         assert_eq!(get_session_timeout(&json!({"timeout": 0})), None);
         assert_eq!(get_session_timeout(&json!({"sessionTimeout": 0})), None);
         assert_eq!(get_session_timeout(&json!({"timeoutMs": 0})), None);

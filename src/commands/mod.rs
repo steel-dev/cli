@@ -47,10 +47,11 @@ Quick Actions:
   steel pdf <url>                      Generate a PDF from a webpage
 
 Browser Sessions:
-  steel browser start [--session <name>]      Create or attach to a browser session
+  steel browser start [--session <name>]      Create a browser session
     --stealth                            Enable stealth mode (humanize + auto CAPTCHA)
     -p, --proxy <proxy>                  Use residential proxy
     --session-timeout <ms>               Session timeout
+    --inactivity-timeout <ms>            Release after this long without commands (default: 10 min)
     --session-solve-captcha              Enable manual CAPTCHA solving
     --profile <name>                     Named profile to persist browser state
     --update-profile                     Save state back to profile on session end
@@ -58,6 +59,9 @@ Browser Sessions:
   steel browser stop [--session <name>]       Stop a session (-a for all)
   steel browser sessions               List active sessions (use --json for structured output)
   steel browser live [--session <name>]       Open live session viewer
+  steel browser batch \"<cmd>\" \"<cmd>\"      Run several commands in one request
+  --session <name|id>                  Target a named session or a session ID
+  --diff                               Print what a command changed on the page
 
 Cloud Sessions:
   steel sessions list                  List cloud sessions
@@ -76,22 +80,20 @@ Cloud Sessions:
 Browser Navigation:
   steel browser navigate <url>         Navigate to URL (aliases: open, goto)
     --wait-until <state>                 load, domcontentloaded, networkidle
-    --header <KEY: VALUE>                Set request header (repeatable)
   steel browser back                   Go back in history
   steel browser forward                Go forward in history
   steel browser reload                 Reload current page
 
 Browser Interaction:
-  steel browser click <sel>            Click an element
-    --button <btn>                       left, right, middle
+  steel browser click <sel>            Click an element (a ref such as e5, or a CSS selector)
     --count <n>                          Click count (2 for double-click)
-    --new-tab                            Open link in new tab
   steel browser dblclick <sel>         Double-click an element
   steel browser fill <sel> <value>     Clear and fill an input field
   steel browser type <sel> <text>      Type text (appends to existing value)
     --clear                              Clear field first
     --delay <ms>                         Delay between keystrokes
   steel browser press <key>            Press key (Enter, Escape, Tab, Control+a)
+  steel browser keydown <key>          Hold a key down (keyup releases it)
   steel browser hover <sel>            Hover over an element
   steel browser focus <sel>            Focus an element
   steel browser check <sel>            Check a checkbox or radio button
@@ -101,59 +103,63 @@ Browser Interaction:
   steel browser selectall <sel>        Select all text in an input
   steel browser scroll [dir] [px]      Scroll page (up/down/left/right, default: down 300)
     -s, --selector <sel>                 Scroll within an element
-  steel browser scrollintoview <sel>   Scroll element into view
-  steel browser setvalue <sel> <val>   Set input value (no events triggered)
+  steel browser drag <src> <dst>       Drag an element onto another
+  steel browser upload <sel> <files>   Upload local files to a file input
+  steel browser mouse <action> [x] [y] Mouse input at a point (move, down, up, click, wheel)
 
 Browser Observation:
-  steel browser snapshot               Accessibility tree snapshot
+  steel browser snapshot               Accessibility tree snapshot with refs
     -i, --interactive                    Only interactive elements
-    -s, --selector <sel>                 Scope to CSS selector
     -c, --compact                        Compact output
     -d, --max-depth <n>                  Limit tree depth
-    -C, --cursor                         Include cursor position
   steel browser screenshot             Take a screenshot
     --full-page / --full                 Full scrollable page
     -o, --output <path>                  Output path (default: screenshot.png)
     --selector <sel>                     Restrict to element
     --format <fmt>                       png, jpeg, webp
     --quality <n>                        JPEG/WebP quality (0-100)
-    --annotate                           Annotate interactive elements
+  steel browser pdf -o <path>          Save the page as PDF (headless sessions)
   steel browser eval <script>          Run JavaScript in page
-  steel browser find <selector>        Find all matching elements
+  steel browser find <value>           Find elements and print their refs
+    --by <kind>                          css (default), role, text, label, placeholder, alt, title, testid
+    --name <name>                        Accessible name, with --by role
   steel browser content                Get page HTML
 
 Get Info:  steel browser get <what> [selector]
-  text <sel>                             Element text content
-  html <sel>                             Inner HTML
+  text <sel>                             Visible text of an element
+  html <sel>                             Inner HTML of an element
+  markdown [sel]                         Main content of an element or the page as Markdown
   value <sel>                            Input/textarea value
   attr <sel> <name>                      Element attribute
   url                                    Current page URL
   title                                  Current page title
   count <sel>                            Count matching elements
   box <sel>                              Element bounding box
-  styles <sel> [--property <p>...]       CSS styles (all computed if no property)
 
 Check State:  steel browser is <what> <selector>
   visible, enabled, checked
 
 Wait:
-  steel browser wait                   Wait for a condition
-    --timeout <ms>                       Timeout (default: 30000)
+  steel browser wait [ms]              Wait for one condition, or a fixed time
+    --timeout <ms>                       Timeout (default: 30000, at most 50000)
     -t, --text <text>                    Wait for text on page
-    --selector <sel>                     Wait for CSS selector
+    --selector <sel>                     Wait for an element
     --state <state>                      visible, hidden, attached, detached
     -u, --url <substring>                Wait for URL to contain string
-    -f, --function <js>                  Wait for JS function to return truthy
     -l, --load-state <state>             load, domcontentloaded, networkidle (alias: --load)
+    --download [-o <path>]               Wait for a download and save it
 
 Tabs:
-  steel browser tab list               List open tabs
-  steel browser tab new [url]          Open new tab
-  steel browser tab switch <index>     Switch to tab by index
-  steel browser tab close [index]      Close tab (active if no index)
+  steel browser tab list               List open tabs (* marks the current tab)
+  steel browser tab new [url]          Open a new tab and switch to it
+  steel browser tab switch <tab>       Switch to a tab (e.g. t2)
+  steel browser tab close [tab]        Close a tab (the current one if omitted)
 
-Window:
-  steel browser bringtofront           Bring browser window to foreground
+Dialogs and Long Commands:
+  steel browser dialog accept [id]     Accept an open dialog (dismiss to decline)
+    --text <text>                        Answer for a prompt
+  steel browser status <execution>     Wait for a command that is still running
+  steel browser cancel <execution>     Stop a command that is still running
   steel browser close                  Close browser session (aliases: quit, exit)
 
 CAPTCHA:
@@ -222,13 +228,15 @@ Examples:
   steel browser start --session my-session
   steel browser navigate https://example.com
   steel browser snapshot -i
-  steel browser click \"button#submit\"
-  steel browser fill \"input[name=email]\" \"user@example.com\"
+  steel browser click e5
+  steel browser fill e3 \"user@example.com\"
+  steel browser click \"button#submit\" --diff
   steel browser type \"textarea\" \"Hello world\" --clear
   steel browser get text \"h1\"
   steel browser is visible \".modal\"
   steel browser wait --text \"Success\" --timeout 5000
-  steel browser screenshot --full --annotate
+  steel browser batch \"fill e3 Seoul\" \"click e5\" \"snapshot -i\"
+  steel browser screenshot --full
   steel browser eval \"document.title\"
   steel browser tab new https://example.com
   steel browser stop --session my-session";
@@ -265,13 +273,6 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Internal daemon process
-    #[command(name = "__daemon", hide = true)]
-    Daemon {
-        #[arg(long)]
-        session_name: String,
-    },
-
     /// Scrape webpage content
     Scrape(scrape::Args),
 
@@ -345,7 +346,6 @@ pub enum Command {
 
 fn telemetry_command_path(command: &Command) -> Option<String> {
     match command {
-        Command::Daemon { .. } => None,
         Command::Scrape(_) => Some("scrape".to_string()),
         Command::Screenshot(_) => Some("screenshot".to_string()),
         Command::Pdf(_) => Some("pdf".to_string()),
@@ -385,14 +385,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     let started_at = std::time::Instant::now();
 
     let result = match cli.command {
-        Command::Daemon { session_name } => {
-            let params_json = std::env::var("STEEL_DAEMON_PARAMS")
-                .map_err(|_| anyhow::anyhow!("Missing STEEL_DAEMON_PARAMS"))?;
-            let params: crate::browser::daemon::protocol::DaemonCreateParams =
-                serde_json::from_str(&params_json)
-                    .map_err(|e| anyhow::anyhow!("Invalid STEEL_DAEMON_PARAMS: {e}"))?;
-            crate::browser::daemon::server::run(session_name, params).await
-        }
         Command::Scrape(args) => scrape::run(args).await,
         Command::Screenshot(args) => screenshot::run(args).await,
         Command::Pdf(args) => pdf::run(args).await,
@@ -517,6 +509,7 @@ mod tests {
         let result = run(Cli {
             command: Command::Browser(browser::BrowserArgs {
                 session: Some("named-session".into()),
+                diff: false,
                 command: browser::Command::Stop(browser::stop::Args { all: true }),
             }),
             json: false,

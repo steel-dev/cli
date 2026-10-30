@@ -1,29 +1,18 @@
-//! Batch command: execute multiple browser actions in a single CLI invocation.
-//!
-//! Usage:
-//!   steel browser batch "click @e3" "snapshot -i" --session my-task
-//!   steel browser batch "fill @e1 Seoul" "fill @e2 Tokyo" "click @e5" --session my-task --bail
-
-use anyhow::Result;
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
-use serde_json::{Value, json};
 
-use crate::util::output;
-
-use super::action::{self, ActionCommand};
+use super::action::{ActionCommand, Browser, Plan};
 
 #[derive(Parser)]
 pub struct Args {
-    /// Commands to execute (each as a quoted string, e.g. "click @e3")
+    /// Commands to run in order (each as a quoted string, e.g. "click e3"). They stop at the first failure.
     #[arg(required = true)]
     pub commands: Vec<String>,
 
-    /// Stop on first error
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub bail: bool,
 }
 
-/// Wrapper to parse a list of tokens as an ActionCommand via Clap.
 #[derive(Parser)]
 #[command(no_binary_name = true)]
 struct ActionParser {
@@ -31,9 +20,8 @@ struct ActionParser {
     action: ActionCommand,
 }
 
-/// Split a command string into tokens, respecting quoted substrings.
-///
-/// "fill @e5 \"hello world\"" → ["fill", "@e5", "hello world"]
+const MAX_COMMANDS: usize = 50;
+
 fn split_command_str(s: &str) -> Vec<String> {
     let mut args = Vec::new();
     let mut current = String::new();
@@ -58,126 +46,29 @@ fn split_command_str(s: &str) -> Vec<String> {
     args
 }
 
-pub async fn run(args: Args, session: Option<&str>) -> Result<()> {
-    let mut client = action::connect_daemon(session).await?;
-
-    let mut results: Vec<Value> = Vec::new();
-    let mut had_error = false;
-
-    for cmd_str in &args.commands {
-        let tokens = split_command_str(cmd_str);
+pub async fn run(args: Args, session: Option<&str>, diff: bool) -> Result<()> {
+    let mut steps = Vec::new();
+    for line in &args.commands {
+        let tokens = split_command_str(line);
         if tokens.is_empty() {
             continue;
         }
-
-        // Parse tokens as an ActionCommand
-        let parsed = match ActionParser::try_parse_from(&tokens) {
-            Ok(p) => p,
-            Err(e) => {
-                let msg = e.render().to_string();
-                if !output::is_json() {
-                    eprintln!("Error ({}): {}", cmd_str, msg);
-                }
-                results.push(json!({
-                    "command": cmd_str,
-                    "success": false,
-                    "error": msg,
-                }));
-                had_error = true;
-                if args.bail {
-                    break;
-                }
-                continue;
-            }
-        };
-
-        // Convert to wire command
-        let daemon_cmd = match parsed.action.into_daemon_command() {
-            Ok(cmd) => cmd,
-            Err(e) => {
-                let msg = e.to_string();
-                if !output::is_json() {
-                    eprintln!("Error ({}): {}", cmd_str, msg);
-                }
-                results.push(json!({
-                    "command": cmd_str,
-                    "success": false,
-                    "error": msg,
-                }));
-                had_error = true;
-                if args.bail {
-                    break;
-                }
-                continue;
-            }
-        };
-
-        // Execute
-        match client.send(daemon_cmd).await {
-            Ok(data) => {
-                if !output::is_json() {
-                    print_text_result(&data);
-                }
-                results.push(json!({
-                    "command": cmd_str,
-                    "success": true,
-                    "data": data,
-                }));
-            }
-            Err(e) => {
-                let msg = e.to_string();
-                if !output::is_json() {
-                    eprintln!("Error ({}): {}", cmd_str, msg);
-                }
-                results.push(json!({
-                    "command": cmd_str,
-                    "success": false,
-                    "error": msg,
-                }));
-                had_error = true;
-                if args.bail {
-                    break;
-                }
-            }
+        let parsed = ActionParser::try_parse_from(&tokens)
+            .map_err(|e| anyhow!("{line}: {}", e.render().to_string().trim()))?;
+        match parsed.action.plan().with_context(|| line.clone())? {
+            Plan::Run(step) if step.batchable() => steps.push(step),
+            _ => bail!("`{line}` cannot run inside batch. Run it on its own."),
         }
     }
-
-    drop(client);
-
-    if output::is_json() {
-        let envelope = json!({
-            "success": !had_error,
-            "data": { "results": results },
-        });
-        println!("{envelope}");
+    if steps.is_empty() {
+        bail!("No commands to run.");
+    }
+    if steps.iter().map(|step| step.commands.len()).sum::<usize>() > MAX_COMMANDS {
+        bail!("A batch can run at most {MAX_COMMANDS} commands.");
     }
 
-    if had_error {
-        if let Some(enriched) =
-            action::session_health_check(session, &anyhow::anyhow!("batch error")).await
-        {
-            return Err(enriched);
-        }
-        anyhow::bail!("One or more batch commands failed");
-    }
-
-    Ok(())
-}
-
-/// Print a single result value in text mode.
-fn print_text_result(data: &Value) {
-    match data {
-        // Snapshots come back as strings — print directly
-        Value::String(s) => println!("{s}"),
-        // Null means no meaningful output (e.g. press key)
-        Value::Null => {}
-        // Objects/arrays — compact JSON on one line
-        other => {
-            if let Ok(s) = serde_json::to_string(other) {
-                println!("{s}");
-            }
-        }
-    }
+    let mut browser = Browser::open(session, true).await?;
+    browser.execute(steps, diff).await
 }
 
 #[cfg(test)]
@@ -229,19 +120,57 @@ mod tests {
         );
     }
 
-    #[test]
-    fn print_text_string() {
-        // Just ensure it doesn't panic — actual stdout testing is integration-level
-        print_text_result(&Value::String("hello".to_string()));
+    #[tokio::test]
+    async fn rejects_commands_that_must_run_alone() {
+        for line in [
+            "tab switch t2",
+            "tab new",
+            "tab close",
+            "dialog accept",
+            "close",
+            "status x-1",
+        ] {
+            let err = run(
+                Args {
+                    commands: vec![line.to_string()],
+                    bail: false,
+                },
+                Some("unused"),
+                false,
+            )
+            .await
+            .unwrap_err();
+            assert!(
+                err.to_string().contains("cannot run inside batch"),
+                "{line}: {err}"
+            );
+        }
     }
 
-    #[test]
-    fn print_text_null() {
-        print_text_result(&Value::Null);
-    }
+    #[tokio::test]
+    async fn rejects_removed_and_invalid_commands_before_starting_a_session() {
+        let err = run(
+            Args {
+                commands: vec!["cookies".to_string()],
+                bail: false,
+            },
+            Some("unused"),
+            false,
+        )
+        .await
+        .unwrap_err();
+        assert!(format!("{err:#}").contains("was removed in 0.6"));
 
-    #[test]
-    fn print_text_object() {
-        print_text_result(&json!({"clicked": "@e3"}));
+        let err = run(
+            Args {
+                commands: vec!["fly away".to_string()],
+                bail: false,
+            },
+            Some("unused"),
+            false,
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().starts_with("fly away:"));
     }
 }

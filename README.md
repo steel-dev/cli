@@ -77,7 +77,7 @@ Supported shells: `bash`, `zsh`, `fish`, `powershell`, `elvish`.
 | ------------------- | ------------------------------------------------------------------------------------ |
 | Onboarding          | `init`, `forge`                                                                      |
 | Browser lifecycle   | `browser start`, `browser stop`, `browser sessions`, `browser live`                  |
-| Browser passthrough | `steel browser <inherited-command>`                                                  |
+| Browser actions     | `browser open`, `browser snapshot`, `browser click`, `browser fill`, `browser batch`, … |
 | Browser profiles    | `profile import`, `profile sync`, `profile list`, `profile delete`                   |
 | API tools           | `scrape`, `screenshot`, `pdf`                                                        |
 | Local runtime       | `dev install`, `dev start`, `dev stop`                                               |
@@ -86,25 +86,26 @@ Supported shells: `bash`, `zsh`, `fish`, `powershell`, `elvish`.
 
 Full flags and schemas: [CLI reference](docs/cli-reference.md).
 
-## Agent-Browser Integration
+## How `steel browser` Works
 
-`steel browser` is directly backed by the vendored [`agent-browser`](https://github.com/steel-dev/agent-browser) runtime. Steel-owned lifecycle commands:
+Each `steel browser` action is one request to the session's commands API. The browser engine runs inside the Steel session next to Chrome, so the CLI keeps no process running between commands.
 
-- `steel browser start`
-- `steel browser stop`
-- `steel browser sessions`
-- `steel browser live`
+```bash
+steel browser open https://example.com
+steel browser snapshot -i
+steel browser click e5 --diff
+steel browser batch "fill e3 Seoul" "click e7" "snapshot -i"
+```
 
-All other `steel browser <command>` calls inherit upstream runtime behavior and route through Steel. Migration from upstream `agent-browser` is typically command-prefix only:
+- The `default` session starts on first use. Use `--session <name>` for more, or `--session <session-id>` to drive a session created elsewhere.
+- Sessions are released after 10 minutes without commands (`steel browser start --inactivity-timeout <ms>`).
+- A retried command never runs twice. Run the same command again after a lost response to get the stored result.
 
-- before: `agent-browser <command> ...`
-- after: `steel browser <command> ...`
-
-See the [compatibility matrix](docs/browser-compat.md), [Steel browser reference](docs/references/steel-browser.md), and [synced command catalog](docs/references/steel-browser-commands.md) for details.
+See the [Steel browser reference](docs/references/steel-browser.md) and the [command catalog](docs/references/steel-browser-commands.md) for details.
 
 ## Endpoint Resolution
 
-For browser lifecycle, browser passthrough bootstrap, and top-level API tools (`scrape`, `screenshot`, `pdf`), endpoint selection is deterministic.
+For browser sessions, browser actions, and top-level API tools (`scrape`, `screenshot`, `pdf`), endpoint selection is deterministic.
 
 Self-hosted precedence (highest to lowest):
 
@@ -119,10 +120,6 @@ Cloud precedence:
 1. `STEEL_API_URL`
 2. `https://api.steel.dev/v1`
 
-Attach-flag override rule:
-
-- If `--cdp` or `--auto-connect` is provided, Steel bootstrap injection is skipped and passthrough args are forwarded unchanged.
-
 ## Output and Runtime Notes
 
 - `steel scrape` defaults to markdown-first output for token efficiency; use `--raw` for the full JSON payload.
@@ -136,23 +133,19 @@ Primary docs:
 
 - [Docs index](docs/README.md)
 - [Generated CLI reference](docs/cli-reference.md)
-- [Browser compatibility](docs/browser-compat.md)
-- [Upstream sync guide](docs/upstream-sync.md)
 
 Reference docs:
 
 - [References index](docs/references/README.md)
 - [Steel CLI reference (high-level)](docs/references/steel-cli.md)
 - [Steel browser reference (modes + contracts)](docs/references/steel-browser.md)
-- [Steel browser commands (synced + transformed)](docs/references/steel-browser-commands.md)
+- [Steel browser commands](docs/references/steel-browser-commands.md)
 - [Agent troubleshooting playbook](docs/references/agent-troubleshooting.md)
-- [Pinned upstream source snapshot](docs/references/upstream/agent-browser-commands.source.md)
 
 Agent skills:
 
 - [Steel Skills catalog](https://github.com/steel-dev/skills)
 - [Steel Agent Skills docs](https://docs.steel.dev/overview/agent-skills)
-- [agent-browser migration guide](https://github.com/steel-dev/skills/blob/main/steel-browser/references/migration-agent-browser.md)
 
 ---
 

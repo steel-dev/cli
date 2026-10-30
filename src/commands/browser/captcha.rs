@@ -2,8 +2,6 @@ use clap::{Parser, Subcommand};
 use serde_json::json;
 
 use crate::api::client::SteelClient;
-use crate::browser::daemon::client::DaemonClient;
-use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
 use crate::browser::lifecycle;
 use crate::util::{api, output};
 
@@ -74,8 +72,7 @@ pub async fn run(command: Command, session: Option<&str>) -> anyhow::Result<()> 
     }
 }
 
-/// Resolve session_id: explicit --session-id flag, or query daemon.
-async fn resolve_session_id(
+fn resolve_session_id(
     explicit_session_id: Option<&str>,
     session: Option<&str>,
 ) -> anyhow::Result<String> {
@@ -85,25 +82,14 @@ async fn resolve_session_id(
             return Ok(trimmed.to_string());
         }
     }
-
-    let session_name = session.unwrap_or("default");
-    let mut client = DaemonClient::connect(session_name).await.map_err(|_| {
-        anyhow::anyhow!(
-            "No running session \"{session_name}\". \
-             Pass `--session-id`, or start a session with `steel browser start`."
-        )
-    })?;
-
-    let data = client.send(DaemonCommand::GetSessionInfo).await?;
-    let info: SessionInfo = serde_json::from_value(data)?;
-    Ok(info.session_id)
+    Ok(super::existing_session(session)?.id)
 }
 
 async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()> {
     let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
-    let session_id = resolve_session_id(args.session_id.as_deref(), session).await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), session)?;
 
     let result = lifecycle::solve_captcha(
         &client,
@@ -147,7 +133,7 @@ async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<(
     let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
-    let session_id = resolve_session_id(args.session_id.as_deref(), session).await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), session)?;
 
     let result = lifecycle::captcha_status(
         &client,

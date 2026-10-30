@@ -12,8 +12,6 @@ use crate::api::generated::{
     GetSessionAgentLogsQuery, GetSessionAgentTracesQuery, GetSessionLogsQuery, GetSessionsQuery,
     ReleaseAllSessionsQuery,
 };
-use crate::browser::daemon::client::DaemonClient;
-use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
 use crate::status;
@@ -73,7 +71,7 @@ pub struct GetArgs {
     /// Cloud session ID
     pub session_id: Option<String>,
 
-    /// Resolve session ID from a local daemon session name
+    /// Resolve session ID from a local browser session name
     #[arg(long)]
     pub session: Option<String>,
 }
@@ -87,7 +85,7 @@ pub struct ReleaseArgs {
     #[arg(short, long)]
     pub all: bool,
 
-    /// Resolve session ID from a local daemon session name
+    /// Resolve session ID from a local browser session name
     #[arg(long)]
     pub session: Option<String>,
 }
@@ -97,7 +95,7 @@ pub struct LogsArgs {
     /// Cloud session ID
     pub session_id: Option<String>,
 
-    /// Resolve session ID from a local daemon session name
+    /// Resolve session ID from a local browser session name
     #[arg(long)]
     pub session: Option<String>,
 
@@ -139,7 +137,7 @@ pub struct TracesArgs {
     /// Cloud session ID
     pub session_id: Option<String>,
 
-    /// Resolve session ID from a local daemon session name
+    /// Resolve session ID from a local browser session name
     #[arg(long)]
     pub session: Option<String>,
 
@@ -211,8 +209,7 @@ async fn run_list(args: ListArgs) -> Result<()> {
 }
 
 async fn run_get(args: GetArgs) -> Result<()> {
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
     let data = client
@@ -239,8 +236,7 @@ async fn run_release(args: ReleaseArgs) -> Result<()> {
         return Ok(());
     }
 
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let data = client
         .cli_release_session(&base_url, mode, &auth, &session_id)
         .await?;
@@ -254,8 +250,7 @@ async fn run_release(args: ReleaseArgs) -> Result<()> {
 }
 
 async fn run_logs(args: LogsArgs, stream_kind: StreamKind, label: &str) -> Result<()> {
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let query = GetSessionLogsQuery {
         namespace: args.namespace,
         start_time: args.start_time.or(args.since),
@@ -287,8 +282,7 @@ async fn run_logs(args: LogsArgs, stream_kind: StreamKind, label: &str) -> Resul
 }
 
 async fn run_agent_logs(args: LogsArgs) -> Result<()> {
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let query = GetSessionAgentLogsQuery {
         namespace: args.namespace,
         start_time: args.start_time.or(args.since),
@@ -308,8 +302,7 @@ async fn run_agent_logs(args: LogsArgs) -> Result<()> {
 }
 
 async fn run_traces(args: TracesArgs) -> Result<()> {
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let query = GetSessionAgentTracesQuery {
         namespace: args.namespace,
         start_time: args.start_time.or(args.since),
@@ -338,10 +331,7 @@ async fn run_traces(args: TracesArgs) -> Result<()> {
     Ok(())
 }
 
-async fn resolve_session_id(
-    session_id: Option<&str>,
-    session_name: Option<&str>,
-) -> Result<String> {
+fn resolve_session_id(session_id: Option<&str>, session_name: Option<&str>) -> Result<String> {
     if let Some(id) = session_id.map(str::trim).filter(|id| !id.is_empty()) {
         return Ok(id.to_string());
     }
@@ -350,12 +340,9 @@ async fn resolve_session_id(
         anyhow::bail!("Missing session ID. Pass <session-id> or --session <name>.");
     };
 
-    let mut client = DaemonClient::connect(name)
-        .await
-        .with_context(|| format!("No running local browser session named \"{name}\"."))?;
-    let data = client.send(DaemonCommand::GetSessionInfo).await?;
-    let info: SessionInfo = serde_json::from_value(data)?;
-    Ok(info.session_id)
+    let found = crate::browser::state::load(name)?
+        .with_context(|| format!("No local browser session named \"{name}\"."))?;
+    Ok(found.id)
 }
 
 async fn follow_if_live(

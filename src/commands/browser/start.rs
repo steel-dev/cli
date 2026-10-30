@@ -1,15 +1,20 @@
 use clap::Parser;
 use serde_json::json;
 
-use crate::browser::daemon::client::DaemonClient;
-use crate::browser::daemon::process;
-use crate::browser::daemon::protocol::{
-    DEFAULT_INACTIVITY_TIMEOUT_MS, DaemonCommand, DaemonCreateParams, SessionInfo,
+use crate::api::client::SteelClient;
+use crate::api::session::CreateSessionOptions;
+use crate::browser::lifecycle::{
+    get_session_created_at_ms, get_session_inactivity_timeout, get_session_timeout,
+    sanitize_connect_url, to_session_summary,
 };
-use crate::browser::lifecycle::sanitize_connect_url;
 use crate::browser::profile_store;
+use crate::browser::state::{self, BrowserSession};
+use crate::config::auth::Auth;
+use crate::config::settings::ApiMode;
 use crate::status;
 use crate::util::{api, output};
+
+pub const DEFAULT_INACTIVITY_TIMEOUT_MS: u64 = 600_000;
 
 #[derive(Parser)]
 pub struct Args {
@@ -25,7 +30,7 @@ pub struct Args {
     #[arg(long = "session-timeout")]
     pub session_timeout: Option<u64>,
 
-    /// Inactivity timeout in milliseconds: release the session when no CDP command or remote input is received for this long. Defaults to 120000 (2 minutes); pass 0 to disable (create-time only)
+    /// Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
     #[arg(long = "inactivity-timeout")]
     pub inactivity_timeout: Option<u64>,
 
@@ -58,12 +63,56 @@ pub struct Args {
     pub credentials: bool,
 }
 
+pub fn default_options() -> CreateSessionOptions {
+    CreateSessionOptions {
+        inactivity_timeout_ms: Some(DEFAULT_INACTIVITY_TIMEOUT_MS),
+        ..Default::default()
+    }
+}
+
+fn now_ms() -> Option<u64> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
+}
+
+pub async fn create(
+    client: &SteelClient,
+    mode: ApiMode,
+    base_url: &str,
+    auth: &Auth,
+    name: &str,
+    options: &CreateSessionOptions,
+) -> anyhow::Result<(BrowserSession, Option<String>)> {
+    let session = client.create_session(base_url, mode, options, auth).await?;
+    let summary = to_session_summary(&session, mode, Some(name), auth)?;
+    let mut created = BrowserSession::new(
+        name.to_string(),
+        summary.id.clone(),
+        mode,
+        base_url.to_string(),
+    );
+    created.live_url = summary.viewer_url;
+    created.profile_id = summary.profile_id;
+    created.timeout_ms = get_session_timeout(&session).or(options.timeout_ms);
+    created.inactivity_timeout_ms =
+        get_session_inactivity_timeout(&session).or(options.inactivity_timeout_ms);
+    created.created_at_ms = get_session_created_at_ms(&session).or_else(now_ms);
+    state::save(&created)?;
+    Ok((created, summary.connect_url))
+}
+
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let (mode, base_url, auth) = api::resolve_with_auth();
 
     let session_name = session.unwrap_or("default").to_string();
+    if state::looks_like_session_id(&session_name) {
+        anyhow::bail!(
+            "Session names cannot look like session IDs. Use `--session {session_name}` on other commands to drive that session, or pick a name."
+        );
+    }
 
-    // Resolve profile
     let mut resolved_profile_id = None;
     let mut stored_browser_profile = None;
     let mut stored_browser = None;
@@ -90,23 +139,17 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         );
     }
 
-    // If a daemon is already running for this session name, stop it first.
-    // `start` always creates a fresh session — use `steel browser sessions`
-    // to inspect existing ones.
-    if DaemonClient::connect(&session_name).await.is_ok() {
+    let client = SteelClient::new()?;
+
+    if let Some(existing) = state::load(&session_name)? {
         status!("Replacing existing session \"{session_name}\"...");
-        process::stop_daemon(&session_name).await?;
-    } else {
-        // No live daemon, but stale files may remain
-        process::cleanup_stale(&session_name);
+        if let Err(err) = super::stop::release(&client, &auth, &existing).await {
+            eprintln!("warning: could not release session {}: {err}", existing.id);
+            state::remove(&session_name)?;
+        }
     }
 
-    // Build params and spawn daemon
-    let params = DaemonCreateParams {
-        api_key: auth.api_key,
-        base_url,
-        mode,
-        session_name: session_name.clone(),
+    let options = CreateSessionOptions {
         stealth: args.stealth,
         proxy_url: args.proxy,
         timeout_ms: args.session_timeout,
@@ -120,16 +163,11 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         credentials: args.credentials,
     };
 
-    let child = process::spawn_daemon(&session_name, &params)?;
-    process::wait_for_daemon(&session_name, child, std::time::Duration::from_secs(30)).await?;
+    let (created, connect_url) =
+        create(&client, mode, &base_url, &auth, &session_name, &options).await?;
 
-    // Connect and get session info
-    let mut client = DaemonClient::connect(&session_name).await?;
-    let info = get_session_info(&mut client).await?;
-
-    // Profile write-back using session_info.profile_id
     if let Some(ref profile_name) = args.profile
-        && let Some(ref returned_profile_id) = info.profile_id
+        && let Some(ref returned_profile_id) = created.profile_id
     {
         profile_store::write_profile(
             profile_name,
@@ -153,30 +191,24 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     properties.insert("inactivity_timeout_ms".into(), json!(inactivity_timeout_ms));
     crate::telemetry::track_event("browser_session_started", properties);
 
-    display_session_info(&info);
+    display_session_info(&created, connect_url.as_deref());
 
     Ok(())
 }
 
-async fn get_session_info(client: &mut DaemonClient) -> anyhow::Result<SessionInfo> {
-    let data = client.send(DaemonCommand::GetSessionInfo).await?;
-    let info: SessionInfo = serde_json::from_value(data)?;
-    Ok(info)
-}
-
-fn display_session_info(info: &SessionInfo) {
+fn display_session_info(info: &BrowserSession, connect_url: Option<&str>) {
     let remaining = remaining_time_str(info);
 
     if output::is_json() {
         let mut data = json!({
-            "id": info.session_id,
+            "id": info.id,
             "mode": info.mode.to_string(),
         });
-        data["name"] = json!(&info.session_name);
-        if let Some(ref url) = info.viewer_url {
+        data["name"] = json!(&info.name);
+        if let Some(ref url) = info.live_url {
             data["liveUrl"] = json!(url);
         }
-        if let Some(ref url) = info.connect_url {
+        if let Some(url) = connect_url {
             data["connectUrl"] = json!(sanitize_connect_url(url));
         }
         if let Some(ref rem) = remaining {
@@ -187,13 +219,13 @@ fn display_session_info(info: &SessionInfo) {
         }
         output::success_data(data);
     } else {
-        println!("id: {}", info.session_id);
+        println!("id: {}", info.id);
         println!("mode: {}", info.mode);
-        println!("name: {}", info.session_name);
-        if let Some(ref url) = info.viewer_url {
+        println!("name: {}", info.name);
+        if let Some(ref url) = info.live_url {
             println!("live_url: {url}");
         }
-        if let Some(ref url) = info.connect_url {
+        if let Some(url) = connect_url {
             println!("connect_url: {}", sanitize_connect_url(url));
         }
         if let Some((ms, label)) = remaining {
@@ -209,14 +241,10 @@ fn display_session_info(info: &SessionInfo) {
     }
 }
 
-/// Compute (remaining_ms, human label) from session info, if timeout is set.
-fn remaining_time_str(info: &SessionInfo) -> Option<(u64, String)> {
+fn remaining_time_str(info: &BrowserSession) -> Option<(u64, String)> {
     let timeout = info.timeout_ms?;
     let created = info.created_at_ms?;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_millis() as u64;
+    let now = now_ms()?;
     let expires_at = created.checked_add(timeout)?;
     if now >= expires_at {
         return Some((0, "expired".to_string()));
@@ -253,6 +281,7 @@ mod tests {
             resolve_inactivity_timeout(None),
             Some(DEFAULT_INACTIVITY_TIMEOUT_MS)
         );
+        assert_eq!(DEFAULT_INACTIVITY_TIMEOUT_MS, 600_000);
     }
 
     #[test]
@@ -263,6 +292,14 @@ mod tests {
     #[test]
     fn inactivity_zero_disables() {
         assert_eq!(resolve_inactivity_timeout(Some(0)), None);
+    }
+
+    #[test]
+    fn default_options_set_only_the_inactivity_timeout() {
+        let options = default_options();
+        assert_eq!(options.inactivity_timeout_ms, Some(600_000));
+        assert_eq!(options.timeout_ms, None);
+        assert!(!options.stealth);
     }
 
     #[test]

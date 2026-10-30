@@ -88,6 +88,23 @@ impl SteelClient {
         Ok(Self { http })
     }
 
+    pub fn authed(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        mode: ApiMode,
+        auth: &Auth,
+    ) -> Result<reqwest::RequestBuilder, ApiError> {
+        if mode == ApiMode::Cloud && auth.api_key.is_none() {
+            return Err(ApiError::MissingAuth);
+        }
+        let mut req = self.http.request(method, url);
+        if let Some(key) = &auth.api_key {
+            req = req.header("Steel-Api-Key", key);
+        }
+        Ok(req)
+    }
+
     /// Make an authenticated API request.
     /// Matches the shared request pattern in TS `requestApi()` and `requestTopLevelApi()`.
     pub async fn request(

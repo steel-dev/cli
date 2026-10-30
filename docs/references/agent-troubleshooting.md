@@ -31,8 +31,14 @@ From `steel browser start` output:
 - `connect_url`: display-safe URL; sensitive query values are redacted.
 
 Do not assume `connect_url` contains usable raw credentials.
-Likewise, `steel browser sessions` returns display-safe `connectUrl` fields.
-It emits compact metadata by default; add `--raw` for full session payloads.
+
+From action output (`--json`, or any piped output):
+
+- `success`: whether the command did what it was asked.
+- `error_code`: the engine error code on failure, such as `stale_ref`.
+- `data.page`: the tab, URL, and title the command used.
+- `data.results`: one entry per command, with fields such as `snapshot` or `value`.
+- `data.notices`: dialogs, new tabs, downloads, and replays to act on.
 
 ## Building a Full CDP URL Safely
 
@@ -77,6 +83,14 @@ steel browser start --local --session "$SESSION_NAME"
 - `Session "<name>" is not running...`:
   the session expired or the name is misspelled. Check `steel browser sessions`,
   then run `steel browser start --session <name>`.
+- `session_ended`: the session was released, often by the 10-minute inactivity
+  timeout. Start a new one and open the page again.
+- `stale_ref`: take a new snapshot and use the new refs.
+- `tab_required`: several tabs are open. Run `steel browser tab list`, then
+  `steel browser tab switch <tab>`.
+- `dialog_pending`: answer with `steel browser dialog accept` or `dismiss`.
+- `delivery_failed`: the API could not reach the browser. Run the same command
+  again; it will not run twice.
 - Stale state:
   `steel browser stop --all`, then start a new named session.
 

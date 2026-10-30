@@ -354,7 +354,7 @@ fn nonexistent_command_fails() {
 #[test]
 fn browser_start_without_auth_or_local_fails() {
     // With no API key and no --local flag, `browser start` should fail
-    // with the actual daemon error (missing API key), not a generic timeout.
+    // with the missing API key error, not a generic timeout.
     let start = std::time::Instant::now();
     let output = run(&["browser", "start"]);
     let elapsed = start.elapsed();
@@ -369,24 +369,21 @@ fn browser_start_without_auth_or_local_fails() {
     let combined = format!("{err}{out}");
     let lower = combined.to_lowercase();
 
-    // The error should surface the actual daemon failure reason (missing API key),
-    // not a generic "failed to start within 30s" timeout message.
+    // The error should surface the actual failure reason (missing API key).
     assert!(
         lower.contains("api key") || lower.contains("api_key") || lower.contains("login"),
         "output should mention the actual auth error (API key / login), got: {combined}"
     );
 
-    // The daemon exits almost immediately on missing auth. With early exit detection,
-    // this should complete in well under 10 seconds (not the 30s timeout).
     assert!(
         elapsed.as_secs() < 15,
-        "should detect daemon failure quickly, but took {elapsed:?}"
+        "should fail quickly, but took {elapsed:?}"
     );
 }
 
 #[test]
 fn browser_start_without_auth_json_mode_surfaces_error() {
-    // In --json mode, the actual daemon error should also appear in the output.
+    // In --json mode, the actual error should also appear in the output.
     let output = run(&["--json", "browser", "start"]);
     assert!(!output.status.success());
 
@@ -426,8 +423,11 @@ fn browser_action_with_missing_named_session_fails_without_starting_one() {
         "error should say how to start the session, got: {error_msg}"
     );
     assert!(
-        !tmp.path().join("daemon-missing.log").exists(),
-        "no daemon should be spawned for a missing named session"
+        !tmp.path()
+            .join("browser-sessions")
+            .join("missing.json")
+            .exists(),
+        "no session should be created for a missing named session"
     );
 }
 

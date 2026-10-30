@@ -1,28 +1,16 @@
 # Steel Browser Reference (Commands + Modes)
 
-This reference defines the `steel browser` command surface, including Steel-owned lifecycle commands and inherited `agent-browser` commands.
+This reference defines how `steel browser` runs and the contracts of its session commands.
 
-## Command Ownership
+## How Commands Run
 
-### Steel-Owned Commands
+Each `steel browser` action is one HTTP request to the session's commands API:
 
-- `steel browser start`
-- `steel browser stop`
-- `steel browser sessions`
-- `steel browser live`
-- `steel browser captcha solve`
+- `POST /v1/sessions/{sessionId}/commands` with the API key, a random `Idempotency-Key`, and `after` (the last operation id the CLI received).
+- The browser engine runs inside the session next to Chrome. It holds refs, tabs, dialogs, and the execution records.
+- The CLI keeps no process running. It stores per-session state in `~/.config/steel/browser-sessions/<name>.json`.
 
-### Inherited Commands (Vendored agent-browser Runtime)
-
-All other `steel browser <command>` invocations are delegated to vendored upstream runtime behavior.
-
-Upstream command catalog (pinned reference):
-
-- Local transformed command catalog for Steel context:
-  - `./steel-browser-commands.md`
-- https://github.com/vercel-labs/agent-browser/blob/b59dc4c82c0583b60849d110f27982fac85f1a07/cli/README.md
-- https://github.com/vercel-labs/agent-browser/tree/b59dc4c82c0583b60849d110f27982fac85f1a07/skills/agent-browser/references
-- https://github.com/vercel-labs/agent-browser/blob/b59dc4c82c0583b60849d110f27982fac85f1a07/skills/agent-browser/references/commands.md
+The full command list is in [./steel-browser-commands.md](./steel-browser-commands.md).
 
 ## Modes
 
@@ -50,7 +38,7 @@ Cloud endpoint precedence:
 
 ### `steel browser start`
 
-Purpose: create or attach a session and print stable fields.
+Purpose: create a session and print stable fields. If the name already has a session, the old one is released first.
 
 Main flags:
 
@@ -59,6 +47,8 @@ Main flags:
 - `--session <name>`
 - `--stealth`
 - `--proxy <url>`
+- `--session-timeout <ms>`
+- `--inactivity-timeout <ms>` (default 600000; `0` turns it off)
 - `--session-solve-captcha`
 - `--namespace <name>`
 - `--credentials`
@@ -84,10 +74,8 @@ Flag semantics:
   storage, etc.) into the session.
 - `--update-profile` saves session state back to the profile when the session ends.
   Requires `--profile`.
-- `--stealth`, `--proxy`, `--namespace`, `--credentials`, `--profile`, and
-  `--update-profile` are create-time flags.
-  If `--session <name>` attaches to an existing live session, these values are not
-  re-applied.
+- `--inactivity-timeout <ms>` releases the session after this long without
+  commands, CDP messages, or live-view input. Commands count as activity.
 
 Output fields:
 
@@ -109,6 +97,7 @@ Agent parsing contract:
 - Parse `id` as the stable handle for follow-up commands.
 - Treat `connect_url` as display metadata, not a secret-bearing credential.
 - Prefer `--session <name>` for cross-command and cross-process continuity.
+- `--session <session-id>` drives a session created elsewhere (SDK, MCP, dashboard).
 
 ### `steel browser stop`
 
@@ -123,19 +112,12 @@ Main flags:
 
 ### `steel browser sessions`
 
-Purpose: list sessions as JSON.
-
-Main flags:
-
-- `--local`
-- `--api-url <url>`
-- `--raw`
+Purpose: list the local sessions that are still live.
 
 Output note:
 
-- `connectUrl` values in JSON are display-safe and redact sensitive query values.
-- Default output is compact and omits each session's full raw payload.
-- Use `--raw` when you need the full underlying API payload.
+- Each row has `id`, `name`, `mode`, `status`, and `viewerUrl` (JSON).
+- Sessions that ended are removed from local state.
 
 ### `steel browser live`
 
@@ -190,20 +172,11 @@ steel browser start --session job --profile myapp --update-profile  # load + sav
 
 Profile metadata is stored at `~/.config/steel/profiles/<name>.json`.
 
-## Passthrough Bootstrap Rules
+## Local Runtime
 
-For inherited commands, Steel bootstrap injects a resolved `--cdp` endpoint unless explicit attach flags are present.
-
-- If `--cdp` is present: passthrough unchanged.
-- If `--auto-connect` is present: passthrough unchanged.
-- If both are present: fail fast.
-
-## Local Runtime UX
-
-Localhost self-hosted flows provide actionable errors:
-
-- Runtime missing: instruct `steel dev install`.
-- Runtime installed but unavailable: instruct `steel dev start`.
+Self-hosted steel-browser serves the commands API only when it runs with
+`ENABLE_COMMANDS_API=true`. Without it, browser actions fail with
+`missing_capability`. `steel dev start` does not turn it on yet.
 
 ## Troubleshooting (Agent-Focused)
 
@@ -213,8 +186,14 @@ Localhost self-hosted flows provide actionable errors:
   verify `steel dev start` is running and endpoint resolution matches expected
   host/port.
 - Commands open a fresh browser unexpectedly:
-  ensure all steps share the same `--session <name>` and mode (`cloud` vs
-  `--local`/`--api-url`).
+  ensure all steps share the same `--session <name>`.
+- `stale_ref`: take a new snapshot (`steel browser snapshot -i`) and use the new refs.
+- `tab_required`: several tabs are open. Pick one with `steel browser tab switch <tab>`.
+- `dialog_pending`: answer the dialog with `steel browser dialog accept` or `dismiss`.
+- `This is the stored result of an earlier run`: the same command already ran
+  after the last response the CLI received. Nothing ran again.
+- `delivery_failed`: the API could not reach the browser. Run the same command
+  again; it will not run twice.
 - `No active live session found` from `steel browser live`:
   run `steel browser start` first, then retry `steel browser live`.
 - CAPTCHA solving notes:
@@ -228,8 +207,6 @@ Localhost self-hosted flows provide actionable errors:
 
 ## Related Docs
 
-- [../browser-compat.md](../browser-compat.md)
-- [../migration-agent-browser.md](../migration-agent-browser.md)
+- [./steel-browser-commands.md](./steel-browser-commands.md)
 - [./agent-troubleshooting.md](./agent-troubleshooting.md)
-- [../upstream-sync.md](../upstream-sync.md)
 - [../cli-reference.md](../cli-reference.md)
