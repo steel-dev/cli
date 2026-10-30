@@ -19,10 +19,10 @@ pub async fn release(
     session: &BrowserSession,
 ) -> anyhow::Result<()> {
     match client
-        .release_session(&session.api_url, session.mode, &session.id, auth)
+        .cli_release_session(&session.api_url, session.mode, auth, &session.id)
         .await
     {
-        Ok(()) => {}
+        Ok(_) => {}
         Err(err) if err.is_not_found() => {}
         Err(err) => return Err(err.into()),
     }

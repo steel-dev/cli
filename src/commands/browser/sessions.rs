@@ -2,7 +2,7 @@ use clap::Parser;
 use serde_json::json;
 
 use crate::api::client::SteelClient;
-use crate::browser::lifecycle::is_session_live;
+use crate::api::session::Session;
 use crate::browser::state::{self, BrowserSession};
 use crate::config::auth;
 use crate::util::output;
@@ -17,20 +17,21 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
     let mut sessions: Vec<(BrowserSession, String)> = Vec::new();
     for session in state::list() {
         match client
-            .get_session(&session.api_url, session.mode, &session.id, &auth)
+            .cli_get_session(&session.api_url, session.mode, &auth, &session.id)
             .await
+            .map(Session::parse)
         {
-            Ok(remote) if is_session_live(&remote) => {
-                let status = remote["status"].as_str().unwrap_or("live").to_string();
+            Ok(Ok(remote)) if remote.is_live() => {
+                let status = remote.status.unwrap_or_else(|| "live".to_string());
                 sessions.push((session, status));
             }
-            Ok(_) => {
+            Ok(Ok(_)) => {
                 state::remove(&session.name)?;
             }
             Err(err) if err.is_not_found() => {
                 state::remove(&session.name)?;
             }
-            Err(_) => sessions.push((session, "unknown".to_string())),
+            Ok(Err(_)) | Err(_) => sessions.push((session, "unknown".to_string())),
         }
     }
 
