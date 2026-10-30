@@ -26,11 +26,6 @@ fn api_url() -> Option<&'static str> {
     API_URL.get().and_then(|o| o.as_deref())
 }
 
-/// Resolve the API mode from global flags.
-pub fn mode() -> ApiMode {
-    ApiMode::resolve(is_local(), api_url())
-}
-
 /// Resolve API mode and base URL from global flags + env + config.
 pub fn resolve() -> (ApiMode, String) {
     let mode = ApiMode::resolve(is_local(), api_url());

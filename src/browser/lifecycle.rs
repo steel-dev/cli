@@ -11,10 +11,6 @@ use crate::config::settings::ApiMode;
 #[derive(Debug)]
 pub struct SessionSummary {
     pub id: String,
-    pub mode: ApiMode,
-    pub name: Option<String>,
-    pub live: bool,
-    pub status: Option<String>,
     pub connect_url: Option<String>,
     pub viewer_url: Option<String>,
     pub profile_id: Option<String>,
@@ -26,16 +22,12 @@ pub struct CaptchaSolveResult {
     pub session_id: String,
     pub success: bool,
     pub message: Option<String>,
-    pub raw: Value,
 }
 
 /// Result of checking CAPTCHA status.
 pub struct CaptchaStatusResult {
-    pub mode: ApiMode,
-    pub session_id: String,
     pub status: String,
     pub types: Vec<String>,
-    pub raw: Value,
 }
 
 const CLOSED_SESSION_STATUSES: &[&str] = &[
@@ -202,7 +194,6 @@ pub fn get_viewer_url(session: &Value, mode: ApiMode, session_id: &str) -> Optio
 pub fn to_session_summary(
     session: &Value,
     mode: ApiMode,
-    name: Option<&str>,
     auth: &Auth,
 ) -> anyhow::Result<SessionSummary> {
     let session_id = get_session_id(session)
@@ -233,10 +224,6 @@ pub fn to_session_summary(
 
     Ok(SessionSummary {
         id: session_id.clone(),
-        mode,
-        name: name.map(|s| s.to_string()),
-        live: is_session_live(session),
-        status: get_session_status(session),
         connect_url,
         viewer_url: get_viewer_url(session, mode, &session_id),
         profile_id: session
@@ -276,7 +263,6 @@ pub async fn solve_captcha(
         session_id: session_id.to_string(),
         success,
         message,
-        raw,
     })
 }
 
@@ -306,13 +292,7 @@ pub async fn captcha_status(
         let (status, types) = normalize_captcha_status(&pages);
 
         if !wait || is_terminal_captcha_status(&status) {
-            return Ok(CaptchaStatusResult {
-                mode,
-                session_id: session_id.to_string(),
-                status,
-                types,
-                raw: serde_json::json!({"pages": pages}),
-            });
+            return Ok(CaptchaStatusResult { status, types });
         }
 
         if start.elapsed().as_millis() as u64 >= timeout {
@@ -511,6 +491,70 @@ mod tests {
         let sanitized = sanitize_connect_url(url);
         assert!(sanitized.contains("sk-1234..."));
         assert!(sanitized.contains("sessionId=s1"));
+        assert!(!sanitized.contains("sk-12345678"));
+    }
+
+    #[test]
+    fn sanitize_leaves_short_keys_and_other_urls_alone() {
+        let short = "wss://connect.steel.dev?apiKey=short&sessionId=s1";
+        assert!(sanitize_connect_url(short).contains("apiKey=short"));
+        let local = "ws://localhost:3000/ws?sessionId=sess-1";
+        assert_eq!(sanitize_connect_url(local), local);
+        assert_eq!(sanitize_connect_url("not a valid url"), "not a valid url");
+    }
+
+    fn auth(key: Option<&str>) -> Auth {
+        Auth {
+            api_key: key.map(str::to_string),
+            source: crate::config::auth::AuthSource::Env,
+        }
+    }
+
+    fn summary(session: Value, mode: ApiMode) -> SessionSummary {
+        to_session_summary(&session, mode, &auth(Some("sk-test-key-12345678"))).unwrap()
+    }
+
+    #[test]
+    fn summary_adds_the_api_key_to_cloud_connect_urls_once() {
+        let fresh = summary(
+            json!({"id": "sess-1", "websocketUrl": "wss://connect.steel.dev?sessionId=sess-1"}),
+            ApiMode::Cloud,
+        );
+        let url = fresh.connect_url.unwrap();
+        assert!(url.contains("apiKey=sk-test-key-12345678"));
+        assert!(url.contains("sessionId=sess-1"));
+
+        let keyed = summary(
+            json!({"id": "sess-1", "websocketUrl": "wss://connect.steel.dev?apiKey=existing&sessionId=sess-1"}),
+            ApiMode::Cloud,
+        );
+        let url = keyed.connect_url.unwrap();
+        assert!(url.contains("apiKey=existing"));
+        assert_eq!(url.matches("apiKey").count(), 1);
+
+        let local = summary(
+            json!({"id": "sess-1", "websocketUrl": "ws://localhost:3000/ws?sessionId=sess-1"}),
+            ApiMode::Local,
+        );
+        assert!(!local.connect_url.unwrap().contains("apiKey"));
+    }
+
+    #[test]
+    fn summary_builds_a_cloud_connect_url_only_in_cloud_mode() {
+        let cloud = summary(json!({"id": "sess-1"}), ApiMode::Cloud);
+        let url = cloud.connect_url.unwrap();
+        assert!(url.starts_with("wss://connect.steel.dev"));
+        assert!(url.contains("apiKey=sk-test-key-12345678"));
+        assert!(url.contains("sessionId=sess-1"));
+
+        let local = to_session_summary(&json!({"id": "sess-1"}), ApiMode::Local, &auth(None));
+        assert!(local.unwrap().connect_url.is_none());
+    }
+
+    #[test]
+    fn summary_needs_an_id() {
+        let missing = to_session_summary(&json!({"status": "live"}), ApiMode::Cloud, &auth(None));
+        assert!(missing.is_err());
     }
 
     #[test]

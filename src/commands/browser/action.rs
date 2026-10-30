@@ -524,7 +524,7 @@ fn parse_tab(value: &str) -> Result<String, String> {
     }
 }
 
-pub(crate) enum Output {
+pub enum Output {
     None,
     Snapshot,
     Value,
@@ -538,7 +538,7 @@ pub(crate) enum Output {
     Dialog,
 }
 
-pub(crate) struct Step {
+pub struct Step {
     pub commands: Vec<Value>,
     pub output: Output,
     pub uploads: Vec<(PathBuf, String)>,
@@ -553,7 +553,7 @@ impl Step {
         }
     }
 
-    pub(crate) fn batchable(&self) -> bool {
+    pub fn batchable(&self) -> bool {
         !matches!(self.output, Output::Switch(_) | Output::TabOpened)
             && !self
                 .commands
@@ -562,7 +562,7 @@ impl Step {
     }
 }
 
-pub(crate) enum Plan {
+pub enum Plan {
     Run(Step),
     Control(Value, Output),
     Close,
@@ -633,7 +633,7 @@ fn image_format(output: &str) -> Option<&'static str> {
 }
 
 impl ActionCommand {
-    pub(crate) fn plan(self) -> Result<Plan> {
+    pub fn plan(self) -> Result<Plan> {
         use Output as O;
         match self {
             Self::Navigate(a) => {
@@ -1022,7 +1022,7 @@ fn session_flag(name: &str) -> String {
     }
 }
 
-pub(crate) fn fail(code: &str, message: &str, data: Option<&Value>) -> anyhow::Error {
+pub fn fail(code: &str, message: &str, data: Option<&Value>) -> anyhow::Error {
     if output::is_json() {
         let mut obj = json!({"success": false, "error": message, "error_code": code});
         if let Some(data) = data {
@@ -1196,7 +1196,7 @@ fn restarted(body: &Value) -> bool {
         })
 }
 
-pub(crate) struct Browser {
+pub struct Browser {
     client: SteelClient,
     auth: Auth,
     pub state: BrowserSession,
@@ -1221,7 +1221,7 @@ async fn attach(
 }
 
 impl Browser {
-    pub(crate) async fn open(name: Option<&str>, start_default: bool) -> Result<Self> {
+    pub async fn open(name: Option<&str>, start_default: bool) -> Result<Self> {
         let (mode, base_url, auth) = api::resolve_with_auth();
         let client = SteelClient::new()?;
         let state = match name {
@@ -1409,7 +1409,7 @@ impl Browser {
         }
     }
 
-    pub(crate) async fn execute(&mut self, steps: Vec<Step>, diff: bool) -> Result<()> {
+    pub async fn execute(&mut self, steps: Vec<Step>, diff: bool) -> Result<()> {
         for (path, name) in steps.iter().flat_map(|step| step.uploads.iter()) {
             let bytes = std::fs::read(path)
                 .with_context(|| format!("Could not read {}", path.display()))?;
@@ -1575,7 +1575,7 @@ impl Browser {
         })
     }
 
-    pub(crate) async fn control(&mut self, mut command: Value, output: Output) -> Result<()> {
+    pub async fn control(&mut self, mut command: Value, output: Output) -> Result<()> {
         if command["command"] == "dialog" && command.get("dialog").is_none() {
             let Some(id) = self.state.dialog.clone() else {
                 bail!(

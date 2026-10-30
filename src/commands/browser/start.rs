@@ -86,7 +86,7 @@ pub async fn create(
     options: &CreateSessionOptions,
 ) -> anyhow::Result<(BrowserSession, Option<String>)> {
     let session = client.create_session(base_url, mode, options, auth).await?;
-    let summary = to_session_summary(&session, mode, Some(name), auth)?;
+    let summary = to_session_summary(&session, mode, auth)?;
     let mut created = BrowserSession::new(
         name.to_string(),
         summary.id.clone(),
