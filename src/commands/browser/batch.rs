@@ -159,7 +159,7 @@ mod tests {
         )
         .await
         .unwrap_err();
-        assert!(format!("{err:#}").contains("was removed in 0.6"));
+        assert!(format!("{err:#}").contains("was removed in 0.5"));
 
         let err = run(
             Args {

@@ -1876,7 +1876,7 @@ mod tests {
         }
 
         for i in 0..archive.len() {
-            let name = archive.by_index(i).unwrap().name().to_string();
+            let name = archive.by_index(i).unwrap().name().unwrap().to_string();
             assert!(!name.contains("LOCK"), "zip contains LOCK: {name}");
             assert!(!name.ends_with(".log"), "zip contains .log: {name}");
             assert!(!name.ends_with(".pma"), "zip contains .pma: {name}");

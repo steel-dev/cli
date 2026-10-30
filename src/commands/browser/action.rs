@@ -347,9 +347,9 @@ pub struct MouseArgs {
     /// move, down, up, click, or wheel
     #[arg(value_parser = ["move", "down", "up", "click", "wheel"])]
     pub action: String,
-    /// X in CSS pixels of the visible page
+    /// X in CSS pixels of the visible page (needed for move, click, and wheel)
     pub x: Option<f64>,
-    /// Y in CSS pixels of the visible page
+    /// Y in CSS pixels of the visible page (needed for move, click, and wheel)
     pub y: Option<f64>,
     /// Mouse button: left, right, middle
     #[arg(long, value_parser = ["left", "right", "middle"])]
@@ -607,7 +607,7 @@ fn single(command: Cmd, output: Output) -> Result<Plan> {
 }
 
 fn removed(what: &str, instead: &str) -> anyhow::Error {
-    anyhow!("`steel browser {what}` was removed in 0.6. {instead}")
+    anyhow!("`steel browser {what}` was removed in 0.5. {instead}")
 }
 
 fn absolute(path: &str) -> Result<PathBuf> {
@@ -740,17 +740,25 @@ impl ActionCommand {
                 step.uploads = uploads;
                 Ok(Plan::Run(step))
             }
-            Self::Mouse(a) => single(
-                cmd("mouse")
-                    .set("action", a.action)
-                    .opt("x", a.x)
-                    .opt("y", a.y)
-                    .opt("button", a.button)
-                    .opt("clicks", a.clicks)
-                    .opt("deltaX", a.dx)
-                    .opt("deltaY", a.dy),
-                O::None,
-            ),
+            Self::Mouse(a) => {
+                if a.x.is_some() != a.y.is_some() {
+                    bail!("Pass x and y together.");
+                }
+                if a.x.is_none() && !matches!(a.action.as_str(), "down" | "up") {
+                    bail!("mouse {} needs x and y.", a.action);
+                }
+                single(
+                    cmd("mouse")
+                        .set("action", a.action)
+                        .opt("x", a.x)
+                        .opt("y", a.y)
+                        .opt("button", a.button)
+                        .opt("clicks", a.clicks)
+                        .opt("deltaX", a.dx)
+                        .opt("deltaY", a.dy),
+                    O::None,
+                )
+            }
             Self::Snapshot(a) => {
                 if a.selector.is_some() {
                     return Err(removed(
@@ -1027,14 +1035,15 @@ pub(crate) fn fail(code: &str, message: &str, data: Option<&Value>) -> anyhow::E
     SilentExit(output::exit_code::GENERAL).into()
 }
 
-fn hint(code: &str) -> &'static str {
+fn hint(code: &str, message: &str) -> &'static str {
     match code {
+        "tab_not_found" | "browser_restarted" if message.contains("tab list") => "",
         "stale_ref" => " Run `steel browser snapshot -i`.",
         "tab_required" => " Run `steel browser tab switch <tab>`.",
         "tab_not_found" => " Run `steel browser tab list`.",
         "dialog_pending" => " Run `steel browser dialog accept` or `steel browser dialog dismiss`.",
         "browser_restarted" => " Run `steel browser tab list`, then `steel browser snapshot -i`.",
-        "missing_capability" => " Start a new session with `steel browser start`.",
+        "missing_capability" => " Run `steel browser start`.",
         "invalid_operation_token" => " If it did not run, run it again.",
         "queue_full" | "expired" | "records_full" => " The session is busy. Try again in a moment.",
         _ => "",
@@ -1071,7 +1080,7 @@ fn failure(body: &Value) -> Option<(String, String)> {
     };
     Some((
         code.clone(),
-        format!("{code}: {message}{effect}{}", hint(&code)),
+        format!("{code}: {message}{effect}{}", hint(&code, message)),
     ))
 }
 
@@ -1362,7 +1371,7 @@ impl Browser {
         self.save()?;
         Err(fail(
             &code,
-            &format!("{message}{}", hint(&code)),
+            &format!("{message}{}", hint(&code, &message)),
             Some(&reply.body),
         ))
     }
@@ -1882,10 +1891,58 @@ mod tests {
                 .err()
                 .unwrap_or_else(|| panic!("{args:?} should fail"));
             assert!(
-                err.to_string().contains("was removed in 0.6"),
+                err.to_string().contains("was removed in 0.5"),
                 "{args:?}: {err}"
             );
         }
+    }
+
+    #[test]
+    fn mouse_needs_a_point_except_for_down_and_up() {
+        assert_eq!(
+            commands(&["mouse", "wheel", "10", "20", "--dy", "-300"]),
+            vec![
+                json!({"command": "mouse", "action": "wheel", "x": 10.0, "y": 20.0, "deltaY": -300.0})
+            ]
+        );
+        assert_eq!(
+            commands(&["mouse", "up"]),
+            vec![json!({"command": "mouse", "action": "up"})]
+        );
+        for args in [
+            vec!["mouse", "wheel", "--dy", "100"],
+            vec!["mouse", "move"],
+            vec!["mouse", "click", "5"],
+        ] {
+            assert!(plan(&args).is_err(), "{args:?} should fail");
+        }
+    }
+
+    #[test]
+    fn hints_are_not_repeated_when_the_engine_already_says_so() {
+        let failed = |code: &str, message: &str| {
+            json!({
+                "execution": {"state": "failed", "effect": "none"},
+                "results": [{"ok": false, "error": {"code": code, "message": message}}]
+            })
+        };
+        let (_, message) = failure(&failed(
+            "tab_not_found",
+            "Tab t3 is not open. Run tab list to see open tabs.",
+        ))
+        .unwrap();
+        assert!(!message.contains("steel browser tab list"), "{message}");
+        let (_, message) = failure(&failed("tab_not_found", "Tab t3 is closed.")).unwrap();
+        assert!(
+            message.ends_with("Run `steel browser tab list`."),
+            "{message}"
+        );
+        let (_, message) = failure(&failed(
+            "browser_restarted",
+            "The browser restarted, so tabs and refs changed. Run tab list again.",
+        ))
+        .unwrap();
+        assert!(!message.contains("steel browser"), "{message}");
     }
 
     #[test]

@@ -657,8 +657,8 @@ steel browser mouse
 ### Parameters
 
 - `action` (enum, required): move, down, up, click, or wheel
-- `x` (string, optional): X in CSS pixels of the visible page
-- `y` (string, optional): Y in CSS pixels of the visible page
+- `x` (string, optional): X in CSS pixels of the visible page (needed for move, click, and wheel)
+- `y` (string, optional): Y in CSS pixels of the visible page (needed for move, click, and wheel)
 - `--button` (enum, optional): Mouse button: left, right, middle
 - `--clicks` (string, optional): Click count for click (1 to 3)
 - `--dx` (string, optional): Horizontal wheel delta

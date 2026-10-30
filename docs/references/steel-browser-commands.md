@@ -138,7 +138,7 @@ Batch sends all commands in one request (at most 50). They run in order and stop
 - `--json` (or piped output) prints the engine response under `data`, with any `notices`.
 - A failed command exits with code 1 and prints the engine error code, such as `stale_ref`, `not_actionable`, or `tab_required`.
 
-## Removed in 0.6
+## Removed in 0.5
 
 | Command | Instead |
 |---|---|
@@ -157,4 +157,4 @@ Batch sends all commands in one request (at most 50). They run in order and stop
 | `wait --function` | `wait --text`, `--selector`, or `--url` |
 | `navigate --header` | not supported |
 
-These commands still parse in 0.6 and print the alternative.
+These commands still parse in 0.5 and print the alternative.

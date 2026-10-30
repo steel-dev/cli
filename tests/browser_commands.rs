@@ -396,7 +396,7 @@ async fn removed_commands_fail_without_calling_the_api() {
         json_out(&out)["error"]
             .as_str()
             .unwrap()
-            .contains("removed in 0.6")
+            .contains("removed in 0.5")
     );
     assert!(server.received_requests().await.unwrap().is_empty());
     assert!(cli.state("default").is_none());
