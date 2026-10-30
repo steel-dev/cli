@@ -22,9 +22,8 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, builder::styling:
 
 const ENVIRONMENT: &[(&str, &str)] = &[
     ("STEEL_API_KEY", "API key for Steel (overrides login)"),
-    ("STEEL_API_URL", "Steel API endpoint"),
-    ("STEEL_BROWSER_API_URL", "Steel Browser API endpoint"),
-    ("STEEL_LOCAL_API_URL", "Local runtime API endpoint"),
+    ("STEEL_API_URL", "Steel API endpoint, cloud or self-hosted"),
+    ("STEEL_WS_URL", "WebSocket endpoint for live log streams"),
     ("STEEL_CONFIG_DIR", "Custom config directory"),
     ("STEEL_TELEMETRY_HOST", "PostHog ingest host override"),
     (
@@ -102,7 +101,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub local: bool,
 
-    /// Explicit self-hosted API endpoint URL
+    /// Steel API endpoint URL (overrides --local and STEEL_API_URL)
     #[arg(long, global = true)]
     pub api_url: Option<String>,
 }

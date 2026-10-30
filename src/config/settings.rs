@@ -22,77 +22,34 @@ impl std::fmt::Display for ApiMode {
 }
 
 impl ApiMode {
-    /// Resolve the base URL for API requests.
-    ///
-    /// Priority: explicit `--api-url` → env var → config → default.
-    /// Matches TS `resolveApiBaseUrl()` in `apiConfig.ts`.
-    pub fn resolve_base_url(
-        &self,
-        explicit_url: Option<&str>,
-        env_vars: &EnvVars,
-        local_config_url: Option<&str>,
-    ) -> String {
-        if let Some(url) = explicit_url {
-            return normalize_api_url(url);
-        }
-
-        match self {
-            Self::Cloud => {
-                let url = env_vars
-                    .steel_api_url
-                    .as_deref()
-                    .filter(|s| !s.trim().is_empty())
-                    .unwrap_or(DEFAULT_API_URL);
-                normalize_api_url(url)
-            }
-            Self::Local => {
-                // STEEL_BROWSER_API_URL → STEEL_LOCAL_API_URL → config → default
-                let url = env_vars
-                    .steel_browser_api_url
-                    .as_deref()
-                    .filter(|s| !s.trim().is_empty())
-                    .or_else(|| {
-                        env_vars
-                            .steel_local_api_url
-                            .as_deref()
-                            .filter(|s| !s.trim().is_empty())
-                    })
-                    .or_else(|| local_config_url.filter(|s| !s.trim().is_empty()))
-                    .unwrap_or(DEFAULT_LOCAL_API_URL);
-                normalize_api_url(url)
-            }
-        }
-    }
-
-    /// Determine mode from CLI flags.
-    /// Matches TS `resolveSessionMode()` / `resolveMode()`.
-    pub const fn resolve(local: bool, api_url: Option<&str>) -> Self {
-        if local {
-            return Self::Local;
-        }
-        if api_url.is_some() {
-            return Self::Local;
-        }
-        Self::Cloud
+    pub fn for_url(url: &str) -> Self {
+        let cloud = url::Url::parse(url)
+            .ok()
+            .and_then(|parsed| {
+                parsed
+                    .host_str()
+                    .map(|host| host == "steel.dev" || host.ends_with(".steel.dev"))
+            })
+            .unwrap_or(false);
+        if cloud { Self::Cloud } else { Self::Local }
     }
 }
 
-/// Env vars relevant to API URL resolution (injectable for testing).
-#[derive(Debug, Default)]
-pub struct EnvVars {
-    pub steel_api_url: Option<String>,
-    pub steel_browser_api_url: Option<String>,
-    pub steel_local_api_url: Option<String>,
+pub fn resolve_base_url(
+    explicit: Option<&str>,
+    local: bool,
+    env_api_url: Option<&str>,
+    local_config_url: Option<&str>,
+) -> String {
+    let url = non_empty(explicit)
+        .or_else(|| local.then(|| non_empty(local_config_url).unwrap_or(DEFAULT_LOCAL_API_URL)))
+        .or_else(|| non_empty(env_api_url))
+        .unwrap_or(DEFAULT_API_URL);
+    normalize_api_url(url)
 }
 
-impl EnvVars {
-    pub fn from_env() -> Self {
-        Self {
-            steel_api_url: std::env::var("STEEL_API_URL").ok(),
-            steel_browser_api_url: std::env::var("STEEL_BROWSER_API_URL").ok(),
-            steel_local_api_url: std::env::var("STEEL_LOCAL_API_URL").ok(),
-        }
-    }
+fn non_empty(value: Option<&str>) -> Option<&str> {
+    value.filter(|v| !v.trim().is_empty())
 }
 
 fn normalize_api_url(url: &str) -> String {
@@ -301,100 +258,71 @@ mod tests {
     // --- ApiMode tests ---
 
     #[test]
-    fn resolve_mode_default_is_cloud() {
-        assert_eq!(ApiMode::resolve(false, None), ApiMode::Cloud);
-    }
-
-    #[test]
-    fn resolve_mode_local_flag() {
-        assert_eq!(ApiMode::resolve(true, None), ApiMode::Local);
-    }
-
-    #[test]
-    fn resolve_mode_api_url_implies_local() {
+    fn steel_dev_hosts_are_cloud() {
+        assert_eq!(ApiMode::for_url("https://api.steel.dev/v1"), ApiMode::Cloud);
         assert_eq!(
-            ApiMode::resolve(false, Some("http://localhost:3000")),
+            ApiMode::for_url("https://api.staging.steel.dev/v1"),
+            ApiMode::Cloud
+        );
+        assert_eq!(ApiMode::for_url("http://localhost:3000/v1"), ApiMode::Local);
+        assert_eq!(
+            ApiMode::for_url("https://browser.example.com/v1"),
             ApiMode::Local
+        );
+        assert_eq!(ApiMode::for_url("https://notsteel.dev/v1"), ApiMode::Local);
+        assert_eq!(ApiMode::for_url("not a url"), ApiMode::Local);
+    }
+
+    #[test]
+    fn base_url_defaults_to_cloud() {
+        assert_eq!(
+            resolve_base_url(None, false, None, None),
+            "https://api.steel.dev/v1"
         );
     }
 
     #[test]
-    fn cloud_base_url_default() {
-        let env = EnvVars::default();
-        let url = ApiMode::Cloud.resolve_base_url(None, &env, None);
-        assert_eq!(url, "https://api.steel.dev/v1");
-    }
-
-    #[test]
-    fn cloud_base_url_from_env() {
-        let env = EnvVars {
-            steel_api_url: Some("https://custom.api.dev/v1/".into()),
-            ..Default::default()
-        };
-        let url = ApiMode::Cloud.resolve_base_url(None, &env, None);
-        assert_eq!(url, "https://custom.api.dev/v1");
-    }
-
-    #[test]
-    fn cloud_base_url_explicit_overrides_env() {
-        let env = EnvVars {
-            steel_api_url: Some("https://from-env.dev/".into()),
-            ..Default::default()
-        };
-        let url = ApiMode::Cloud.resolve_base_url(Some("https://explicit.dev/v1/"), &env, None);
-        assert_eq!(url, "https://explicit.dev/v1");
-    }
-
-    #[test]
-    fn local_base_url_default() {
-        let env = EnvVars::default();
-        let url = ApiMode::Local.resolve_base_url(None, &env, None);
-        assert_eq!(url, "http://localhost:3000/v1");
-    }
-
-    #[test]
-    fn local_base_url_browser_api_url_takes_priority() {
-        let env = EnvVars {
-            steel_browser_api_url: Some("http://browser:4000/v1".into()),
-            steel_local_api_url: Some("http://local:5000/v1".into()),
-            ..Default::default()
-        };
-        let url = ApiMode::Local.resolve_base_url(None, &env, None);
+    fn base_url_reads_steel_api_url() {
+        let url = resolve_base_url(None, false, Some("http://browser:4000/v1/"), None);
         assert_eq!(url, "http://browser:4000/v1");
     }
 
     #[test]
-    fn local_base_url_falls_to_local_env() {
-        let env = EnvVars {
-            steel_local_api_url: Some("http://local:5000/v1".into()),
-            ..Default::default()
-        };
-        let url = ApiMode::Local.resolve_base_url(None, &env, None);
-        assert_eq!(url, "http://local:5000/v1");
-    }
-
-    #[test]
-    fn local_base_url_falls_to_config() {
-        let env = EnvVars::default();
-        let url = ApiMode::Local.resolve_base_url(None, &env, Some("http://from-config:6000/v1"));
+    fn local_flag_uses_config_or_localhost() {
+        assert_eq!(
+            resolve_base_url(None, true, None, None),
+            "http://localhost:3000/v1"
+        );
+        let url = resolve_base_url(None, true, None, Some("http://from-config:6000/v1"));
         assert_eq!(url, "http://from-config:6000/v1");
-    }
-
-    #[test]
-    fn local_base_url_empty_env_skipped() {
-        let env = EnvVars {
-            steel_browser_api_url: Some("  ".into()),
-            steel_local_api_url: Some("".into()),
-            ..Default::default()
-        };
-        let url = ApiMode::Local.resolve_base_url(None, &env, None);
+        let url = resolve_base_url(None, true, Some("https://api.steel.dev/v1"), None);
         assert_eq!(url, "http://localhost:3000/v1");
     }
 
     #[test]
+    fn explicit_url_wins() {
+        let url = resolve_base_url(
+            Some("https://explicit.dev/v1/"),
+            true,
+            Some("https://from-env.dev"),
+            Some("http://from-config:6000/v1"),
+        );
+        assert_eq!(url, "https://explicit.dev/v1");
+    }
+
+    #[test]
+    fn empty_values_are_skipped() {
+        let url = resolve_base_url(Some(" "), true, Some(""), Some("  "));
+        assert_eq!(url, "http://localhost:3000/v1");
+        assert_eq!(
+            resolve_base_url(None, false, Some(" "), None),
+            "https://api.steel.dev/v1"
+        );
+    }
+
+    #[test]
     fn trailing_slashes_stripped() {
-        let env = EnvVars::default();
-        let url = ApiMode::Cloud.resolve_base_url(Some("https://api.dev///"), &env, None);
+        let url = resolve_base_url(Some("https://api.dev///"), false, None, None);
         assert_eq!(url, "https://api.dev");
     }
 

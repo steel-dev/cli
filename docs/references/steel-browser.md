@@ -12,27 +12,16 @@ Each `steel browser` action is one HTTP request to the session's commands API:
 
 The full command list is in [./steel-browser-commands.md](./steel-browser-commands.md).
 
-## Modes
-
-- Cloud mode (default): no mode flag required.
-- Self-hosted mode: use `--local` or `--api-url <url>`.
-
-`--api-url` implies self-hosted mode.
-
 ## Endpoint Resolution
 
-Self-hosted endpoint precedence:
+The API URL is chosen in this order:
 
 1. `--api-url <url>`
-2. `STEEL_BROWSER_API_URL`
-3. `STEEL_LOCAL_API_URL`
-4. `browser.apiUrl` in `~/.config/steel/config.json`
-5. `http://localhost:3000/v1`
+2. `--local`: `browser.apiUrl` in `~/.config/steel/config.json`, or `http://localhost:3000/v1`
+3. `STEEL_API_URL`
+4. `https://api.steel.dev/v1`
 
-Cloud endpoint precedence:
-
-1. `STEEL_API_URL`
-2. `https://api.steel.dev/v1`
+URLs on `steel.dev` are Steel Cloud and need an API key. Any other URL is treated as self-hosted.
 
 ## Steel-Owned Command Contracts
 
