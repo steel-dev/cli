@@ -21,24 +21,24 @@ pub struct Args {
     pub proxy: Option<String>,
 
     /// Session timeout in milliseconds (create-time only)
-    #[arg(long = "session-timeout")]
-    pub session_timeout: Option<u64>,
+    #[arg(long, alias = "session-timeout")]
+    pub timeout: Option<u64>,
 
     /// Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
     #[arg(long = "inactivity-timeout")]
     pub inactivity_timeout: Option<u64>,
 
     /// Create new sessions in headless mode (create-time only)
-    #[arg(long = "session-headless", hide = true)]
-    pub session_headless: Option<bool>,
+    #[arg(long, alias = "session-headless", hide = true)]
+    pub headless: Option<bool>,
 
     /// Preferred session region (create-time only)
-    #[arg(long = "session-region", hide = true)]
-    pub session_region: Option<String>,
+    #[arg(long, alias = "session-region", hide = true)]
+    pub region: Option<String>,
 
     /// Enable manual CAPTCHA solving on new sessions (create-time only)
-    #[arg(long = "session-solve-captcha")]
-    pub session_solve_captcha: bool,
+    #[arg(long, alias = "session-solve-captcha")]
+    pub solve_captcha: bool,
 
     /// Named profile to persist browser state across sessions
     #[arg(long)]
@@ -121,11 +121,11 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let proxy_enabled = args.proxy.is_some();
     let namespace_set = args.namespace.is_some();
     let inactivity_timeout_ms = resolve_inactivity_timeout(args.inactivity_timeout);
-    if let (Some(timeout), Some(inactivity)) = (args.session_timeout, inactivity_timeout_ms)
+    if let (Some(timeout), Some(inactivity)) = (args.timeout, inactivity_timeout_ms)
         && inactivity >= timeout
     {
         eprintln!(
-            "warning: --inactivity-timeout ({inactivity}ms) >= --session-timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
+            "warning: --inactivity-timeout ({inactivity}ms) >= --timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
         );
     }
 
@@ -142,11 +142,11 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let options = CreateSessionOptions {
         stealth: args.stealth,
         proxy_url: args.proxy,
-        timeout_ms: args.session_timeout,
+        timeout_ms: args.timeout,
         inactivity_timeout_ms,
-        headless: args.session_headless,
-        region: args.session_region,
-        solve_captcha: args.session_solve_captcha,
+        headless: args.headless,
+        region: args.region,
+        solve_captcha: args.solve_captcha,
         profile_id: resolved_profile_id,
         persist_profile,
         namespace: args.namespace,
@@ -173,10 +173,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     properties.insert("persist_profile".into(), json!(persist_profile));
     properties.insert("credentials".into(), json!(args.credentials));
     properties.insert("namespace_set".into(), json!(namespace_set));
-    properties.insert(
-        "session_timeout_set".into(),
-        json!(args.session_timeout.is_some()),
-    );
+    properties.insert("session_timeout_set".into(), json!(args.timeout.is_some()));
     properties.insert("inactivity_timeout_ms".into(), json!(inactivity_timeout_ms));
     crate::telemetry::track_event("browser_session_started", properties);
 

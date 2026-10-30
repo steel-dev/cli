@@ -8,8 +8,7 @@ Every `steel browser` action sends one request to the session's commands API (`P
 steel browser start [--session <name>]   # create a session (default name: default)
 steel browser sessions                   # list local sessions that are still live
 steel browser live                       # print the live viewer URL
-steel browser stop [--session <name>]    # release the session (-a for all)
-steel browser close                      # same as stop (aliases: quit, exit)
+steel browser stop [--session <name>]    # release the session (-a for all; aliases: close, quit, exit)
 ```
 
 - Actions without `--session` use the `default` session. It starts on first use.
@@ -128,7 +127,7 @@ Dialogs stay open until you answer them. A command that opens one prints the dia
 steel browser batch "fill e3 Seoul" "fill e4 Tokyo" "click e5" "snapshot -i"
 ```
 
-Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, `cancel`, and `close` must run on their own.
+Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, and `cancel` must run on their own. `stop` is not a batch command.
 
 ## Retries and output
 

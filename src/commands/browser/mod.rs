@@ -15,7 +15,7 @@ pub const DEFAULT_SESSION: &str = "default";
 #[derive(Parser)]
 pub struct BrowserArgs {
     /// Named session to target, or a session ID
-    #[arg(long, global = true)]
+    #[arg(long, global = true, alias = "session-id")]
     pub session: Option<String>,
 
     /// Print what the command changed on the page (a diff against the last snapshot)
@@ -32,6 +32,7 @@ pub enum Command {
     Start(start::Args),
 
     /// Stop a browser session
+    #[command(aliases = ["close", "quit", "exit"])]
     Stop(stop::Args),
 
     /// List active browser sessions
@@ -147,6 +148,29 @@ mod tests {
         assert!(
             matches!(super::target(Some(id)), Ok(Some(super::Target::Id(found))) if found == id)
         );
+    }
+
+    #[test]
+    fn old_names_still_parse() {
+        let args = parse(&[
+            "start",
+            "--session-timeout",
+            "1000",
+            "--session-solve-captcha",
+        ]);
+        let Command::Start(start) = args.command else {
+            panic!("expected start");
+        };
+        assert_eq!(start.timeout, Some(1000));
+        assert!(start.solve_captcha);
+
+        let id = "4f7c2b1e-9a3d-4e5f-8b6a-1c2d3e4f5a6b";
+        let args = parse(&["captcha", "solve", "--session-id", id]);
+        assert_eq!(args.session.as_deref(), Some(id));
+
+        for name in ["close", "quit", "exit"] {
+            assert!(matches!(parse(&[name]).command, Command::Stop(_)), "{name}");
+        }
     }
 
     #[test]

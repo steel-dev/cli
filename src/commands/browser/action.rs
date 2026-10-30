@@ -122,9 +122,6 @@ pub enum ActionCommand {
     Status(ExecutionArgs),
     /// Stop a command that is still running
     Cancel(ExecutionArgs),
-    /// Close the browser session
-    #[command(aliases = ["quit", "exit"])]
-    Close,
 
     #[command(hide = true)]
     Cookies(RemovedArgs),
@@ -182,7 +179,6 @@ impl ActionCommand {
             Self::Dialog(_) => "dialog",
             Self::Status(_) => "status",
             Self::Cancel(_) => "cancel",
-            Self::Close => "close",
             Self::Cookies(_) => "cookies",
             Self::Storage(_) => "storage",
             Self::Set(_) => "set",
@@ -563,7 +559,6 @@ impl Step {
 pub enum Plan {
     Run(Step),
     Control(Value, Output),
-    Close,
 }
 
 struct Cmd(Map<String, Value>);
@@ -875,7 +870,6 @@ impl ActionCommand {
                 cmd("cancel").set("execution", a.execution).done(),
                 O::Execution,
             )),
-            Self::Close => Ok(Plan::Close),
             Self::Cookies(_) => Err(removed(
                 "cookies",
                 "Read cookies with `steel browser eval \"document.cookie\"` (HttpOnly cookies are not visible). Keep logins across sessions with `steel browser start --profile <name>`.",
@@ -1617,7 +1611,6 @@ pub async fn run(action: ActionCommand, session: Option<&str>, diff: bool) -> Re
             let mut browser = Browser::open(session, false).await?;
             browser.control(command, output).await
         }
-        Plan::Close => super::stop::run(super::stop::Args { all: false }, session).await,
     }
 }
 
@@ -1841,7 +1834,6 @@ mod tests {
             plan(&["status", "x-7"]).unwrap(),
             Plan::Control(ref c, Output::Execution) if *c == json!({"command": "status", "execution": "x-7"})
         ));
-        assert!(matches!(plan(&["close"]).unwrap(), Plan::Close));
     }
 
     #[test]
