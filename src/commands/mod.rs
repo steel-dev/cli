@@ -18,228 +18,69 @@ pub mod sessions;
 pub mod skills;
 pub mod update;
 
-use clap::{Parser, Subcommand, builder::styling::Styles};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, builder::styling::Styles};
 
-const LONG_HELP: &str = "\
-Global Flags:
-  --json                                 Structured JSON output for automation
-  -l, --local                            Use local Steel runtime
-  --api-url <url>                        Explicit self-hosted API endpoint URL
+const ENVIRONMENT: &[(&str, &str)] = &[
+    ("STEEL_API_KEY", "API key for Steel (overrides login)"),
+    ("STEEL_API_URL", "Steel API endpoint"),
+    ("STEEL_BROWSER_API_URL", "Steel Browser API endpoint"),
+    ("STEEL_LOCAL_API_URL", "Local runtime API endpoint"),
+    ("STEEL_CONFIG_DIR", "Custom config directory"),
+    ("STEEL_TELEMETRY_HOST", "PostHog ingest host override"),
+    (
+        "STEEL_TELEMETRY_DISABLED",
+        "Disable built-in telemetry for this machine/session",
+    ),
+    (
+        "STEEL_FORCE_TTY",
+        "Force text output when piped (disable auto-JSON)",
+    ),
+    ("NO_COLOR", "Disable colored output"),
+];
 
-Getting Started:
-  steel init                           Log in, verify, and install Steel skills into detected agents
-    --agent                              Auto-accept prompts and print agent-friendly output
-  steel skills list                    List available Steel Skills
-  steel skills install --all           Install all Steel Skills through npx skills
-  steel skills install <name>          Install a Steel Skill through npx skills
-  steel skills doctor                  Check skills installer, auth, manifest, and paths
+const EXAMPLES: &[&str] = &[
+    "steel init",
+    "steel init --agent",
+    "steel scrape https://example.com",
+    "steel scrape https://example.com --format html,markdown",
+    "steel screenshot https://example.com -f",
+    "steel browser start --session my-session",
+    "steel browser navigate https://example.com",
+    "steel browser snapshot -i",
+    "steel browser click e5",
+    "steel browser fill e3 \"user@example.com\"",
+    "steel browser click \"button#submit\" --diff",
+    "steel browser type \"textarea\" \"Hello world\" --clear",
+    "steel browser get text \"h1\"",
+    "steel browser is visible \".modal\"",
+    "steel browser wait --text \"Success\" --timeout 5000",
+    "steel browser batch \"fill e3 Seoul\" \"click e5\" \"snapshot -i\"",
+    "steel browser screenshot --full",
+    "steel browser eval \"document.title\"",
+    "steel browser tab new https://example.com",
+    "steel browser stop --session my-session",
+];
 
-Quick Actions:
-  steel scrape <url>                   Scrape webpage content (markdown by default)
-    --format <fmt>                       Output formats: html, readability, cleaned_html, markdown
-    -d, --delay <ms>                     Delay before scraping
-    --pdf / --screenshot                 Include PDF or screenshot in response
-    --use-proxy                          Use Steel-managed residential proxy
-    -r, --region <region>                Region for request execution
-    -l, --local                          Use local Steel runtime
-  steel screenshot <url>               Capture a screenshot
-    -f, --full-page                      Full-page capture
-  steel pdf <url>                      Generate a PDF from a webpage
+fn long_help(root: &clap::Command) -> String {
+    let environment: Vec<String> = ENVIRONMENT
+        .iter()
+        .map(|(name, about)| format!("  {name:<38}{about}"))
+        .collect();
+    let examples: Vec<String> = EXAMPLES.iter().map(|e| format!("  {e}")).collect();
+    format!(
+        "All Commands:\n{}\n\nEnvironment:\n{}\n\nExamples:\n{}",
+        describe::overview(root),
+        environment.join("\n"),
+        examples.join("\n")
+    )
+}
 
-Browser Sessions:
-  steel browser start [--session <name>]      Create a browser session
-    --stealth                            Enable stealth mode (humanize + auto CAPTCHA)
-    -p, --proxy <proxy>                  Use residential proxy
-    --session-timeout <ms>               Session timeout
-    --inactivity-timeout <ms>            Release after this long without commands (default: 10 min)
-    --session-solve-captcha              Enable manual CAPTCHA solving
-    --profile <name>                     Named profile to persist browser state
-    --update-profile                     Save state back to profile on session end
-    --namespace <ns> / --credentials     Inject stored credentials
-  steel browser stop [--session <name>]       Stop a session (-a for all)
-  steel browser sessions               List active sessions (use --json for structured output)
-  steel browser live [--session <name>]       Open live session viewer
-  steel browser batch \"<cmd>\" \"<cmd>\"      Run several commands in one request
-  --session <name|id>                  Target a named session or a session ID
-  --diff                               Print what a command changed on the page
-
-Cloud Sessions:
-  steel sessions list                  List cloud sessions
-    --status <status>                   Filter: live, released, failed
-    --limit <n>                         Number of sessions to return
-  steel sessions get <id>              Show cloud session details
-  steel sessions release <id>          Release a cloud session
-    -a, --all                           Release all active cloud sessions
-  steel sessions logs <id>             Show browser event logs
-    -f, --follow                        Follow live logs over WebSocket
-    --since <time>                      Start timestamp
-  steel sessions agent-logs <id>       Show raw CDP-derived agent events
-  steel sessions traces <id>           Show semantic agent traces
-    -f, --follow                        Follow live traces over WebSocket
-
-Browser Navigation:
-  steel browser navigate <url>         Navigate to URL (aliases: open, goto)
-    --wait-until <state>                 load, domcontentloaded, networkidle
-  steel browser back                   Go back in history
-  steel browser forward                Go forward in history
-  steel browser reload                 Reload current page
-
-Browser Interaction:
-  steel browser click <sel>            Click an element (a ref such as e5, or a CSS selector)
-    --count <n>                          Click count (2 for double-click)
-  steel browser dblclick <sel>         Double-click an element
-  steel browser fill <sel> <value>     Clear and fill an input field
-  steel browser type <sel> <text>      Type text (appends to existing value)
-    --clear                              Clear field first
-    --delay <ms>                         Delay between keystrokes
-  steel browser press <key>            Press key (Enter, Escape, Tab, Control+a)
-  steel browser keydown <key>          Hold a key down (keyup releases it)
-  steel browser hover <sel>            Hover over an element
-  steel browser focus <sel>            Focus an element
-  steel browser check <sel>            Check a checkbox or radio button
-  steel browser uncheck <sel>          Uncheck a checkbox
-  steel browser select <sel> <vals>    Select dropdown option(s)
-  steel browser clear <sel>            Clear an input field
-  steel browser selectall <sel>        Select all text in an input
-  steel browser scroll [dir] [px]      Scroll page (up/down/left/right, default: down 300)
-    -s, --selector <sel>                 Scroll within an element
-  steel browser drag <src> <dst>       Drag an element onto another
-  steel browser upload <sel> <files>   Upload local files to a file input
-  steel browser mouse <action> [x] [y] Mouse input at a point (move, down, up, click, wheel)
-
-Browser Observation:
-  steel browser snapshot               Accessibility tree snapshot with refs
-    -i, --interactive                    Only interactive elements
-    -c, --compact                        Compact output
-    -d, --max-depth <n>                  Limit tree depth
-  steel browser screenshot             Take a screenshot
-    --full-page / --full                 Full scrollable page
-    -o, --output <path>                  Output path (default: screenshot.png)
-    --selector <sel>                     Restrict to element
-    --format <fmt>                       png, jpeg, webp
-    --quality <n>                        JPEG/WebP quality (0-100)
-  steel browser pdf -o <path>          Save the page as PDF (headless sessions)
-  steel browser eval <script>          Run JavaScript in page
-  steel browser find <value>           Find elements and print their refs
-    --by <kind>                          css (default), role, text, label, placeholder, alt, title, testid
-    --name <name>                        Accessible name, with --by role
-  steel browser content                Get page HTML
-
-Get Info:  steel browser get <what> [selector]
-  text <sel>                             Visible text of an element
-  html <sel>                             Inner HTML of an element
-  markdown [sel]                         Main content of an element or the page as Markdown
-  value <sel>                            Input/textarea value
-  attr <sel> <name>                      Element attribute
-  url                                    Current page URL
-  title                                  Current page title
-  count <sel>                            Count matching elements
-  box <sel>                              Element bounding box
-
-Check State:  steel browser is <what> <selector>
-  visible, enabled, checked
-
-Wait:
-  steel browser wait [ms]              Wait for one condition, or a fixed time
-    --timeout <ms>                       Timeout (default: 30000, at most 50000)
-    -t, --text <text>                    Wait for text on page
-    --selector <sel>                     Wait for an element
-    --state <state>                      visible, hidden, attached, detached
-    -u, --url <substring>                Wait for URL to contain string
-    -l, --load-state <state>             load, domcontentloaded, networkidle (alias: --load)
-    --download [-o <path>]               Wait for a download and save it
-
-Tabs:
-  steel browser tab list               List open tabs (* marks the current tab)
-  steel browser tab new [url]          Open a new tab and switch to it
-  steel browser tab switch <tab>       Switch to a tab (e.g. t2)
-  steel browser tab close [tab]        Close a tab (the current one if omitted)
-
-Dialogs and Long Commands:
-  steel browser dialog accept [id]     Accept an open dialog (dismiss to decline)
-    --text <text>                        Answer for a prompt
-  steel browser status <execution>     Wait for a command that is still running
-  steel browser cancel <execution>     Stop a command that is still running
-  steel browser close                  Close browser session (aliases: quit, exit)
-
-CAPTCHA:
-  steel browser captcha solve          Solve CAPTCHA
-    --session-id <id>                      Session ID override
-    --page-id <id> / --task-id <id>      Target specific CAPTCHA
-  steel browser captcha status         Check CAPTCHA status
-    -w, --wait                           Wait for terminal status
-    --timeout <ms> / --interval <ms>     Poll settings
-
-Credentials:
-  steel credentials list               List stored credentials
-    -n, --namespace <ns>                 Filter by namespace
-    --origin <url>                       Filter by origin
-  steel credentials create             Create credential
-    --origin <url>                       Origin URL
-    -u <user> -p <pass>                  Username and password
-    --totp-secret <secret>               TOTP for 2FA
-    -n, --namespace <ns>                 Namespace
-    --label <label>                      Human-readable label
-  steel credentials update             Update credential (same flags as create)
-  steel credentials delete             Delete credential
-
-Profiles:
-  steel profile list                   List named browser profiles
-  steel profile import --name <n>      Import Chrome profile (--from \"Profile 1\")
-  steel profile sync --name <n>        Sync profile from Chrome
-  steel profile delete --name <n>      Delete a profile
-
-Development:
-  steel dev install                    Install local Steel Browser runtime
-    --repo-url <url>                     Custom git repository URL
-  steel dev start                      Start local runtime
-    -p, --port <port>                    API port
-    -d, --docker-check                   Only verify Docker, then exit
-  steel dev stop                       Stop local runtime
-
-Other:
-  steel login                          Login to Steel (alias: auth)
-  steel logout                         Logout from Steel
-  steel config                         Show current configuration
-  steel doctor                         Check environment, auth, and connectivity
-    --preflight                          Only check auth and API (fast, for agents)
-  steel forge [template] [-n <name>]   Scaffold a new project from a template
-  steel update                         Update to latest version
-  steel cache [-c]                     Manage CLI cache (-c to clean)
-  steel completion <shell>             Generate shell completion script (bash, zsh, fish, powershell, elvish)
-
-Environment:
-  STEEL_API_KEY                        API key for Steel (overrides login)
-  STEEL_API_URL                        Steel API endpoint
-  STEEL_BROWSER_API_URL                Steel Browser API endpoint
-  STEEL_LOCAL_API_URL                  Local runtime API endpoint
-  STEEL_CONFIG_DIR                     Custom config directory
-  STEEL_TELEMETRY_HOST                 PostHog ingest host override
-  STEEL_TELEMETRY_DISABLED             Disable built-in telemetry for this machine/session
-  STEEL_FORCE_TTY                      Force text output when piped (disable auto-JSON)
-  NO_COLOR                             Disable colored output
-
-Examples:
-  steel init
-  steel init --agent
-  steel scrape https://example.com
-  steel scrape https://example.com --format html,markdown
-  steel screenshot https://example.com -f
-  steel browser start --session my-session
-  steel browser navigate https://example.com
-  steel browser snapshot -i
-  steel browser click e5
-  steel browser fill e3 \"user@example.com\"
-  steel browser click \"button#submit\" --diff
-  steel browser type \"textarea\" \"Hello world\" --clear
-  steel browser get text \"h1\"
-  steel browser is visible \".modal\"
-  steel browser wait --text \"Success\" --timeout 5000
-  steel browser batch \"fill e3 Seoul\" \"click e5\" \"snapshot -i\"
-  steel browser screenshot --full
-  steel browser eval \"document.title\"
-  steel browser tab new https://example.com
-  steel browser stop --session my-session";
+pub fn parse() -> Cli {
+    let root = Cli::command();
+    let help = long_help(&root);
+    let mut matches = root.after_long_help(help).get_matches();
+    Cli::from_arg_matches_mut(&mut matches).unwrap_or_else(|err| err.exit())
+}
 
 #[derive(Parser)]
 #[command(
@@ -247,7 +88,6 @@ Examples:
     version,
     about = "Steel CLI - browser automation for AI agents",
     long_about = "Steel CLI - browser automation for AI agents",
-    after_long_help = LONG_HELP,
     styles = Styles::plain(),
 )]
 pub struct Cli {
@@ -443,6 +283,16 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn long_help_examples_parse() {
+        for example in EXAMPLES {
+            let args = browser::batch::split_command_str(example);
+            if let Err(err) = Cli::try_parse_from(&args) {
+                panic!("{example}: {err}");
+            }
+        }
     }
 
     #[tokio::test]
