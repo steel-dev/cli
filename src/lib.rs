@@ -7,5 +7,5 @@ mod config;
 mod telemetry;
 mod util;
 
-pub use commands::{Cli, run};
+pub use commands::{Cli, parse, run};
 pub use util::output::handle_error;

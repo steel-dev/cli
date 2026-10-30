@@ -65,8 +65,8 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
   URLs with sensitive query keys redacted.
 - `steel scrape`, `steel screenshot`, and `steel pdf` share local/cloud endpoint
   resolution conventions with browser lifecycle commands.
-- `steel scrape` defaults to markdown-first output for token efficiency; use
-  `--raw` to print the full API JSON payload.
+- `steel scrape` prints markdown by default for token efficiency; use `--json`
+  to print the full API response.
 
 ## Core Config Paths
 

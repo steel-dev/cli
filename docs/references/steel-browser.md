@@ -142,7 +142,6 @@ Main flags:
 - `--task-id <id>`
 - `--local`
 - `--api-url <url>`
-- `--raw`
 
 API mapping:
 
