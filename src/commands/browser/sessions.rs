@@ -4,7 +4,6 @@ use serde_json::json;
 use crate::api::client::SteelClient;
 use crate::api::session::Session;
 use crate::browser::state::{self, BrowserSession};
-use crate::config::auth;
 use crate::util::output;
 
 #[derive(Parser)]
@@ -12,12 +11,12 @@ pub struct Args {}
 
 pub async fn run(_args: Args) -> anyhow::Result<()> {
     let client = SteelClient::new()?;
-    let auth = auth::resolve_auth();
 
     let mut sessions: Vec<(BrowserSession, String)> = Vec::new();
     for session in state::list() {
         match client
-            .cli_get_session(&session.api_url, session.mode, &auth, &session.id)
+            .at(&session.api_url, session.mode)
+            .cli_get_session(&session.id)
             .await
             .map(Session::parse)
         {

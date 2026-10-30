@@ -161,36 +161,20 @@ fn build_create_body(options: &CreateSessionOptions) -> Value {
 }
 
 impl SteelClient {
-    pub async fn create_session(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        options: &CreateSessionOptions,
-        auth: &Auth,
-    ) -> anyhow::Result<Session> {
+    pub async fn create_session(&self, options: &CreateSessionOptions) -> anyhow::Result<Session> {
         let body = build_create_body(options);
         let data = self
-            .request(
-                base_url,
-                mode,
-                reqwest::Method::POST,
-                "/sessions",
-                Some(body),
-                auth,
-            )
+            .request(reqwest::Method::POST, "/sessions", Some(body))
             .await?;
         Session::parse(data)
     }
 
     pub async fn solve_captcha(
         &self,
-        base_url: &str,
-        mode: ApiMode,
         session_id: &str,
         page_id: Option<&str>,
         url: Option<&str>,
         task_id: Option<&str>,
-        auth: &Auth,
     ) -> Result<Value, ApiError> {
         let mut payload = json!({});
         let obj = payload.as_object_mut().unwrap();
@@ -215,23 +199,17 @@ impl SteelClient {
         }
 
         self.request(
-            base_url,
-            mode,
             reqwest::Method::POST,
             &format!("/sessions/{session_id}/captchas/solve"),
             Some(payload),
-            auth,
         )
         .await
     }
 
     pub async fn captcha_status(
         &self,
-        base_url: &str,
-        mode: ApiMode,
         session_id: &str,
         page_id: Option<&str>,
-        auth: &Auth,
     ) -> Result<Vec<Value>, ApiError> {
         let path = match page_id {
             Some(pid) if !pid.trim().is_empty() => {
@@ -241,9 +219,7 @@ impl SteelClient {
             _ => format!("/sessions/{session_id}/captchas/status"),
         };
 
-        let data = self
-            .request(base_url, mode, reqwest::Method::GET, &path, None, auth)
-            .await?;
+        let data = self.request(reqwest::Method::GET, &path, None).await?;
 
         if let Some(arr) = data.as_array() {
             return Ok(arr.iter().filter(|v| v.is_object()).cloned().collect());
@@ -430,11 +406,12 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    fn test_auth() -> Auth {
-        Auth {
+    fn client(server: &MockServer) -> SteelClient {
+        let auth = Auth {
             api_key: Some("test-key".into()),
             source: AuthSource::Env,
-        }
+        };
+        SteelClient::with(server.uri(), ApiMode::Local, auth).unwrap()
     }
 
     #[tokio::test]
@@ -450,14 +427,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = SteelClient::new().unwrap();
-        let session = client
-            .create_session(
-                &server.uri(),
-                ApiMode::Local,
-                &CreateSessionOptions::default(),
-                &test_auth(),
-            )
+        let session = client(&server)
+            .create_session(&CreateSessionOptions::default())
             .await
             .unwrap();
 
@@ -476,11 +447,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = SteelClient::new().unwrap();
-        let err = client
-            .cli_get_session(&server.uri(), ApiMode::Local, &test_auth(), "s1")
-            .await
-            .unwrap_err();
+        let err = client(&server).cli_get_session("s1").await.unwrap_err();
 
         let msg = err.to_string();
         assert!(msg.contains("403"), "expected 403 in: {msg}");
@@ -500,11 +467,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = SteelClient::new().unwrap();
-        let err = client
-            .cli_get_session(&server.uri(), ApiMode::Local, &test_auth(), "gone")
-            .await
-            .unwrap_err();
+        let err = client(&server).cli_get_session("gone").await.unwrap_err();
 
         assert!(err.is_not_found());
     }

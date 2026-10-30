@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use serde_json::json;
 
 use crate::api::client::SteelClient;
-use crate::util::{api, output};
+use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -116,7 +116,6 @@ pub async fn run(command: Command) -> anyhow::Result<()> {
 }
 
 async fn run_list(args: ListArgs) -> anyhow::Result<()> {
-    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut query_params = Vec::new();
@@ -134,14 +133,7 @@ async fn run_list(args: ListArgs) -> anyhow::Result<()> {
     };
 
     let data = client
-        .request(
-            &base_url,
-            mode,
-            reqwest::Method::GET,
-            &path,
-            None,
-            &auth_info,
-        )
+        .request(reqwest::Method::GET, &path, None)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -179,7 +171,6 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --password"))?;
 
-    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut value = json!({
@@ -211,14 +202,7 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
     }
 
     let result = client
-        .request(
-            &base_url,
-            mode,
-            reqwest::Method::POST,
-            "/credentials",
-            Some(body),
-            &auth_info,
-        )
+        .request(reqwest::Method::POST, "/credentials", Some(body))
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -256,7 +240,6 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --origin"))?;
 
-    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut body = json!({"origin": origin});
@@ -300,14 +283,7 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
     }
 
     let result = client
-        .request(
-            &base_url,
-            mode,
-            reqwest::Method::PUT,
-            "/credentials",
-            Some(body),
-            &auth_info,
-        )
+        .request(reqwest::Method::PUT, "/credentials", Some(body))
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
@@ -338,7 +314,6 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --origin"))?;
 
-    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut body = json!({"origin": origin});
@@ -350,14 +325,7 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
     }
 
     client
-        .request(
-            &base_url,
-            mode,
-            reqwest::Method::DELETE,
-            "/credentials",
-            Some(body),
-            &auth_info,
-        )
+        .request(reqwest::Method::DELETE, "/credentials", Some(body))
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 

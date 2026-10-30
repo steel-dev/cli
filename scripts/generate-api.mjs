@@ -218,12 +218,7 @@ ${queryPushes}
 }
 
 function methodArgs(operation) {
-  const args = [
-    "&self",
-    "base_url: &str",
-    "mode: ApiMode",
-    "auth: &Auth",
-  ];
+  const args = ["&self"];
   if (operation.pathParams.some((parameter) => parameter.name === "id")) {
     args.push("session_id: &str");
   }
@@ -248,15 +243,8 @@ function renderClientMethod(operation) {
   return `    pub async fn cli_${snakeCase(operation.id)}(
         ${methodArgs(operation)},
     ) -> Result<Value, ApiError> {
-        self.request(
-            base_url,
-            mode,
-            reqwest::Method::${operation.method},
-            ${requestPath},
-            None,
-            auth,
-        )
-        .await
+        self.request(reqwest::Method::${operation.method}, ${requestPath}, None)
+            .await
     }`;
 }
 
@@ -317,8 +305,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::client::{ApiError, SteelClient};
-use crate::config::auth::Auth;
-use crate::config::settings::ApiMode;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct OperationMetadata {

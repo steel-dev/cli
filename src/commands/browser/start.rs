@@ -5,10 +5,8 @@ use crate::api::client::SteelClient;
 use crate::api::session::CreateSessionOptions;
 use crate::browser::profile_store;
 use crate::browser::state::{self, BrowserSession};
-use crate::config::auth::Auth;
-use crate::config::settings::ApiMode;
 use crate::status;
-use crate::util::{api, output};
+use crate::util::output;
 
 pub const DEFAULT_INACTIVITY_TIMEOUT_MS: u64 = 600_000;
 
@@ -75,18 +73,16 @@ fn now_ms() -> Option<u64> {
 
 pub async fn create(
     client: &SteelClient,
-    mode: ApiMode,
-    base_url: &str,
-    auth: &Auth,
     name: &str,
     options: &CreateSessionOptions,
 ) -> anyhow::Result<(BrowserSession, Option<String>)> {
-    let session = client.create_session(base_url, mode, options, auth).await?;
+    let session = client.create_session(options).await?;
+    let mode = client.mode();
     let mut created = BrowserSession::new(
         name.to_string(),
         session.id.clone(),
         mode,
-        base_url.to_string(),
+        client.base_url().to_string(),
     );
     created.live_url = session.viewer_url(mode);
     created.profile_id = session.profile_id.clone();
@@ -96,12 +92,10 @@ pub async fn create(
         .or(options.inactivity_timeout_ms);
     created.created_at_ms = session.created_at_ms().or_else(now_ms);
     state::save(&created)?;
-    Ok((created, session.connect_url(mode, auth)))
+    Ok((created, session.connect_url(mode, client.auth())))
 }
 
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
-
     let session_name = session.unwrap_or("default").to_string();
     if state::looks_like_session_id(&session_name) {
         anyhow::bail!(
@@ -139,7 +133,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
 
     if let Some(existing) = state::load(&session_name)? {
         status!("Replacing existing session \"{session_name}\"...");
-        if let Err(err) = super::stop::release(&client, &auth, &existing).await {
+        if let Err(err) = super::stop::release(&client, &existing).await {
             eprintln!("warning: could not release session {}: {err}", existing.id);
             state::remove(&session_name)?;
         }
@@ -159,8 +153,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         credentials: args.credentials,
     };
 
-    let (created, connect_url) =
-        create(&client, mode, &base_url, &auth, &session_name, &options).await?;
+    let (created, connect_url) = create(&client, &session_name, &options).await?;
 
     if let Some(ref profile_name) = args.profile
         && let Some(ref returned_profile_id) = created.profile_id

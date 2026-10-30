@@ -15,7 +15,7 @@ use crate::api::generated::{
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
 use crate::status;
-use crate::util::{api, output};
+use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -184,20 +184,14 @@ pub async fn run(command: Command) -> Result<()> {
 }
 
 async fn run_list(args: ListArgs) -> Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
     let data = client
-        .cli_get_sessions(
-            &base_url,
-            mode,
-            &auth,
-            &GetSessionsQuery {
-                cursor_id: args.cursor_id,
-                limit: args.limit,
-                status: args.status,
-                project_id: None,
-            },
-        )
+        .cli_get_sessions(&GetSessionsQuery {
+            cursor_id: args.cursor_id,
+            limit: args.limit,
+            status: args.status,
+            project_id: None,
+        })
         .await?;
 
     if output::is_json() {
@@ -210,23 +204,19 @@ async fn run_list(args: ListArgs) -> Result<()> {
 
 async fn run_get(args: GetArgs) -> Result<()> {
     let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
-    let data = client
-        .cli_get_session(&base_url, mode, &auth, &session_id)
-        .await?;
+    let data = client.cli_get_session(&session_id).await?;
 
     output::success_data(data);
     Ok(())
 }
 
 async fn run_release(args: ReleaseArgs) -> Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     if args.all {
         let data = client
-            .cli_release_all_sessions(&base_url, mode, &auth, &ReleaseAllSessionsQuery::default())
+            .cli_release_all_sessions(&ReleaseAllSessionsQuery::default())
             .await?;
         if output::is_json() {
             output::success_data(data);
@@ -237,9 +227,7 @@ async fn run_release(args: ReleaseArgs) -> Result<()> {
     }
 
     let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
-    let data = client
-        .cli_release_session(&base_url, mode, &auth, &session_id)
-        .await?;
+    let data = client.cli_release_session(&session_id).await?;
 
     if output::is_json() {
         output::success_data(data);
@@ -259,24 +247,12 @@ async fn run_logs(args: LogsArgs, stream_kind: StreamKind, label: &str) -> Resul
         limit: args.limit,
         offset: args.offset,
     };
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
-    let data = client
-        .cli_get_session_logs(&base_url, mode, &auth, &session_id, &query)
-        .await?;
+    let data = client.cli_get_session_logs(&session_id, &query).await?;
 
     print_event_response(&data, label);
     if args.follow {
-        follow_if_live(
-            &client,
-            &base_url,
-            mode,
-            &auth,
-            &session_id,
-            stream_kind,
-            &data,
-        )
-        .await?;
+        follow_if_live(&client, &session_id, stream_kind, &data).await?;
     }
     Ok(())
 }
@@ -291,10 +267,9 @@ async fn run_agent_logs(args: LogsArgs) -> Result<()> {
         limit: args.limit,
         offset: args.offset,
     };
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
     let data = client
-        .cli_get_session_agent_logs(&base_url, mode, &auth, &session_id, &query)
+        .cli_get_session_agent_logs(&session_id, &query)
         .await?;
 
     print_event_response(&data, "agent logs");
@@ -309,24 +284,14 @@ async fn run_traces(args: TracesArgs) -> Result<()> {
         end_time: args.end_time,
         event_types: args.event_type,
     };
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
     let data = client
-        .cli_get_session_agent_traces(&base_url, mode, &auth, &session_id, &query)
+        .cli_get_session_agent_traces(&session_id, &query)
         .await?;
 
     print_event_response(&data, "traces");
     if args.follow {
-        follow_if_live(
-            &client,
-            &base_url,
-            mode,
-            &auth,
-            &session_id,
-            StreamKind::Traces,
-            &data,
-        )
-        .await?;
+        follow_if_live(&client, &session_id, StreamKind::Traces, &data).await?;
     }
     Ok(())
 }
@@ -347,15 +312,12 @@ fn resolve_session_id(session_id: Option<&str>, session_name: Option<&str>) -> R
 
 async fn follow_if_live(
     client: &SteelClient,
-    base_url: &str,
-    mode: ApiMode,
-    auth: &Auth,
     session_id: &str,
     stream_kind: StreamKind,
     historical: &Value,
 ) -> Result<()> {
     let session = client
-        .cli_get_session(base_url, mode, auth, session_id)
+        .cli_get_session(session_id)
         .await
         .unwrap_or_else(|_| json!({}));
 
@@ -367,7 +329,13 @@ async fn follow_if_live(
     }
 
     let mut seen = event_ids(historical);
-    let url = build_ws_url(base_url, mode, auth, stream_kind, session_id)?;
+    let url = build_ws_url(
+        client.base_url(),
+        client.mode(),
+        client.auth(),
+        stream_kind,
+        session_id,
+    )?;
     status!("Following live session {session_id}. Press Ctrl-C to stop.");
 
     let (ws_stream, _) = connect_async(url.as_str()).await.with_context(|| {
