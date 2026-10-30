@@ -60,9 +60,8 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 ## Global Conventions
 
 - `--help` and `--version` are available globally.
-- Browser command paths skip auto-update checks for lower command latency.
-- `steel browser start` and `steel browser sessions` emit display-safe connect
-  URLs with sensitive query keys redacted.
+- `steel browser start` prints a display-safe connect URL with sensitive query
+  keys redacted.
 - `steel scrape`, `steel screenshot`, and `steel pdf` share local/cloud endpoint
   resolution conventions with browser lifecycle commands.
 - `steel scrape` defaults to markdown-first output for token efficiency; use
