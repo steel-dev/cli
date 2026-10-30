@@ -247,7 +247,7 @@ fn looks_like_cookbook_pin(name: &OsStr) -> bool {
 
 fn load_recipes(cookbook: &Path) -> anyhow::Result<Vec<Recipe>> {
     let yaml = std::fs::read_to_string(cookbook.join("registry.yaml"))?;
-    let recipes: Vec<Recipe> = serde_yaml::from_str(&yaml)?;
+    let recipes: Vec<Recipe> = serde_norway::from_str(&yaml)?;
     Ok(recipes)
 }
 

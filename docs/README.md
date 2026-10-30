@@ -5,17 +5,14 @@ This folder contains both generated command docs and hand-maintained migration/r
 ## Docs Map
 
 - `cli-reference.md`: auto-generated CLI command reference.
-- `browser-compat.md`: Steel Browser compatibility contract and caveats.
-- `migration-agent-browser.md`: migration guide from `agent-browser` to `steel browser`.
-- `upstream-sync.md`: maintainer guide for vendored runtime updates.
-- `references/`: stable quick-reference docs and synced upstream command catalogs.
+- `references/`: stable quick-reference docs.
   - Profile commands and persistence are documented in `references/steel-browser.md` and `references/steel-cli.md`.
 
 ## References Subfolder
 
 - `references/steel-cli.md`: high-level CLI behavior and command-group reference.
-- `references/steel-browser.md`: browser modes, lifecycle contracts, passthrough behavior.
-- `references/steel-browser-commands.md`: synced/transformed upstream command catalog for `steel browser`.
+- `references/steel-browser.md`: browser modes, lifecycle contracts, and how commands run.
+- `references/steel-browser-commands.md`: `steel browser` command catalog.
 
 ## Regenerating Generated Docs
 

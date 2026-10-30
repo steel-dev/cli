@@ -13,11 +13,11 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 
 ### Browser Commands
 
-- `steel browser start`: create or attach a Steel browser session.
+- `steel browser start`: create a Steel browser session.
 - `steel browser stop`: stop active session(s).
-- `steel browser sessions`: list session metadata as JSON.
+- `steel browser sessions`: list local sessions that are still live.
 - `steel browser live`: print the active session live-view URL.
-- `steel browser <inherited-command>`: pass through to vendored `agent-browser` runtime.
+- `steel browser <action>`: run a command (open, snapshot, click, fill, …) through the session's commands API. See [./steel-browser-commands.md](./steel-browser-commands.md).
 
 ### Profile Commands
 
@@ -61,7 +61,6 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 
 - `--help` and `--version` are available globally.
 - Browser command paths skip auto-update checks for lower command latency.
-- Command help for inherited browser commands is delegated to the vendored browser runtime.
 - `steel browser start` and `steel browser sessions` emit display-safe connect
   URLs with sensitive query keys redacted.
 - `steel scrape`, `steel screenshot`, and `steel pdf` share local/cloud endpoint
@@ -74,7 +73,7 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - Config directory: `~/.config/steel`
 - Main config: `~/.config/steel/config.json`
 - Telemetry state: `~/.config/steel/telemetry.json`
-- Browser session state: `~/.config/steel/browser-session-state.json`
+- Browser session state: `~/.config/steel/browser-sessions/<name>.json`
 - Profile metadata: `~/.config/steel/profiles/<name>.json`
 
 On the first run where telemetry is enabled, the CLI prints a one-time notice to stderr describing what is collected and how to opt out. The notice is suppressed in JSON/non-TTY output.
@@ -91,7 +90,7 @@ Telemetry can be disabled persistently in `config.json` with:
 
 ## Environment Variables (Common)
 
-- `STEEL_API_KEY`: cloud auth for session API and browser runtime.
+- `STEEL_API_KEY`: cloud auth for the session and commands APIs.
 - `STEEL_API_URL`: cloud API endpoint override.
 - `STEEL_BROWSER_API_URL`: canonical self-hosted local endpoint override.
 - `STEEL_LOCAL_API_URL`: backward-compatible self-hosted alias.
@@ -103,6 +102,5 @@ Telemetry can be disabled persistently in `config.json` with:
 ## Key References
 
 - [Steel Browser Reference](./steel-browser.md)
+- [Steel Browser Commands](./steel-browser-commands.md)
 - [Agent Troubleshooting Playbook](./agent-troubleshooting.md)
-- [Browser Compatibility](../browser-compat.md)
-- [agent-browser Migration Guide](../migration-agent-browser.md)

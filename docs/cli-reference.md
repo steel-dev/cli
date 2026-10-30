@@ -25,6 +25,8 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel browser fill](#steel-browser-fill)
 - [steel browser type](#steel-browser-type)
 - [steel browser press](#steel-browser-press)
+- [steel browser keydown](#steel-browser-keydown)
+- [steel browser keyup](#steel-browser-keyup)
 - [steel browser hover](#steel-browser-hover)
 - [steel browser focus](#steel-browser-focus)
 - [steel browser check](#steel-browser-check)
@@ -33,23 +35,25 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel browser clear](#steel-browser-clear)
 - [steel browser selectall](#steel-browser-selectall)
 - [steel browser scroll](#steel-browser-scroll)
-- [steel browser scrollintoview](#steel-browser-scrollintoview)
-- [steel browser setvalue](#steel-browser-setvalue)
+- [steel browser drag](#steel-browser-drag)
+- [steel browser upload](#steel-browser-upload)
+- [steel browser mouse](#steel-browser-mouse)
 - [steel browser snapshot](#steel-browser-snapshot)
 - [steel browser screenshot](#steel-browser-screenshot)
+- [steel browser pdf](#steel-browser-pdf)
 - [steel browser eval](#steel-browser-eval)
 - [steel browser find](#steel-browser-find)
 - [steel browser content](#steel-browser-content)
 - [steel browser get](#steel-browser-get)
 - [steel browser get text](#steel-browser-get-text)
 - [steel browser get html](#steel-browser-get-html)
+- [steel browser get markdown](#steel-browser-get-markdown)
 - [steel browser get value](#steel-browser-get-value)
 - [steel browser get attr](#steel-browser-get-attr)
 - [steel browser get url](#steel-browser-get-url)
 - [steel browser get title](#steel-browser-get-title)
 - [steel browser get count](#steel-browser-get-count)
 - [steel browser get box](#steel-browser-get-box)
-- [steel browser get styles](#steel-browser-get-styles)
 - [steel browser is](#steel-browser-is)
 - [steel browser is visible](#steel-browser-is-visible)
 - [steel browser is enabled](#steel-browser-is-enabled)
@@ -60,29 +64,9 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel browser tab new](#steel-browser-tab-new)
 - [steel browser tab switch](#steel-browser-tab-switch)
 - [steel browser tab close](#steel-browser-tab-close)
-- [steel browser cookies](#steel-browser-cookies)
-- [steel browser cookies set](#steel-browser-cookies-set)
-- [steel browser cookies clear](#steel-browser-cookies-clear)
-- [steel browser storage](#steel-browser-storage)
-- [steel browser storage local](#steel-browser-storage-local)
-- [steel browser storage local set](#steel-browser-storage-local-set)
-- [steel browser storage local clear](#steel-browser-storage-local-clear)
-- [steel browser storage session](#steel-browser-storage-session)
-- [steel browser storage session set](#steel-browser-storage-session-set)
-- [steel browser storage session clear](#steel-browser-storage-session-clear)
-- [steel browser drag](#steel-browser-drag)
-- [steel browser upload](#steel-browser-upload)
-- [steel browser highlight](#steel-browser-highlight)
-- [steel browser set](#steel-browser-set)
-- [steel browser set viewport](#steel-browser-set-viewport)
-- [steel browser set geo](#steel-browser-set-geo)
-- [steel browser set offline](#steel-browser-set-offline)
-- [steel browser set headers](#steel-browser-set-headers)
-- [steel browser set useragent](#steel-browser-set-useragent)
-- [steel browser bringtofront](#steel-browser-bringtofront)
-- [steel browser diff](#steel-browser-diff)
-- [steel browser diff snapshot](#steel-browser-diff-snapshot)
-- [steel browser diff screenshot](#steel-browser-diff-screenshot)
+- [steel browser dialog](#steel-browser-dialog)
+- [steel browser status](#steel-browser-status)
+- [steel browser cancel](#steel-browser-cancel)
 - [steel browser close](#steel-browser-close)
 - [steel sessions](#steel-sessions)
 - [steel sessions list](#steel-sessions-list)
@@ -200,53 +184,52 @@ steel browser
 
 ### Subcommands
 
-- `start`: Create or attach to a browser session
+- `start`: Create a browser session
 - `stop`: Stop a browser session
 - `sessions`: List active browser sessions
 - `live`: Open the live session viewer
 - `captcha`: CAPTCHA management
-- `batch`: Run multiple browser commands in a single invocation
+- `batch`: Run several browser commands in one request
 - `navigate`: Navigate to a URL
 - `back`: Navigate back in history
 - `forward`: Navigate forward in history
 - `reload`: Reload the current page
 - `click`: Click an element
 - `dblclick`: Double-click an element
-- `fill`: Fill an input field (clears existing value first)
-- `type`: Type text into an element (appends to existing value)
-- `press`: Press a keyboard key
+- `fill`: Fill an input field (replaces the current value)
+- `type`: Type text into an element key by key (appends to the current value)
+- `press`: Press a key or chord (Enter, Escape, Tab, Control+a)
+- `keydown`: Hold a key down until keyup
+- `keyup`: Release a key held with keydown
 - `hover`: Hover over an element
 - `focus`: Focus an element
-- `check`: Check a checkbox or radio button
-- `uncheck`: Uncheck a checkbox
-- `select`: Select option(s) from a dropdown
+- `check`: Check a checkbox, radio button, or switch
+- `uncheck`: Uncheck a checkbox or switch
+- `select`: Select option(s) in a <select> element
 - `clear`: Clear an input field
 - `selectall`: Select all text in an input
 - `scroll`: Scroll the page or an element
-- `scrollintoview`: Scroll an element into view
-- `setvalue`: Set the value of an input element (without triggering events)
-- `snapshot`: Take an accessibility tree snapshot
+- `drag`: Drag an element onto another
+- `upload`: Upload files to a file input
+- `mouse`: Mouse input at a point, for canvases and maps
+- `snapshot`: Take an accessibility tree snapshot with element refs
 - `screenshot`: Take a screenshot
-- `eval`: Evaluate JavaScript in the page
-- `find`: Find all elements matching a selector
-- `content`: Get the page HTML content
-- `get`: Get information about elements or page
+- `pdf`: Save the page as a PDF (headless sessions only)
+- `eval`: Run JavaScript in the page and print its value
+- `find`: Find elements and print their refs
+- `content`: Get the page HTML
+- `get`: Get information about elements or the page
 - `is`: Check element state
-- `wait`: Wait for a condition (text, selector, URL, function, or timeout)
-- `tab`: Manage tabs
-- `cookies`: Manage browser cookies
-- `storage`: Manage browser storage (localStorage/sessionStorage)
-- `drag`: Drag and drop from one element to another
-- `upload`: Upload files to a file input element
-- `highlight`: Visually highlight an element
-- `set`: Configure browser settings (viewport, geolocation, etc.)
-- `bringtofront`: Bring the browser window to the foreground
-- `diff`: Compare snapshots or screenshots
+- `wait`: Wait for an element, text, URL, load state, download, or a fixed time
+- `tab`: List, open, switch, or close tabs
+- `dialog`: Accept or dismiss an open dialog
+- `status`: Wait for a command that is still running
+- `cancel`: Stop a command that is still running
 - `close`: Close the browser session
 
 ## steel browser start
 
-Create or attach to a browser session
+Create a browser session
 
 ### Usage
 
@@ -259,7 +242,7 @@ steel browser start
 - `--stealth` (boolean, optional): Enable stealth mode (humanize interactions + auto CAPTCHA)
 - `-p, --proxy` (string, optional): Use a residential proxy
 - `--session-timeout` (string, optional): Session timeout in milliseconds (create-time only)
-- `--inactivity-timeout` (string, optional): Inactivity timeout in milliseconds: release the session when no CDP command or remote input is received for this long. Defaults to 120000 (2 minutes); pass 0 to disable (create-time only)
+- `--inactivity-timeout` (string, optional): Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
 - `--session-solve-captcha` (boolean, optional): Enable manual CAPTCHA solving on new sessions (create-time only)
 - `--profile` (string, optional): Named profile to persist browser state across sessions
 - `--update-profile` (boolean, optional): Save session state back to the profile when the session ends
@@ -352,7 +335,7 @@ steel browser captcha status
 
 ## steel browser batch
 
-Run multiple browser commands in a single invocation
+Run several browser commands in one request
 
 ### Usage
 
@@ -362,8 +345,7 @@ steel browser batch
 
 ### Parameters
 
-- `commands` (string[], required): Commands to execute (each as a quoted string, e.g. "click @e3")
-- `--bail` (boolean, optional): Stop on first error
+- `commands` (string[], required): Commands to run in order (each as a quoted string, e.g. "click e3"). They stop at the first failure
 
 ## steel browser navigate
 
@@ -380,8 +362,7 @@ Aliases: `open`, `goto`
 ### Parameters
 
 - `url` (string, required): URL to navigate to
-- `--wait-until` (string, optional): Wait condition: load, domcontentloaded, networkidle
-- `--header` (string[], optional): Set request header (repeatable, format: "Key: Value")
+- `--wait-until` (enum, optional): Wait condition: load, domcontentloaded, networkidle
 
 ## steel browser back
 
@@ -425,10 +406,8 @@ steel browser click
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
-- `--button` (string, optional): Mouse button: left, right, middle
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 - `--count` (string, optional): Number of clicks (2 for double-click)
-- `--new-tab` (boolean, optional): Open the link in a new tab instead of clicking
 
 ## steel browser dblclick
 
@@ -442,11 +421,11 @@ steel browser dblclick
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser fill
 
-Fill an input field (clears existing value first)
+Fill an input field (replaces the current value)
 
 ### Usage
 
@@ -456,12 +435,12 @@ steel browser fill
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref
+- `selector` (string, required): Element ref or CSS selector
 - `value` (string[], optional): Value to fill
 
 ## steel browser type
 
-Type text into an element (appends to existing value)
+Type text into an element key by key (appends to the current value)
 
 ### Usage
 
@@ -471,14 +450,14 @@ steel browser type
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref
+- `selector` (string, required): Element ref or CSS selector
 - `text` (string[], optional): Text to type
 - `--clear` (boolean, optional): Clear the field before typing
-- `--delay` (string, optional): Delay between keystrokes in milliseconds
+- `--delay` (string, optional): Delay between keystrokes in milliseconds (at most 1000)
 
 ## steel browser press
 
-Press a keyboard key
+Press a key or chord (Enter, Escape, Tab, Control+a)
 
 ### Usage
 
@@ -492,6 +471,34 @@ Aliases: `key`
 
 - `key` (string, required): Key to press (e.g. Enter, Escape, Tab, Control+a)
 
+## steel browser keydown
+
+Hold a key down until keyup
+
+### Usage
+
+```bash
+steel browser keydown
+```
+
+### Parameters
+
+- `key` (string, required): Key name (e.g. Shift, Control, ArrowDown)
+
+## steel browser keyup
+
+Release a key held with keydown
+
+### Usage
+
+```bash
+steel browser keyup
+```
+
+### Parameters
+
+- `key` (string, required): Key name (e.g. Shift, Control, ArrowDown)
+
 ## steel browser hover
 
 Hover over an element
@@ -504,7 +511,7 @@ steel browser hover
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser focus
 
@@ -518,11 +525,11 @@ steel browser focus
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser check
 
-Check a checkbox or radio button
+Check a checkbox, radio button, or switch
 
 ### Usage
 
@@ -532,11 +539,11 @@ steel browser check
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser uncheck
 
-Uncheck a checkbox
+Uncheck a checkbox or switch
 
 ### Usage
 
@@ -546,11 +553,11 @@ steel browser uncheck
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser select
 
-Select option(s) from a dropdown
+Select option(s) in a <select> element
 
 ### Usage
 
@@ -560,8 +567,8 @@ steel browser select
 
 ### Parameters
 
-- `selector` (string, required): Select element selector or ref
-- `values` (string[], optional): Option value(s) to select
+- `selector` (string, required): Select element ref or CSS selector
+- `values` (string[], optional): Option value(s) or label(s) to select
 
 ## steel browser clear
 
@@ -575,7 +582,7 @@ steel browser clear
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser selectall
 
@@ -589,7 +596,7 @@ steel browser selectall
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser scroll
 
@@ -603,42 +610,63 @@ steel browser scroll
 
 ### Parameters
 
-- `direction` (string, optional): Direction: up, down, left, right
+- `direction` (enum, optional): Direction: up, down, left, right (default: down)
 - `amount` (string, optional): Scroll amount in pixels (default: 300)
-- `-s, --selector` (string, optional): Element selector to scroll
+- `-s, --selector` (string, optional): Element to scroll instead of the page
 
-## steel browser scrollintoview
+## steel browser drag
 
-Scroll an element into view
-
-### Usage
-
-```bash
-steel browser scrollintoview
-```
-
-### Parameters
-
-- `selector` (string, required): Element selector or ref (e.g. @e1)
-
-## steel browser setvalue
-
-Set the value of an input element (without triggering events)
+Drag an element onto another
 
 ### Usage
 
 ```bash
-steel browser setvalue
+steel browser drag
 ```
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref
-- `value` (string[], optional): Value to set
+- `source` (string, required): Element to drag (ref or CSS selector)
+- `target` (string, required): Element to drop on (ref or CSS selector)
+
+## steel browser upload
+
+Upload files to a file input
+
+### Usage
+
+```bash
+steel browser upload
+```
+
+### Parameters
+
+- `selector` (string, required): File input ref or CSS selector
+- `files` (string[], optional): Local files to upload, or names of files already in the session
+
+## steel browser mouse
+
+Mouse input at a point, for canvases and maps
+
+### Usage
+
+```bash
+steel browser mouse
+```
+
+### Parameters
+
+- `action` (enum, required): move, down, up, click, or wheel
+- `x` (string, optional): X in CSS pixels of the visible page (needed for move, click, and wheel)
+- `y` (string, optional): Y in CSS pixels of the visible page (needed for move, click, and wheel)
+- `--button` (enum, optional): Mouse button: left, right, middle
+- `--clicks` (string, optional): Click count for click (1 to 3)
+- `--dx` (string, optional): Horizontal wheel delta
+- `--dy` (string, optional): Vertical wheel delta
 
 ## steel browser snapshot
 
-Take an accessibility tree snapshot
+Take an accessibility tree snapshot with element refs
 
 ### Usage
 
@@ -649,10 +677,8 @@ steel browser snapshot
 ### Parameters
 
 - `-i, --interactive` (boolean, optional): Show only interactive elements
-- `-s, --selector` (string, optional): Restrict snapshot to a subtree
-- `-c, --compact` (boolean, optional): Use compact output format
+- `-c, --compact` (boolean, optional): Keep only lines with refs or values, and their ancestors
 - `-d, --max-depth` (string, optional): Maximum nesting depth
-- `-u, --urls` (boolean, optional): Include URLs in the snapshot
 
 ## steel browser screenshot
 
@@ -668,14 +694,29 @@ steel browser screenshot
 
 - `-f, --full-page` (boolean, optional): Capture the full scrollable page
 - `-o, --output` (string, optional): Output file path
-- `--selector` (string, optional): Restrict screenshot to an element
-- `--format` (string, optional): Image format: png, jpeg, webp
+- `--selector` (string, optional): Capture one element (ref or CSS selector)
+- `--format` (enum, optional): Image format: png, jpeg, webp (default: from the output extension)
 - `--quality` (string, optional): JPEG/WebP quality (0-100)
-- `--annotate` (boolean, optional): Annotate interactive elements on the screenshot
+
+## steel browser pdf
+
+Save the page as a PDF (headless sessions only)
+
+### Usage
+
+```bash
+steel browser pdf
+```
+
+### Parameters
+
+- `-o, --output` (string, optional): Output file path
+- `--landscape` (boolean, optional): Use landscape orientation
+- `--print-background` (boolean, optional): Print background graphics
 
 ## steel browser eval
 
-Evaluate JavaScript in the page
+Run JavaScript in the page and print its value
 
 ### Usage
 
@@ -685,11 +726,11 @@ steel browser eval
 
 ### Parameters
 
-- `script` (string, required): JavaScript expression to evaluate
+- `script` (string, required): JavaScript expression or function body; its value is printed
 
 ## steel browser find
 
-Find all elements matching a selector
+Find elements and print their refs
 
 ### Usage
 
@@ -699,11 +740,14 @@ steel browser find
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `value` (string, required): What to look for (a CSS selector unless --by says otherwise)
+- `--by` (enum, optional): Locator kind
+- `--name` (string, optional): Accessible name, with --by role
+- `--exact` (boolean, optional): Match the text exactly instead of as a case-insensitive substring
 
 ## steel browser content
 
-Get the page HTML content
+Get the page HTML
 
 ### Usage
 
@@ -713,7 +757,7 @@ steel browser content
 
 ## steel browser get
 
-Get information about elements or page
+Get information about elements or the page
 
 ### Usage
 
@@ -723,19 +767,19 @@ steel browser get
 
 ### Subcommands
 
-- `text`: Get element text content
-- `html`: Get element inner HTML
-- `value`: Get input/textarea value
-- `attr`: Get element attribute value
-- `url`: Get current page URL
-- `title`: Get current page title
+- `text`: Get the visible text of an element
+- `html`: Get the inner HTML of an element
+- `markdown`: Get the main content of an element or the page as Markdown
+- `value`: Get an input or textarea value
+- `attr`: Get an element attribute
+- `url`: Get the page URL
+- `title`: Get the page title
 - `count`: Count matching elements
-- `box`: Get element bounding box
-- `styles`: Get element CSS styles
+- `box`: Get an element's bounding box
 
 ## steel browser get text
 
-Get element text content
+Get the visible text of an element
 
 ### Usage
 
@@ -745,11 +789,11 @@ steel browser get text
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser get html
 
-Get element inner HTML
+Get the inner HTML of an element
 
 ### Usage
 
@@ -759,11 +803,25 @@ steel browser get html
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
+
+## steel browser get markdown
+
+Get the main content of an element or the page as Markdown
+
+### Usage
+
+```bash
+steel browser get markdown
+```
+
+### Parameters
+
+- `selector` (string, optional): Element ref (e.g. e5) or CSS selector; the whole page if omitted
 
 ## steel browser get value
 
-Get input/textarea value
+Get an input or textarea value
 
 ### Usage
 
@@ -773,11 +831,11 @@ steel browser get value
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser get attr
 
-Get element attribute value
+Get an element attribute
 
 ### Usage
 
@@ -787,12 +845,12 @@ steel browser get attr
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref
+- `selector` (string, required): Element ref or CSS selector
 - `attribute` (string, required): Attribute name
 
 ## steel browser get url
 
-Get current page URL
+Get the page URL
 
 ### Usage
 
@@ -802,7 +860,7 @@ steel browser get url
 
 ## steel browser get title
 
-Get current page title
+Get the page title
 
 ### Usage
 
@@ -822,11 +880,11 @@ steel browser get count
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser get box
 
-Get element bounding box
+Get an element's bounding box
 
 ### Usage
 
@@ -836,22 +894,7 @@ steel browser get box
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
-
-## steel browser get styles
-
-Get element CSS styles
-
-### Usage
-
-```bash
-steel browser get styles
-```
-
-### Parameters
-
-- `selector` (string, required): Element selector or ref
-- `--property` (string[], optional): CSS property names to query (returns all computed styles if omitted)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser is
 
@@ -865,13 +908,13 @@ steel browser is
 
 ### Subcommands
 
-- `visible`: Check if element is visible
-- `enabled`: Check if element is enabled
-- `checked`: Check if element is checked
+- `visible`: Check if an element is visible
+- `enabled`: Check if an element is enabled
+- `checked`: Check if an element is checked
 
 ## steel browser is visible
 
-Check if element is visible
+Check if an element is visible
 
 ### Usage
 
@@ -881,11 +924,11 @@ steel browser is visible
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser is enabled
 
-Check if element is enabled
+Check if an element is enabled
 
 ### Usage
 
@@ -895,11 +938,11 @@ steel browser is enabled
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser is checked
 
-Check if element is checked
+Check if an element is checked
 
 ### Usage
 
@@ -909,11 +952,11 @@ steel browser is checked
 
 ### Parameters
 
-- `selector` (string, required): Element selector or ref (e.g. @e1)
+- `selector` (string, required): Element ref (e.g. e5) or CSS selector
 
 ## steel browser wait
 
-Wait for a condition (text, selector, URL, function, or timeout)
+Wait for an element, text, URL, load state, download, or a fixed time
 
 ### Usage
 
@@ -923,17 +966,19 @@ steel browser wait
 
 ### Parameters
 
-- `--timeout` (string, optional): Timeout in milliseconds
-- `-t, --text` (string, optional): Wait for text to appear on page
-- `--selector` (string, optional): Wait for a CSS selector
-- `--state` (string, optional): Selector state: visible, hidden, attached, detached
-- `-u, --url` (string, optional): Wait for URL to contain this string
-- `-f, --function` (string, optional): Wait for a JS function to return truthy
-- `-l, --load-state` (string, optional): Wait for load state: load, domcontentloaded, networkidle
+- `ms` (string, optional): Fixed time to wait in milliseconds (at most 30000)
+- `--timeout` (string, optional): Timeout in milliseconds (at most 50000)
+- `-t, --text` (string, optional): Wait for text to appear on the page
+- `--selector` (string, optional): Wait for an element (ref or CSS selector)
+- `--state` (enum, optional): Element state: visible, hidden, attached, detached
+- `-u, --url` (string, optional): Wait for the URL to contain this string (`*` matches anything)
+- `-l, --load-state` (enum, optional): Wait for a load state: load, domcontentloaded, networkidle
+- `--download` (boolean, optional): Wait for a download to finish and save it
+- `-o, --output` (string, optional): Where to save the download (default: its file name in the current directory)
 
 ## steel browser tab
 
-Manage tabs
+List, open, switch, or close tabs
 
 ### Usage
 
@@ -944,9 +989,9 @@ steel browser tab
 ### Subcommands
 
 - `list`: List open tabs
-- `new`: Open a new tab
-- `switch`: Switch to a tab by index
-- `close`: Close a tab (active tab if no index given)
+- `new`: Open a new tab and switch to it
+- `switch`: Switch to a tab
+- `close`: Close a tab (the current tab if omitted)
 
 ## steel browser tab list
 
@@ -960,7 +1005,7 @@ steel browser tab list
 
 ## steel browser tab new
 
-Open a new tab
+Open a new tab and switch to it
 
 ### Usage
 
@@ -974,7 +1019,7 @@ steel browser tab new
 
 ## steel browser tab switch
 
-Switch to a tab by index
+Switch to a tab
 
 ### Usage
 
@@ -984,11 +1029,11 @@ steel browser tab switch
 
 ### Parameters
 
-- `index` (string, required): Tab index to switch to
+- `tab` (string, required): Tab id from `tab list`, such as t2
 
 ## steel browser tab close
 
-Close a tab (active tab if no index given)
+Close a tab (the current tab if omitted)
 
 ### Usage
 
@@ -998,347 +1043,51 @@ steel browser tab close
 
 ### Parameters
 
-- `index` (string, optional): Tab index to close (closes active tab if omitted)
+- `tab` (string, optional): Tab id from `tab list`, such as t2
 
-## steel browser cookies
+## steel browser dialog
 
-Manage browser cookies
-
-### Usage
-
-```bash
-steel browser cookies
-```
-
-### Subcommands
-
-- `set`: Set a cookie
-- `clear`: Clear all cookies
-
-## steel browser cookies set
-
-Set a cookie
+Accept or dismiss an open dialog
 
 ### Usage
 
 ```bash
-steel browser cookies set
+steel browser dialog
 ```
 
 ### Parameters
 
-- `name` (string, required): Cookie name
-- `value` (string, required): Cookie value
-- `--domain` (string, optional): Cookie domain
-- `--path` (string, optional): Cookie path
-- `--secure` (boolean, optional): Secure flag
-- `--http-only` (boolean, optional): HttpOnly flag
+- `action` (enum, required): accept or dismiss
+- `id` (string, optional): Dialog id such as d-2 (default: the last dialog the CLI saw)
+- `--text` (string, optional): Answer for a prompt dialog
 
-## steel browser cookies clear
+## steel browser status
 
-Clear all cookies
+Wait for a command that is still running
 
 ### Usage
 
 ```bash
-steel browser cookies clear
-```
-
-## steel browser storage
-
-Manage browser storage (localStorage/sessionStorage)
-
-### Usage
-
-```bash
-steel browser storage
-```
-
-### Subcommands
-
-- `local`: Manage localStorage
-- `session`: Manage sessionStorage
-
-## steel browser storage local
-
-Manage localStorage
-
-### Usage
-
-```bash
-steel browser storage local
-```
-
-### Subcommands
-
-- `set`: Set a storage value
-- `clear`: Clear all values
-
-## steel browser storage local set
-
-Set a storage value
-
-### Usage
-
-```bash
-steel browser storage local set
+steel browser status
 ```
 
 ### Parameters
 
-- `key` (string, required): Key to set
-- `value` (string, required): Value to set
+- `execution` (string, required): Execution id such as x-7
 
-## steel browser storage local clear
+## steel browser cancel
 
-Clear all values
-
-### Usage
-
-```bash
-steel browser storage local clear
-```
-
-## steel browser storage session
-
-Manage sessionStorage
+Stop a command that is still running
 
 ### Usage
 
 ```bash
-steel browser storage session
-```
-
-### Subcommands
-
-- `set`: Set a storage value
-- `clear`: Clear all values
-
-## steel browser storage session set
-
-Set a storage value
-
-### Usage
-
-```bash
-steel browser storage session set
+steel browser cancel
 ```
 
 ### Parameters
 
-- `key` (string, required): Key to set
-- `value` (string, required): Value to set
-
-## steel browser storage session clear
-
-Clear all values
-
-### Usage
-
-```bash
-steel browser storage session clear
-```
-
-## steel browser drag
-
-Drag and drop from one element to another
-
-### Usage
-
-```bash
-steel browser drag
-```
-
-### Parameters
-
-- `source` (string, required): Source element selector or ref
-- `target` (string, required): Target element selector or ref
-
-## steel browser upload
-
-Upload files to a file input element
-
-### Usage
-
-```bash
-steel browser upload
-```
-
-### Parameters
-
-- `selector` (string, required): File input element selector or ref
-- `files` (string[], optional): File paths to upload
-
-## steel browser highlight
-
-Visually highlight an element
-
-### Usage
-
-```bash
-steel browser highlight
-```
-
-### Parameters
-
-- `selector` (string, required): Element selector or ref (e.g. @e1)
-
-## steel browser set
-
-Configure browser settings (viewport, geolocation, etc.)
-
-### Usage
-
-```bash
-steel browser set
-```
-
-### Subcommands
-
-- `viewport`: Set viewport size
-- `geo`: Set geolocation
-- `offline`: Toggle offline mode
-- `headers`: Set extra HTTP headers (JSON string)
-- `useragent`: Set browser user agent string
-
-## steel browser set viewport
-
-Set viewport size
-
-### Usage
-
-```bash
-steel browser set viewport
-```
-
-### Parameters
-
-- `width` (string, required): Viewport width in pixels
-- `height` (string, required): Viewport height in pixels
-- `--scale` (string, optional): Device scale factor
-- `--mobile` (boolean, optional): Emulate mobile device
-
-## steel browser set geo
-
-Set geolocation
-
-### Usage
-
-```bash
-steel browser set geo
-```
-
-Aliases: `geolocation`
-
-### Parameters
-
-- `latitude` (string, required): Latitude
-- `longitude` (string, required): Longitude
-- `--accuracy` (string, optional): Accuracy in meters
-
-## steel browser set offline
-
-Toggle offline mode
-
-### Usage
-
-```bash
-steel browser set offline
-```
-
-### Parameters
-
-- `state` (string, required): "on" to enable offline mode, "off" to disable
-
-## steel browser set headers
-
-Set extra HTTP headers (JSON string)
-
-### Usage
-
-```bash
-steel browser set headers
-```
-
-### Parameters
-
-- `json` (string, required): JSON string of headers (e.g. '{"X-Key":"value"}')
-
-## steel browser set useragent
-
-Set browser user agent string
-
-### Usage
-
-```bash
-steel browser set useragent
-```
-
-Aliases: `ua`
-
-### Parameters
-
-- `user_agent` (string[], optional): User agent string
-
-## steel browser bringtofront
-
-Bring the browser window to the foreground
-
-### Usage
-
-```bash
-steel browser bringtofront
-```
-
-## steel browser diff
-
-Compare snapshots or screenshots
-
-### Usage
-
-```bash
-steel browser diff
-```
-
-### Subcommands
-
-- `snapshot`: Compare current snapshot against a baseline
-- `screenshot`: Compare current screenshot against a baseline image
-
-## steel browser diff snapshot
-
-Compare current snapshot against a baseline
-
-### Usage
-
-```bash
-steel browser diff snapshot
-```
-
-### Parameters
-
-- `-b, --baseline` (string, optional): Baseline snapshot text or file path
-- `-s, --selector` (string, optional): Restrict snapshot to a subtree
-- `-c, --compact` (boolean, optional): Use compact output format
-- `-d, --max-depth` (string, optional): Maximum nesting depth
-
-## steel browser diff screenshot
-
-Compare current screenshot against a baseline image
-
-### Usage
-
-```bash
-steel browser diff screenshot
-```
-
-### Parameters
-
-- `-b, --baseline` (string, required): Baseline image file path (required)
-- `-t, --threshold` (string, optional): Color difference threshold (0.0–1.0)
-- `-o, --output` (string, optional): Save diff image to this path
-- `-s, --selector` (string, optional): Restrict screenshot to an element
-- `--full-page` (boolean, optional): Capture the full scrollable page
+- `execution` (string, required): Execution id such as x-7
 
 ## steel browser close
 
@@ -1405,7 +1154,7 @@ steel sessions get
 ### Parameters
 
 - `session_id` (string, optional): Cloud session ID
-- `--session` (string, optional): Resolve session ID from a local daemon session name
+- `--session` (string, optional): Resolve session ID from a local browser session name
 
 ### API Operations
 
@@ -1426,7 +1175,7 @@ steel sessions release
 
 - `session_id` (string, optional): Cloud session ID
 - `-a, --all` (boolean, optional): Release all active cloud sessions
-- `--session` (string, optional): Resolve session ID from a local daemon session name
+- `--session` (string, optional): Resolve session ID from a local browser session name
 
 ### API Operations
 
@@ -1448,7 +1197,7 @@ steel sessions logs
 ### Parameters
 
 - `session_id` (string, optional): Cloud session ID
-- `--session` (string, optional): Resolve session ID from a local daemon session name
+- `--session` (string, optional): Resolve session ID from a local browser session name
 - `-f, --follow` (boolean, optional): Stream live frames over WebSocket after printing historical data
 - `--namespace` (string, optional): Filter by namespace
 - `--start-time` (string, optional): ISO timestamp lower bound
@@ -1477,7 +1226,7 @@ steel sessions agent-logs
 ### Parameters
 
 - `session_id` (string, optional): Cloud session ID
-- `--session` (string, optional): Resolve session ID from a local daemon session name
+- `--session` (string, optional): Resolve session ID from a local browser session name
 - `-f, --follow` (boolean, optional): Stream live frames over WebSocket after printing historical data
 - `--namespace` (string, optional): Filter by namespace
 - `--start-time` (string, optional): ISO timestamp lower bound
@@ -1505,7 +1254,7 @@ steel sessions traces
 ### Parameters
 
 - `session_id` (string, optional): Cloud session ID
-- `--session` (string, optional): Resolve session ID from a local daemon session name
+- `--session` (string, optional): Resolve session ID from a local browser session name
 - `-f, --follow` (boolean, optional): Stream live trace frames over WebSocket after printing historical data
 - `--namespace` (string, optional): Filter by namespace
 - `--start-time` (string, optional): ISO timestamp lower bound

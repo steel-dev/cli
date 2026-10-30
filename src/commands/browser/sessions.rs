@@ -1,84 +1,71 @@
 use clap::Parser;
+use serde_json::json;
 
-use crate::browser::daemon::client::DaemonClient;
-use crate::browser::daemon::process;
-use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
+use crate::api::client::SteelClient;
+use crate::browser::lifecycle::is_session_live;
+use crate::browser::state::{self, BrowserSession};
+use crate::config::auth;
 use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {}
 
 pub async fn run(_args: Args) -> anyhow::Result<()> {
-    let names = process::list_daemon_names();
+    let client = SteelClient::new()?;
+    let auth = auth::resolve_auth();
 
-    let mut sessions: Vec<SessionInfo> = Vec::new();
-    for name in &names {
-        // Fast path: skip sockets whose daemon process is already dead
-        if process::cleanup_if_dead(name) {
-            continue;
-        }
-        match DaemonClient::connect(name).await {
-            Ok(mut client) => {
-                if let Ok(data) = client.send(DaemonCommand::GetSessionInfo).await
-                    && let Ok(info) = serde_json::from_value::<SessionInfo>(data)
-                {
-                    sessions.push(info);
-                }
+    let mut sessions: Vec<(BrowserSession, String)> = Vec::new();
+    for session in state::list() {
+        match client
+            .get_session(&session.api_url, session.mode, &session.id, &auth)
+            .await
+        {
+            Ok(remote) if is_session_live(&remote) => {
+                let status = remote["status"].as_str().unwrap_or("live").to_string();
+                sessions.push((session, status));
             }
-            Err(_) => {
-                // Socket exists but connection failed — clean up
-                process::cleanup_stale(name);
+            Ok(_) => {
+                state::remove(&session.name)?;
             }
+            Err(err) if err.is_not_found() => {
+                state::remove(&session.name)?;
+            }
+            Err(_) => sessions.push((session, "unknown".to_string())),
         }
     }
 
-    let data: Vec<serde_json::Value> = sessions
-        .iter()
-        .map(|s| {
-            let mut obj = serde_json::json!({
-                "id": s.session_id,
-                "name": s.session_name,
-                "mode": s.mode.to_string(),
-            });
-            if let Some(ref status) = s.status {
-                obj["status"] = serde_json::json!(status);
-            }
-            if let Some(ref url) = s.viewer_url {
-                obj["viewerUrl"] = serde_json::json!(url);
-            }
-            obj
-        })
-        .collect();
-
     if output::is_json() {
-        output::success_data(serde_json::json!(data));
+        let data: Vec<serde_json::Value> = sessions
+            .iter()
+            .map(|(s, status)| {
+                let mut obj = json!({
+                    "id": s.id,
+                    "name": s.name,
+                    "mode": s.mode.to_string(),
+                    "status": status,
+                });
+                if let Some(ref url) = s.live_url {
+                    obj["viewerUrl"] = json!(url);
+                }
+                obj
+            })
+            .collect();
+        output::success_data(json!(data));
     } else if sessions.is_empty() {
         println!("No active browser sessions.");
     } else {
-        // Human-readable table
-        let max_id = sessions
+        let rows: Vec<Vec<String>> = sessions
             .iter()
-            .map(|s| s.session_id.len())
-            .max()
-            .unwrap_or(2)
-            .max(2);
-        let max_name = sessions
-            .iter()
-            .map(|s| s.session_name.len())
-            .max()
-            .unwrap_or(4)
-            .max(4);
-        println!(
-            "{:<max_id$}  {:<max_name$}  {:<6}  STATUS",
-            "ID", "NAME", "MODE"
-        );
-        for s in &sessions {
-            let status = s.status.as_deref().unwrap_or("live");
-            println!(
-                "{:<max_id$}  {:<max_name$}  {:<6}  {status}",
-                s.session_id, s.session_name, s.mode
-            );
-        }
+            .map(|(s, status)| {
+                vec![
+                    s.id.clone(),
+                    s.name.clone(),
+                    s.mode.to_string(),
+                    status.clone(),
+                ]
+            })
+            .collect();
+        output::print_table(&["ID", "NAME", "MODE", "STATUS"], &rows);
     }
 
     Ok(())

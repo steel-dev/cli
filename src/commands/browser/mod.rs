@@ -8,11 +8,19 @@ pub mod stop;
 
 use clap::{Parser, Subcommand};
 
+use crate::browser::state::{self, BrowserSession};
+
+pub(crate) const DEFAULT_SESSION: &str = "default";
+
 #[derive(Parser)]
 pub struct BrowserArgs {
-    /// Named session to target
+    /// Named session to target, or a session ID
     #[arg(long, global = true)]
     pub session: Option<String>,
+
+    /// Print what the command changed on the page (a diff against the last snapshot)
+    #[arg(long, global = true)]
+    pub diff: bool,
 
     #[command(subcommand)]
     pub command: Command,
@@ -20,7 +28,7 @@ pub struct BrowserArgs {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Create or attach to a browser session
+    /// Create a browser session
     Start(start::Args),
 
     /// Stop a browser session
@@ -38,7 +46,7 @@ pub enum Command {
         command: captcha::Command,
     },
 
-    /// Run multiple browser commands in a single invocation
+    /// Run several browser commands in one request
     Batch(batch::Args),
 
     /// Browser actions (navigate, click, fill, snapshot, screenshot, …)
@@ -60,21 +68,43 @@ impl Command {
     }
 }
 
+pub(crate) fn existing_session(name: Option<&str>) -> anyhow::Result<BrowserSession> {
+    let wanted = name.unwrap_or(DEFAULT_SESSION);
+    if let Some(found) = state::load(wanted)? {
+        return Ok(found);
+    }
+    if state::looks_like_session_id(wanted) {
+        let (mode, base_url) = crate::util::api::resolve();
+        return Ok(BrowserSession::new(
+            wanted.to_string(),
+            wanted.to_string(),
+            mode,
+            base_url,
+        ));
+    }
+    match name {
+        Some(name) => anyhow::bail!(
+            "Session \"{name}\" is not running. Start it with `steel browser start --session {name}`."
+        ),
+        None => anyhow::bail!("No active browser session. Start one with `steel browser start`."),
+    }
+}
+
 pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
     let session = args.session;
     if let Some(ref name) = session
-        && let Some(err) = crate::browser::daemon::process::validate_session_name(name)
+        && let Some(err) = state::validate_session_name(name)
     {
         anyhow::bail!("{err}");
     }
     match args.command {
-        Command::Start(args) => start::run(args, session.as_deref()).await,
-        Command::Stop(args) => stop::run(args, session.as_deref()).await,
-        Command::Sessions(args) => sessions::run(args).await,
-        Command::Live(args) => live::run(args, session.as_deref()).await,
+        Command::Start(start_args) => start::run(start_args, session.as_deref()).await,
+        Command::Stop(stop_args) => stop::run(stop_args, session.as_deref()).await,
+        Command::Sessions(sessions_args) => sessions::run(sessions_args).await,
+        Command::Live(live_args) => live::run(live_args, session.as_deref()).await,
         Command::Captcha { command } => captcha::run(command, session.as_deref()).await,
-        Command::Batch(args) => batch::run(args, session.as_deref()).await,
-        Command::Action(action) => action::run(action, session.as_deref()).await,
+        Command::Batch(batch_args) => batch::run(batch_args, session.as_deref(), args.diff).await,
+        Command::Action(action) => action::run(action, session.as_deref(), args.diff).await,
     }
 }
 
@@ -82,7 +112,7 @@ pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
 mod tests {
     use clap::Parser;
 
-    use super::action::{ActionCommand, SetCommand};
+    use super::action::ActionCommand;
     use super::{BrowserArgs, Command};
     use crate::commands::{self, Cli};
 
@@ -126,33 +156,12 @@ mod tests {
     }
 
     #[test]
-    fn session_after_setvalue_value_is_a_flag() {
-        let args = parse(&["setvalue", "@e1", "42", "--session", "repro"]);
-        assert_eq!(args.session.as_deref(), Some("repro"));
-        let Command::Action(ActionCommand::SetValue(set)) = args.command else {
-            panic!("expected setvalue");
-        };
-        assert_eq!(set.value, ["42"]);
-    }
-
-    #[test]
-    fn session_after_user_agent_is_a_flag() {
-        let args = parse(&[
-            "set",
-            "useragent",
-            "Mozilla/5.0",
-            "Test",
-            "--session",
-            "repro",
-        ]);
-        assert_eq!(args.session.as_deref(), Some("repro"));
-        let Command::Action(ActionCommand::Set {
-            command: SetCommand::UserAgent(ua),
-        }) = args.command
-        else {
-            panic!("expected set useragent");
-        };
-        assert_eq!(ua.user_agent, ["Mozilla/5.0", "Test"]);
+    fn diff_is_a_flag_anywhere() {
+        let args = parse(&["click", "e5", "--diff"]);
+        assert!(args.diff);
+        let args = parse(&["--diff", "press", "Enter"]);
+        assert!(args.diff);
+        assert!(!parse(&["press", "Enter"]).diff);
     }
 
     #[test]

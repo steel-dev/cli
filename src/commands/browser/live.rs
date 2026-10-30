@@ -1,37 +1,36 @@
 use clap::Parser;
 use serde_json::json;
 
-use crate::browser::daemon::client::DaemonClient;
-use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
+use crate::api::client::SteelClient;
+use crate::browser::lifecycle::get_viewer_url;
+use crate::config::auth;
 use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {}
 
 pub async fn run(_args: Args, session: Option<&str>) -> anyhow::Result<()> {
-    let session_name = session.unwrap_or("default");
+    let target = super::existing_session(session)?;
 
-    let mut client = DaemonClient::connect(session_name).await.map_err(|_| {
-        let msg = match session {
-            Some(name) => format!(
-                "No running session \"{name}\". \
-                 Start one with `steel browser start --session {name}`."
-            ),
-            None => "No active browser session. Start one with `steel browser start`.".to_string(),
-        };
-        anyhow::anyhow!("{msg}")
-    })?;
-
-    let data = client.send(DaemonCommand::GetSessionInfo).await?;
-    let info: SessionInfo = serde_json::from_value(data)?;
-
-    match info.viewer_url {
-        Some(url) => {
-            output::success(json!(url), &format!("{url}\n"));
-        }
+    let url = match target.live_url {
+        Some(url) => Some(url),
         None => {
-            anyhow::bail!("Session \"{session_name}\" has no live viewer URL.");
+            let client = SteelClient::new()?;
+            let remote = client
+                .get_session(
+                    &target.api_url,
+                    target.mode,
+                    &target.id,
+                    &auth::resolve_auth(),
+                )
+                .await?;
+            get_viewer_url(&remote, target.mode, &target.id)
         }
+    };
+
+    match url {
+        Some(url) => output::success(json!(url), &format!("{url}\n")),
+        None => anyhow::bail!("Session \"{}\" has no live viewer URL.", target.name),
     }
 
     Ok(())

@@ -1,7 +1,9 @@
 use clap::Parser;
 use serde_json::json;
 
-use crate::browser::daemon::process;
+use crate::api::client::SteelClient;
+use crate::browser::state::{self, BrowserSession};
+use crate::config::auth::{self, Auth};
 use crate::util::output;
 
 #[derive(Parser)]
@@ -11,15 +13,34 @@ pub struct Args {
     pub all: bool,
 }
 
+pub async fn release(
+    client: &SteelClient,
+    auth: &Auth,
+    session: &BrowserSession,
+) -> anyhow::Result<()> {
+    match client
+        .release_session(&session.api_url, session.mode, &session.id, auth)
+        .await
+    {
+        Ok(()) => {}
+        Err(err) if err.is_not_found() => {}
+        Err(err) => return Err(err.into()),
+    }
+    state::remove(&session.name)?;
+    Ok(())
+}
+
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     if args.all && session.is_some() {
         anyhow::bail!("Cannot combine `--all` with `--session`.");
     }
 
-    let stopped_count;
-    if args.all {
-        let names = process::list_daemon_names();
-        if names.is_empty() {
+    let client = SteelClient::new()?;
+    let auth = auth::resolve_auth();
+
+    let stopped: Vec<String> = if args.all {
+        let sessions = state::list();
+        if sessions.is_empty() {
             if output::is_json() {
                 output::success_data(json!({ "stoppedSessions": [] }));
             } else {
@@ -27,32 +48,33 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
             }
             return Ok(());
         }
-
-        for name in &names {
-            let _ = process::stop_daemon(name).await;
+        let mut stopped = Vec::new();
+        for session in &sessions {
+            match release(&client, &auth, session).await {
+                Ok(()) => stopped.push(session.name.clone()),
+                Err(err) => eprintln!("warning: could not stop \"{}\": {err}", session.name),
+            }
         }
-        stopped_count = names.len() as u64;
-
-        if output::is_json() {
-            output::success_data(json!({ "stoppedSessions": names }));
-        } else {
-            println!("Stopped {} sessions.", names.len());
-        }
+        stopped
     } else {
-        let session_name = session.unwrap_or("default");
-        process::stop_daemon(session_name).await?;
-        stopped_count = 1;
+        let target = super::existing_session(session)?;
+        release(&client, &auth, &target).await?;
+        vec![target.name]
+    };
 
-        if output::is_json() {
-            output::success_data(json!({ "stoppedSessions": [session_name] }));
-        } else {
-            println!("Stopped session \"{session_name}\".");
-        }
+    if output::is_json() {
+        output::success_data(json!({ "stoppedSessions": stopped }));
+    } else if let [name] = stopped.as_slice()
+        && !args.all
+    {
+        println!("Stopped session \"{name}\".");
+    } else {
+        println!("Stopped {} sessions.", stopped.len());
     }
 
     let mut properties = serde_json::Map::new();
     properties.insert("all".into(), json!(args.all));
-    properties.insert("stopped_count".into(), json!(stopped_count));
+    properties.insert("stopped_count".into(), json!(stopped.len()));
     crate::telemetry::track_event("browser_session_stopped", properties);
 
     Ok(())
