@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
 use crate::api::client::SteelClient;
+use crate::browser::state::BrowserSession;
 use crate::util::output;
 
 #[derive(Subcommand)]
@@ -71,24 +72,18 @@ pub async fn run(command: Command, session: Option<&str>) -> anyhow::Result<()> 
     }
 }
 
-fn resolve_session_id(
-    explicit_session_id: Option<&str>,
+fn client_for(
+    session_id: Option<&str>,
     session: Option<&str>,
-) -> anyhow::Result<String> {
-    if let Some(id) = explicit_session_id {
-        let trimmed = id.trim();
-        if !trimmed.is_empty() {
-            return Ok(trimmed.to_string());
-        }
-    }
-    Ok(super::existing_session(session)?.id)
+) -> anyhow::Result<(SteelClient, BrowserSession)> {
+    let target = super::existing_session(session_id.or(session))?;
+    let client = SteelClient::new()?.at(&target.api_url, target.mode);
+    Ok((client, target))
 }
 
 async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()> {
-    let client = SteelClient::new()?;
-    let mode = client.mode();
-
-    let session_id = resolve_session_id(args.session_id.as_deref(), session)?;
+    let (client, target) = client_for(args.session_id.as_deref(), session)?;
+    let (mode, session_id) = (target.mode, target.id);
 
     let raw = client
         .solve_captcha(
@@ -128,9 +123,8 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
 }
 
 async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<()> {
-    let client = SteelClient::new()?;
-
-    let session_id = resolve_session_id(args.session_id.as_deref(), session)?;
+    let (client, target) = client_for(args.session_id.as_deref(), session)?;
+    let session_id = target.id;
 
     let timeout = args.timeout.unwrap_or(60_000);
     let interval = args.interval.unwrap_or(1_000);

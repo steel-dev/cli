@@ -12,7 +12,7 @@ use crate::browser::state::{self, BrowserSession, SnapshotInfo};
 use crate::config::settings::ApiMode;
 use crate::util::output::{self, SilentExit};
 
-use super::{DEFAULT_SESSION, start};
+use super::{DEFAULT_SESSION, Target, start};
 
 #[derive(Parser)]
 pub struct SelectorArg {
@@ -1218,23 +1218,16 @@ async fn attach(client: &SteelClient, id: &str) -> Result<BrowserSession> {
 impl Browser {
     pub async fn open(name: Option<&str>, start_default: bool) -> Result<Self> {
         let client = SteelClient::new()?;
-        let state = match name {
-            Some(name) => match state::load(name)? {
-                Some(found) => found,
-                None if state::looks_like_session_id(name) => attach(&client, name).await?,
-                None => bail!(
-                    "Session \"{name}\" is not running. It may have expired. Run `steel browser start --session {name}` to start a new one."
-                ),
-            },
-            None => match state::load(DEFAULT_SESSION)? {
-                Some(found) => found,
-                None if start_default => {
-                    eprintln!("warning: session \"default\" is not running; starting a new one");
-                    let options = start::default_options();
-                    start::create(&client, DEFAULT_SESSION, &options).await?.0
-                }
-                None => bail!("No active browser session. Start one with `steel browser start`."),
-            },
+        let state = match super::target(name)? {
+            Some(Target::Saved(found)) => *found,
+            Some(Target::Id(id)) => attach(&client, &id).await?,
+            None if name.is_none() && start_default => {
+                eprintln!("warning: session \"default\" is not running; starting a new one");
+                start::create(&client, DEFAULT_SESSION, &start::default_options())
+                    .await?
+                    .0
+            }
+            None => return Err(super::not_running(name)),
         };
         let client = client.at(&state.api_url, state.mode);
         Ok(Self { client, state })

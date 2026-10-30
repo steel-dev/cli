@@ -296,18 +296,15 @@ async fn run_traces(args: TracesArgs) -> Result<()> {
     Ok(())
 }
 
-fn resolve_session_id(session_id: Option<&str>, session_name: Option<&str>) -> Result<String> {
-    if let Some(id) = session_id.map(str::trim).filter(|id| !id.is_empty()) {
-        return Ok(id.to_string());
+fn resolve_session_id(session_id: Option<&str>, session: Option<&str>) -> Result<String> {
+    match (
+        session_id.map(str::trim).filter(|id| !id.is_empty()),
+        session,
+    ) {
+        (Some(id), _) => Ok(id.to_string()),
+        (None, Some(session)) => Ok(super::browser::existing_session(Some(session))?.id),
+        (None, None) => anyhow::bail!("Missing session ID. Pass <session-id> or --session <name>."),
     }
-
-    let Some(name) = session_name.map(str::trim).filter(|name| !name.is_empty()) else {
-        anyhow::bail!("Missing session ID. Pass <session-id> or --session <name>.");
-    };
-
-    let found = crate::browser::state::load(name)?
-        .with_context(|| format!("No local browser session named \"{name}\"."))?;
-    Ok(found.id)
 }
 
 async fn follow_if_live(
