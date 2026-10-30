@@ -113,7 +113,7 @@ These options are accepted by every command.
 
 - `--json` (boolean, optional): Output all results as JSON (structured output for automation)
 - `--local` (boolean, optional): Use local Steel runtime instead of cloud
-- `--api-url` (string, optional): Explicit self-hosted API endpoint URL
+- `--api-url` (string, optional): Steel API endpoint URL (overrides --local and STEEL_API_URL)
 - `-h, --help`: Print help for a command
 - `-V, --version`: Print the Steel CLI version
 
