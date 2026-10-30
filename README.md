@@ -125,7 +125,7 @@ Cloud precedence:
 
 - `steel scrape` prints markdown by default for token efficiency; use `--json` for the full API response.
 - `steel browser start` prints a display-safe connect URL with sensitive query values redacted.
-- Piped output auto-switches to JSON for machine-readable workflows. Use `--json` to force it, or `STEEL_FORCE_TTY=1` to disable.
+- Output is text by default, including when piped. Pass `--json` for machine-readable output.
 
 ## Documentation Map
 

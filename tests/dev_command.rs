@@ -16,11 +16,9 @@ fn steel_cmd() -> Command {
 }
 
 /// Helper: run `steel` with a temporary STEEL_CONFIG_DIR so tests are isolated.
-/// Also sets STEEL_FORCE_TTY=1 to keep text output in piped test environments.
 fn steel_with_tmp_config(tmp: &tempfile::TempDir) -> Command {
     let mut cmd = steel_cmd();
     cmd.env("STEEL_CONFIG_DIR", tmp.path());
-    cmd.env("STEEL_FORCE_TTY", "1");
     cmd
 }
 

@@ -382,6 +382,18 @@ fn browser_start_without_auth_or_local_fails() {
 }
 
 #[test]
+fn piped_output_is_text_unless_json_is_passed() {
+    let text = run(&["scrape", "https://example.com"]);
+    assert!(!text.status.success());
+    assert!(stdout(&text).is_empty(), "got: {}", stdout(&text));
+    assert!(stderr(&text).contains("Error: Missing Steel API key"));
+
+    let json = run(&["--json", "scrape", "https://example.com"]);
+    let parsed: serde_json::Value = serde_json::from_str(stdout(&json).trim()).unwrap();
+    assert_eq!(parsed["error_code"], "auth_required");
+}
+
+#[test]
 fn browser_start_without_auth_json_mode_surfaces_error() {
     // In --json mode, the actual error should also appear in the output.
     let output = run(&["--json", "browser", "start"]);

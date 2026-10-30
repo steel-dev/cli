@@ -31,10 +31,6 @@ const ENVIRONMENT: &[(&str, &str)] = &[
         "STEEL_TELEMETRY_DISABLED",
         "Disable built-in telemetry for this machine/session",
     ),
-    (
-        "STEEL_FORCE_TTY",
-        "Force text output when piped (disable auto-JSON)",
-    ),
     ("NO_COLOR", "Disable colored output"),
 ];
 
@@ -210,6 +206,10 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
     }
 }
 
+fn done(_: ()) {
+    crate::util::output::success_silent();
+}
+
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
     let telemetry_context =
         telemetry_command_path(&cli.command).map(|path| crate::telemetry::command_context(&path));
@@ -231,13 +231,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Browser(args) => browser::run(args).await,
         Command::Sessions { command } => sessions::run(command).await,
         Command::Init(args) => init::run(args).await,
-        Command::Login(args) => login::run(args).await,
-        Command::Logout(args) => logout::run(args).await,
+        Command::Login(args) => login::run(args).await.map(done),
+        Command::Logout(args) => logout::run(args).await.map(done),
         Command::Credentials { command } => credentials::run(command).await,
-        Command::Dev { command } => dev::run(command).await,
+        Command::Dev { command } => dev::run(command).await.map(done),
         Command::Forge(args) => forge::run(args).await,
         Command::Config(args) => config::run(args).await,
-        Command::Update(args) => update::run(args).await,
+        Command::Update(args) => update::run(args).await.map(done),
         Command::Cache(args) => cache::run(args).await,
         Command::Profile { command } => profile::run(command).await,
         Command::Describe(args) => describe::run(args).await,
