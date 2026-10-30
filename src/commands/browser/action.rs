@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
 use crate::api::commands::{Reply, Session};
-use crate::browser::lifecycle::{get_viewer_url, is_session_live};
+use crate::api::session::Session as RemoteSession;
 use crate::browser::state::{self, BrowserSession, SnapshotInfo};
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
@@ -1209,13 +1209,13 @@ async fn attach(
     auth: &Auth,
     id: &str,
 ) -> Result<BrowserSession> {
-    let session = client.get_session(base_url, mode, id, auth).await?;
-    if !is_session_live(&session) {
+    let remote = RemoteSession::parse(client.cli_get_session(base_url, mode, auth, id).await?)?;
+    if !remote.is_live() {
         bail!("Session {id} has ended. Start a new one with `steel browser start`.");
     }
     let mut attached =
         BrowserSession::new(id.to_string(), id.to_string(), mode, base_url.to_string());
-    attached.live_url = get_viewer_url(&session, mode, id);
+    attached.live_url = remote.viewer_url(mode);
     state::save(&attached)?;
     Ok(attached)
 }

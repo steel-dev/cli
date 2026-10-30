@@ -3,10 +3,6 @@ use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::api::session::CreateSessionOptions;
-use crate::browser::lifecycle::{
-    get_session_created_at_ms, get_session_inactivity_timeout, get_session_timeout,
-    sanitize_connect_url, to_session_summary,
-};
 use crate::browser::profile_store;
 use crate::browser::state::{self, BrowserSession};
 use crate::config::auth::Auth;
@@ -86,21 +82,21 @@ pub async fn create(
     options: &CreateSessionOptions,
 ) -> anyhow::Result<(BrowserSession, Option<String>)> {
     let session = client.create_session(base_url, mode, options, auth).await?;
-    let summary = to_session_summary(&session, mode, auth)?;
     let mut created = BrowserSession::new(
         name.to_string(),
-        summary.id.clone(),
+        session.id.clone(),
         mode,
         base_url.to_string(),
     );
-    created.live_url = summary.viewer_url;
-    created.profile_id = summary.profile_id;
-    created.timeout_ms = get_session_timeout(&session).or(options.timeout_ms);
-    created.inactivity_timeout_ms =
-        get_session_inactivity_timeout(&session).or(options.inactivity_timeout_ms);
-    created.created_at_ms = get_session_created_at_ms(&session).or_else(now_ms);
+    created.live_url = session.viewer_url(mode);
+    created.profile_id = session.profile_id.clone();
+    created.timeout_ms = session.timeout_ms().or(options.timeout_ms);
+    created.inactivity_timeout_ms = session
+        .inactivity_timeout_ms()
+        .or(options.inactivity_timeout_ms);
+    created.created_at_ms = session.created_at_ms().or_else(now_ms);
     state::save(&created)?;
-    Ok((created, summary.connect_url))
+    Ok((created, session.connect_url(mode, auth)))
 }
 
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
@@ -263,6 +259,32 @@ fn humanize_secs(secs: u64) -> String {
     }
 }
 
+fn sanitize_connect_url(url: &str) -> String {
+    if let Ok(mut parsed) = url::Url::parse(url) {
+        let pairs: Vec<(String, String)> = parsed
+            .query_pairs()
+            .map(|(k, v)| {
+                if k == "apiKey" && v.len() > 7 {
+                    (k.to_string(), format!("{}...", &v[..7]))
+                } else {
+                    (k.to_string(), v.to_string())
+                }
+            })
+            .collect();
+
+        if !pairs.is_empty() {
+            parsed.query_pairs_mut().clear();
+            for (k, v) in &pairs {
+                parsed.query_pairs_mut().append_pair(k, v);
+            }
+        }
+
+        parsed.to_string()
+    } else {
+        url.to_string()
+    }
+}
+
 const fn resolve_inactivity_timeout(explicit: Option<u64>) -> Option<u64> {
     match explicit {
         None => Some(DEFAULT_INACTIVITY_TIMEOUT_MS),
@@ -300,6 +322,20 @@ mod tests {
         assert_eq!(options.inactivity_timeout_ms, Some(600_000));
         assert_eq!(options.timeout_ms, None);
         assert!(!options.stealth);
+    }
+
+    #[test]
+    fn sanitize_masks_long_api_keys_only() {
+        let masked =
+            sanitize_connect_url("wss://connect.steel.dev?apiKey=sk-12345678&sessionId=s1");
+        assert!(masked.contains("sk-1234..."));
+        assert!(masked.contains("sessionId=s1"));
+        assert!(!masked.contains("sk-12345678"));
+        let short = "wss://connect.steel.dev?apiKey=short&sessionId=s1";
+        assert!(sanitize_connect_url(short).contains("apiKey=short"));
+        let local = "ws://localhost:3000/ws?sessionId=sess-1";
+        assert_eq!(sanitize_connect_url(local), local);
+        assert_eq!(sanitize_connect_url("not a valid url"), "not a valid url");
     }
 
     #[test]

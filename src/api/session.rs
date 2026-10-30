@@ -1,13 +1,14 @@
-//! Session API: create, list, get, release, captcha.
-//! Ported from: cli/source/utils/browser/lifecycle/api-client.ts
-
+use anyhow::Context;
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
 
-/// Options for creating a session. Matches TS `StartSessionRequestOptions`.
+const CLOUD_CONNECT_URL: &str = "wss://connect.steel.dev";
+const CLOUD_VIEWER_URL: &str = "https://app.steel.dev/sessions";
+
 #[derive(Debug, Default)]
 pub struct CreateSessionOptions {
     pub stealth: bool,
@@ -23,23 +24,75 @@ pub struct CreateSessionOptions {
     pub credentials: bool,
 }
 
-/// Extract a single session from response. Matches TS `extractSingleSession()`.
-fn extract_single_session(data: &Value) -> Result<Value, ApiError> {
-    if let Some(obj) = data.as_object() {
-        // Nested { session: {...} }
-        if let Some(session) = obj.get("session")
-            && session.is_object()
-        {
-            return Ok(session.clone());
-        }
-        return Ok(data.clone());
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Session {
+    pub id: String,
+    pub status: Option<String>,
+    pub websocket_url: Option<String>,
+    pub session_viewer_url: Option<String>,
+    pub timeout: Option<u64>,
+    pub inactivity_timeout: Option<u64>,
+    pub created_at: Option<String>,
+    pub profile_id: Option<String>,
+}
+
+fn non_empty(value: Option<&str>) -> Option<&str> {
+    value.filter(|v| !v.trim().is_empty())
+}
+
+impl Session {
+    pub fn parse(value: Value) -> anyhow::Result<Self> {
+        serde_json::from_value(value).context("The Steel API returned an unexpected session.")
     }
 
-    Err(ApiError::RequestFailed {
-        status: 0,
-        message: "Unexpected empty response from Steel session API.".into(),
-        body: None,
-    })
+    pub fn is_live(&self) -> bool {
+        !matches!(self.status.as_deref(), Some("released" | "failed"))
+    }
+
+    pub fn timeout_ms(&self) -> Option<u64> {
+        self.timeout.filter(|&ms| ms > 0)
+    }
+
+    pub fn inactivity_timeout_ms(&self) -> Option<u64> {
+        self.inactivity_timeout.filter(|&ms| ms > 0)
+    }
+
+    pub fn created_at_ms(&self) -> Option<u64> {
+        let created = self
+            .created_at
+            .as_deref()?
+            .parse::<jiff::Timestamp>()
+            .ok()?;
+        u64::try_from(created.as_millisecond()).ok()
+    }
+
+    pub fn viewer_url(&self, mode: ApiMode) -> Option<String> {
+        non_empty(self.session_viewer_url.as_deref())
+            .map(str::to_string)
+            .or_else(|| (mode == ApiMode::Cloud).then(|| format!("{CLOUD_VIEWER_URL}/{}", self.id)))
+    }
+
+    pub fn connect_url(&self, mode: ApiMode, auth: &Auth) -> Option<String> {
+        let given = non_empty(self.websocket_url.as_deref()).map(str::to_string);
+        let (ApiMode::Cloud, Some(key)) = (mode, auth.api_key.as_deref()) else {
+            return given;
+        };
+        let Some(url) = given else {
+            return Some(format!(
+                "{CLOUD_CONNECT_URL}?apiKey={key}&sessionId={}",
+                self.id
+            ));
+        };
+        if url.contains("apiKey=") {
+            return Some(url);
+        }
+        let Ok(mut parsed) = url::Url::parse(&url) else {
+            return Some(url);
+        };
+        parsed.query_pairs_mut().append_pair("apiKey", key);
+        Some(parsed.to_string())
+    }
 }
 
 /// Build the JSON body for session creation.
@@ -108,33 +161,13 @@ fn build_create_body(options: &CreateSessionOptions) -> Value {
 }
 
 impl SteelClient {
-    pub async fn get_session(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        session_id: &str,
-        auth: &Auth,
-    ) -> Result<Value, ApiError> {
-        let data = self
-            .request(
-                base_url,
-                mode,
-                reqwest::Method::GET,
-                &format!("/sessions/{session_id}"),
-                None,
-                auth,
-            )
-            .await?;
-        extract_single_session(&data)
-    }
-
     pub async fn create_session(
         &self,
         base_url: &str,
         mode: ApiMode,
         options: &CreateSessionOptions,
         auth: &Auth,
-    ) -> Result<Value, ApiError> {
+    ) -> anyhow::Result<Session> {
         let body = build_create_body(options);
         let data = self
             .request(
@@ -146,26 +179,7 @@ impl SteelClient {
                 auth,
             )
             .await?;
-        extract_single_session(&data)
-    }
-
-    pub async fn release_session(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        session_id: &str,
-        auth: &Auth,
-    ) -> Result<(), ApiError> {
-        self.request(
-            base_url,
-            mode,
-            reqwest::Method::POST,
-            &format!("/sessions/{session_id}/release"),
-            None,
-            auth,
-        )
-        .await?;
-        Ok(())
+        Session::parse(data)
     }
 
     pub async fn solve_captcha(
@@ -245,20 +259,105 @@ impl SteelClient {
 mod tests {
     use super::*;
 
-    // --- extract_single_session ---
+    fn session(value: Value) -> Session {
+        Session::parse(value).unwrap()
+    }
 
-    #[test]
-    fn extract_single_direct() {
-        let data = json!({"id": "s1"});
-        let session = extract_single_session(&data).unwrap();
-        assert_eq!(session["id"], "s1");
+    fn key(api_key: Option<&str>) -> Auth {
+        Auth {
+            api_key: api_key.map(str::to_string),
+            source: crate::config::auth::AuthSource::Env,
+        }
     }
 
     #[test]
-    fn extract_single_nested() {
-        let data = json!({"session": {"id": "s1"}});
-        let session = extract_single_session(&data).unwrap();
-        assert_eq!(session["id"], "s1");
+    fn parse_needs_an_id() {
+        assert!(Session::parse(json!({"status": "live"})).is_err());
+        assert_eq!(session(json!({"id": "s1"})).id, "s1");
+    }
+
+    #[test]
+    fn released_and_failed_sessions_are_not_live() {
+        assert!(session(json!({"id": "s1", "status": "live"})).is_live());
+        assert!(session(json!({"id": "s1", "status": "idle"})).is_live());
+        assert!(session(json!({"id": "s1"})).is_live());
+        assert!(!session(json!({"id": "s1", "status": "released"})).is_live());
+        assert!(!session(json!({"id": "s1", "status": "failed"})).is_live());
+    }
+
+    #[test]
+    fn zero_timeouts_mean_no_limit() {
+        let s = session(json!({"id": "s1", "timeout": 300000, "inactivityTimeout": 120000}));
+        assert_eq!(s.timeout_ms(), Some(300000));
+        assert_eq!(s.inactivity_timeout_ms(), Some(120000));
+        let s = session(json!({"id": "s1", "timeout": 0, "inactivityTimeout": 0}));
+        assert_eq!(s.timeout_ms(), None);
+        assert_eq!(s.inactivity_timeout_ms(), None);
+        assert_eq!(session(json!({"id": "s1"})).timeout_ms(), None);
+    }
+
+    #[test]
+    fn created_at_is_read_as_epoch_ms() {
+        let s = session(json!({"id": "s1", "createdAt": "2025-01-15T10:30:00Z"}));
+        assert_eq!(s.created_at_ms(), Some(1_736_937_000_000));
+        let s = session(json!({"id": "s1", "createdAt": "2025-01-15T10:30:00.123Z"}));
+        assert_eq!(s.created_at_ms(), Some(1_736_937_000_123));
+        assert_eq!(session(json!({"id": "s1"})).created_at_ms(), None);
+    }
+
+    #[test]
+    fn viewer_url_falls_back_to_the_cloud_dashboard() {
+        let given = session(json!({"id": "s1", "sessionViewerUrl": "https://custom.dev/view"}));
+        assert_eq!(
+            given.viewer_url(ApiMode::Local).as_deref(),
+            Some("https://custom.dev/view")
+        );
+        let bare = session(json!({"id": "s1"}));
+        assert_eq!(
+            bare.viewer_url(ApiMode::Cloud).as_deref(),
+            Some("https://app.steel.dev/sessions/s1")
+        );
+        assert_eq!(bare.viewer_url(ApiMode::Local), None);
+    }
+
+    #[test]
+    fn cloud_connect_urls_carry_the_api_key_once() {
+        let auth = key(Some("sk-test"));
+        let fresh =
+            session(json!({"id": "s1", "websocketUrl": "wss://connect.steel.dev?sessionId=s1"}));
+        let url = fresh.connect_url(ApiMode::Cloud, &auth).unwrap();
+        assert!(url.contains("apiKey=sk-test"));
+        assert!(url.contains("sessionId=s1"));
+
+        let keyed = session(
+            json!({"id": "s1", "websocketUrl": "wss://connect.steel.dev?apiKey=old&sessionId=s1"}),
+        );
+        let url = keyed.connect_url(ApiMode::Cloud, &auth).unwrap();
+        assert_eq!(url.matches("apiKey").count(), 1);
+        assert!(url.contains("apiKey=old"));
+
+        let local =
+            session(json!({"id": "s1", "websocketUrl": "ws://localhost:3000/ws?sessionId=s1"}));
+        assert!(
+            !local
+                .connect_url(ApiMode::Local, &auth)
+                .unwrap()
+                .contains("apiKey")
+        );
+    }
+
+    #[test]
+    fn cloud_connect_url_is_built_when_missing() {
+        let bare = session(json!({"id": "s1"}));
+        let url = bare
+            .connect_url(ApiMode::Cloud, &key(Some("sk-test")))
+            .unwrap();
+        assert_eq!(url, "wss://connect.steel.dev?apiKey=sk-test&sessionId=s1");
+        assert_eq!(bare.connect_url(ApiMode::Cloud, &key(None)), None);
+        assert_eq!(
+            bare.connect_url(ApiMode::Local, &key(Some("sk-test"))),
+            None
+        );
     }
 
     // --- build_create_body ---
@@ -339,27 +438,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_session_success() {
-        let server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .and(path("/sessions/s1"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(json!({"id": "s1", "status": "live"})),
-            )
-            .mount(&server)
-            .await;
-
-        let client = SteelClient::new().unwrap();
-        let session = client
-            .get_session(&server.uri(), ApiMode::Local, "s1", &test_auth())
-            .await
-            .unwrap();
-
-        assert_eq!(session["id"], "s1");
-    }
-
-    #[tokio::test]
     async fn create_session_success() {
         let server = MockServer::start().await;
 
@@ -383,24 +461,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(session["id"], "new-sess");
-    }
-
-    #[tokio::test]
-    async fn release_session_success() {
-        let server = MockServer::start().await;
-
-        Mock::given(method("POST"))
-            .and(path("/sessions/s1/release"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
-            .mount(&server)
-            .await;
-
-        let client = SteelClient::new().unwrap();
-        client
-            .release_session(&server.uri(), ApiMode::Local, "s1", &test_auth())
-            .await
-            .unwrap();
+        assert_eq!(session.id, "new-sess");
     }
 
     #[tokio::test]
@@ -417,7 +478,7 @@ mod tests {
 
         let client = SteelClient::new().unwrap();
         let err = client
-            .get_session(&server.uri(), ApiMode::Local, "s1", &test_auth())
+            .cli_get_session(&server.uri(), ApiMode::Local, &test_auth(), "s1")
             .await
             .unwrap_err();
 
@@ -441,7 +502,7 @@ mod tests {
 
         let client = SteelClient::new().unwrap();
         let err = client
-            .get_session(&server.uri(), ApiMode::Local, "gone", &test_auth())
+            .cli_get_session(&server.uri(), ApiMode::Local, &test_auth(), "gone")
             .await
             .unwrap_err();
 

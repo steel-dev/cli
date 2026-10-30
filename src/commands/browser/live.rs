@@ -2,7 +2,7 @@ use clap::Parser;
 use serde_json::json;
 
 use crate::api::client::SteelClient;
-use crate::browser::lifecycle::get_viewer_url;
+use crate::api::session::Session;
 use crate::config::auth;
 use crate::util::output;
 
@@ -17,14 +17,14 @@ pub async fn run(_args: Args, session: Option<&str>) -> anyhow::Result<()> {
         None => {
             let client = SteelClient::new()?;
             let remote = client
-                .get_session(
+                .cli_get_session(
                     &target.api_url,
                     target.mode,
-                    &target.id,
                     &auth::resolve_auth(),
+                    &target.id,
                 )
                 .await?;
-            get_viewer_url(&remote, target.mode, &target.id)
+            Session::parse(remote)?.viewer_url(target.mode)
         }
     };
 
