@@ -36,9 +36,9 @@ Main flags:
 - `--session <name>`
 - `--stealth`
 - `--proxy <url>`
-- `--session-timeout <ms>`
+- `--timeout <ms>`
 - `--inactivity-timeout <ms>` (default 600000; `0` turns it off)
-- `--session-solve-captcha`
+- `--solve-captcha`
 - `--namespace <name>`
 - `--credentials`
 - `--profile <name>`
@@ -50,7 +50,7 @@ Flag semantics:
   - `stealthConfig.humanizeInteractions = true`
   - `stealthConfig.autoCaptchaSolving = true`
   - `solveCaptcha = true`
-- `--session-solve-captcha` enables manual CAPTCHA solving for new sessions:
+- `--solve-captcha` enables manual CAPTCHA solving for new sessions:
   - `solveCaptcha = true`
   - `stealthConfig.autoCaptchaSolving` is not forced on
 - `--proxy <url>` sets `proxyUrl` on session creation. The Sessions API may return
@@ -124,8 +124,7 @@ Purpose: manually trigger CAPTCHA solving for a target session.
 
 Main flags:
 
-- `--session-id <id>`
-- `--session <name>`
+- `--session <name|id>`
 - `--page-id <id>`
 - `--url <url>`
 - `--task-id <id>`
@@ -187,7 +186,7 @@ Self-hosted steel-browser serves the commands API only when it runs with
 - CAPTCHA solving notes:
   - CAPTCHA solving requires a paid Steel plan.
   - `--stealth` enables auto solving; wait and monitor with screenshots.
-  - `--session-solve-captcha` enables manual solving; use `steel browser captcha solve`.
+  - `--solve-captcha` enables manual solving; use `steel browser captcha solve`.
   - Default sessions do not solve captchas; restart with CAPTCHA solving enabled and navigate back.
   - Proxy + CAPTCHA solving together is a strong anti-bot evasion combination.
 - Need hard reset of stale session mapping:

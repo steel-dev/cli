@@ -127,7 +127,6 @@ mod tests {
             "tab new",
             "tab close",
             "dialog accept",
-            "close",
             "status x-1",
         ] {
             let err = run(

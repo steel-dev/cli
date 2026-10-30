@@ -25,10 +25,6 @@ impl Command {
 
 #[derive(Parser)]
 pub struct SolveArgs {
-    /// Explicit session ID (overrides --session name lookup)
-    #[arg(long)]
-    pub session_id: Option<String>,
-
     /// Page ID
     #[arg(long)]
     pub page_id: Option<String>,
@@ -44,10 +40,6 @@ pub struct SolveArgs {
 
 #[derive(Parser)]
 pub struct StatusArgs {
-    /// Explicit session ID (overrides --session name lookup)
-    #[arg(long)]
-    pub session_id: Option<String>,
-
     /// Page ID
     #[arg(long)]
     pub page_id: Option<String>,
@@ -72,17 +64,14 @@ pub async fn run(command: Command, session: Option<&str>) -> anyhow::Result<()> 
     }
 }
 
-fn client_for(
-    session_id: Option<&str>,
-    session: Option<&str>,
-) -> anyhow::Result<(SteelClient, BrowserSession)> {
-    let target = super::existing_session(session_id.or(session))?;
+fn client_for(session: Option<&str>) -> anyhow::Result<(SteelClient, BrowserSession)> {
+    let target = super::existing_session(session)?;
     let client = SteelClient::new()?.at(&target.api_url, target.mode);
     Ok((client, target))
 }
 
 async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()> {
-    let (client, target) = client_for(args.session_id.as_deref(), session)?;
+    let (client, target) = client_for(session)?;
     let (mode, session_id) = (target.mode, target.id);
 
     let raw = client
@@ -123,7 +112,7 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
 }
 
 async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<()> {
-    let (client, target) = client_for(args.session_id.as_deref(), session)?;
+    let (client, target) = client_for(session)?;
     let session_id = target.id;
 
     let timeout = args.timeout.unwrap_or(60_000);

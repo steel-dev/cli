@@ -67,7 +67,6 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel browser dialog](#steel-browser-dialog)
 - [steel browser status](#steel-browser-status)
 - [steel browser cancel](#steel-browser-cancel)
-- [steel browser close](#steel-browser-close)
 - [steel sessions](#steel-sessions)
 - [steel sessions list](#steel-sessions-list)
 - [steel sessions get](#steel-sessions-get)
@@ -225,7 +224,6 @@ steel browser
 - `dialog`: Accept or dismiss an open dialog
 - `status`: Wait for a command that is still running
 - `cancel`: Stop a command that is still running
-- `close`: Close the browser session
 
 ## steel browser start
 
@@ -241,9 +239,9 @@ steel browser start
 
 - `--stealth` (boolean, optional): Enable stealth mode (humanize interactions + auto CAPTCHA)
 - `-p, --proxy` (string, optional): Use a residential proxy
-- `--session-timeout` (string, optional): Session timeout in milliseconds (create-time only)
+- `--timeout` (string, optional): Session timeout in milliseconds (create-time only)
 - `--inactivity-timeout` (string, optional): Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
-- `--session-solve-captcha` (boolean, optional): Enable manual CAPTCHA solving on new sessions (create-time only)
+- `--solve-captcha` (boolean, optional): Enable manual CAPTCHA solving on new sessions (create-time only)
 - `--profile` (string, optional): Named profile to persist browser state across sessions
 - `--update-profile` (boolean, optional): Save session state back to the profile when the session ends
 - `--namespace` (string, optional): Credential namespace
@@ -258,6 +256,8 @@ Stop a browser session
 ```bash
 steel browser stop
 ```
+
+Aliases: `close`, `quit`, `exit`
 
 ### Parameters
 
@@ -310,7 +310,6 @@ steel browser captcha solve
 
 ### Parameters
 
-- `--session-id` (string, optional): Explicit session ID (overrides --session name lookup)
 - `--page-id` (string, optional): Page ID
 - `--url` (string, optional): Page URL for targeted CAPTCHA solving
 - `--task-id` (string, optional): CAPTCHA task ID for targeted solving
@@ -327,7 +326,6 @@ steel browser captcha status
 
 ### Parameters
 
-- `--session-id` (string, optional): Explicit session ID (overrides --session name lookup)
 - `--page-id` (string, optional): Page ID
 - `-w, --wait` (boolean, optional): Wait for terminal status
 - `--timeout` (string, optional): Timeout in milliseconds for --wait mode
@@ -1088,18 +1086,6 @@ steel browser cancel
 ### Parameters
 
 - `execution` (string, required): Execution id such as x-7
-
-## steel browser close
-
-Close the browser session
-
-### Usage
-
-```bash
-steel browser close
-```
-
-Aliases: `quit`, `exit`
 
 ## steel sessions
 
