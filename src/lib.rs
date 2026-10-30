@@ -1,8 +1,11 @@
 #![allow(clippy::too_many_arguments)]
 
-pub mod api;
-pub mod browser;
-pub mod commands;
-pub mod config;
-pub mod telemetry;
-pub mod util;
+mod api;
+mod browser;
+mod commands;
+mod config;
+mod telemetry;
+mod util;
+
+pub use commands::{Cli, run};
+pub use util::output::handle_error;

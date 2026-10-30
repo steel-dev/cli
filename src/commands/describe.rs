@@ -600,4 +600,31 @@ mod tests {
         assert_eq!(ops[0]["streaming"]["transport"], "websocket");
         assert_eq!(ops[0]["streaming"]["path"], "/v1/sessions/{id}/logs");
     }
+
+    #[test]
+    fn generated_operation_ids_are_unique() {
+        let ids: Vec<_> = CLI_OPERATION_METADATA.iter().map(|op| op.id).collect();
+        let unique: std::collections::BTreeSet<_> = ids.iter().collect();
+        assert_eq!(ids.len(), unique.len());
+    }
+
+    #[test]
+    fn generated_command_paths_exist_in_clap_tree() {
+        let root = root_cmd();
+        for op in CLI_OPERATION_METADATA {
+            let mut current = root.clone();
+            for segment in op
+                .command
+                .split_whitespace()
+                .filter(|s| !s.starts_with('-'))
+            {
+                current = current
+                    .find_subcommand(segment)
+                    .unwrap_or_else(|| {
+                        panic!("generated command path does not exist: {}", op.command)
+                    })
+                    .clone();
+            }
+        }
+    }
 }

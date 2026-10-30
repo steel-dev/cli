@@ -23,28 +23,6 @@ pub struct CreateSessionOptions {
     pub credentials: bool,
 }
 
-/// Extract session list from response. Matches TS `extractSessionList()`.
-fn extract_session_list(data: &Value) -> Vec<Value> {
-    // Direct array
-    if let Some(arr) = data.as_array() {
-        return arr.iter().filter(|v| v.is_object()).cloned().collect();
-    }
-
-    // Nested { sessions: [...] }
-    if let Some(obj) = data.as_object() {
-        if let Some(Value::Array(arr)) = obj.get("sessions") {
-            return arr.iter().filter(|v| v.is_object()).cloned().collect();
-        }
-
-        // Single session object with id
-        if obj.contains_key("id") {
-            return vec![data.clone()];
-        }
-    }
-
-    vec![]
-}
-
 /// Extract a single session from response. Matches TS `extractSingleSession()`.
 fn extract_single_session(data: &Value) -> Result<Value, ApiError> {
     if let Some(obj) = data.as_object() {
@@ -130,25 +108,6 @@ fn build_create_body(options: &CreateSessionOptions) -> Value {
 }
 
 impl SteelClient {
-    pub async fn list_sessions(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
-    ) -> Result<Vec<Value>, ApiError> {
-        let data = self
-            .request(
-                base_url,
-                mode,
-                reqwest::Method::GET,
-                "/sessions",
-                None,
-                auth,
-            )
-            .await?;
-        Ok(extract_session_list(&data))
-    }
-
     pub async fn get_session(
         &self,
         base_url: &str,
@@ -286,35 +245,6 @@ impl SteelClient {
 mod tests {
     use super::*;
 
-    // --- extract_session_list ---
-
-    #[test]
-    fn extract_list_from_array() {
-        let data = json!([{"id": "s1"}, {"id": "s2"}]);
-        let list = extract_session_list(&data);
-        assert_eq!(list.len(), 2);
-    }
-
-    #[test]
-    fn extract_list_from_nested() {
-        let data = json!({"sessions": [{"id": "s1"}]});
-        let list = extract_session_list(&data);
-        assert_eq!(list.len(), 1);
-    }
-
-    #[test]
-    fn extract_list_single_object() {
-        let data = json!({"id": "s1", "status": "live"});
-        let list = extract_session_list(&data);
-        assert_eq!(list.len(), 1);
-    }
-
-    #[test]
-    fn extract_list_null() {
-        let list = extract_session_list(&Value::Null);
-        assert!(list.is_empty());
-    }
-
     // --- extract_single_session ---
 
     #[test]
@@ -398,7 +328,7 @@ mod tests {
     // --- Integration tests with wiremock ---
 
     use crate::config::auth::AuthSource;
-    use wiremock::matchers::{header, method, path};
+    use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn test_auth() -> Auth {
@@ -406,29 +336,6 @@ mod tests {
             api_key: Some("test-key".into()),
             source: AuthSource::Env,
         }
-    }
-
-    #[tokio::test]
-    async fn list_sessions_success() {
-        let server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .and(path("/sessions"))
-            .and(header("Steel-Api-Key", "test-key"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(json!([{"id": "s1", "status": "live"}])),
-            )
-            .mount(&server)
-            .await;
-
-        let client = SteelClient::new().unwrap();
-        let sessions = client
-            .list_sessions(&server.uri(), ApiMode::Local, &test_auth())
-            .await
-            .unwrap();
-
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0]["id"], "s1");
     }
 
     #[tokio::test]
@@ -501,7 +408,7 @@ mod tests {
         let server = MockServer::start().await;
 
         Mock::given(method("GET"))
-            .and(path("/sessions"))
+            .and(path("/sessions/s1"))
             .respond_with(
                 ResponseTemplate::new(403).set_body_json(json!({"message": "Invalid API key"})),
             )
@@ -510,7 +417,7 @@ mod tests {
 
         let client = SteelClient::new().unwrap();
         let err = client
-            .list_sessions(&server.uri(), ApiMode::Local, &test_auth())
+            .get_session(&server.uri(), ApiMode::Local, "s1", &test_auth())
             .await
             .unwrap_err();
 

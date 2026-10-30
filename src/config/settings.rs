@@ -193,10 +193,6 @@ pub fn write_config_to(path: &Path, config: &Config) -> Result<()> {
     Ok(())
 }
 
-pub fn write_config(config: &Config) -> Result<()> {
-    write_config_to(&super::config_path(), config)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

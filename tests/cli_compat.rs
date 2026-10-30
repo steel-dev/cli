@@ -8,7 +8,7 @@ use std::path::Path;
 
 use clap::{ArgAction, Command, CommandFactory};
 
-use steel_cli::commands;
+use steel_cli::Cli;
 
 /// Describes a single CLI flag.
 #[derive(Debug)]
@@ -130,7 +130,7 @@ fn get_subcommand(root: &Command, path: &[&str]) -> Command {
 }
 
 fn root_cmd() -> Command {
-    commands::Cli::command()
+    Cli::command()
 }
 
 /// Verify the complete subcommand tree matches the spec.

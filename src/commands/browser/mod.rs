@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 
 use crate::browser::state::{self, BrowserSession};
 
-pub(crate) const DEFAULT_SESSION: &str = "default";
+pub const DEFAULT_SESSION: &str = "default";
 
 #[derive(Parser)]
 pub struct BrowserArgs {
@@ -68,7 +68,7 @@ impl Command {
     }
 }
 
-pub(crate) fn existing_session(name: Option<&str>) -> anyhow::Result<BrowserSession> {
+pub fn existing_session(name: Option<&str>) -> anyhow::Result<BrowserSession> {
     let wanted = name.unwrap_or(DEFAULT_SESSION);
     if let Some(found) = state::load(wanted)? {
         return Ok(found);
