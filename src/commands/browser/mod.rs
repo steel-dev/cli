@@ -68,26 +68,42 @@ impl Command {
     }
 }
 
-pub fn existing_session(name: Option<&str>) -> anyhow::Result<BrowserSession> {
+pub enum Target {
+    Saved(Box<BrowserSession>),
+    Id(String),
+}
+
+pub fn target(name: Option<&str>) -> anyhow::Result<Option<Target>> {
     let wanted = name.unwrap_or(DEFAULT_SESSION);
+    if let Some(err) = state::validate_session_name(wanted) {
+        anyhow::bail!("{err}");
+    }
     if let Some(found) = state::load(wanted)? {
-        return Ok(found);
+        return Ok(Some(Target::Saved(Box::new(found))));
     }
     if state::looks_like_session_id(wanted) {
-        let (mode, base_url) = crate::util::api::resolve();
-        return Ok(BrowserSession::new(
-            wanted.to_string(),
-            wanted.to_string(),
-            mode,
-            base_url,
-        ));
+        return Ok(Some(Target::Id(wanted.to_string())));
     }
+    Ok(None)
+}
+
+pub fn not_running(name: Option<&str>) -> anyhow::Error {
     match name {
-        Some(name) => anyhow::bail!(
-            "Session \"{name}\" is not running. Start it with `steel browser start --session {name}`."
+        Some(name) => anyhow::anyhow!(
+            "Session \"{name}\" is not running. It may have expired. Start it with `steel browser start --session {name}`."
         ),
-        None => anyhow::bail!("No active browser session. Start one with `steel browser start`."),
+        None => anyhow::anyhow!("No active browser session. Start one with `steel browser start`."),
     }
+}
+
+pub fn existing_session(name: Option<&str>) -> anyhow::Result<BrowserSession> {
+    Ok(match target(name)?.ok_or_else(|| not_running(name))? {
+        Target::Saved(found) => *found,
+        Target::Id(id) => {
+            let (mode, base_url) = crate::util::api::resolve();
+            BrowserSession::new(id.clone(), id, mode, base_url)
+        }
+    })
 }
 
 pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
@@ -122,6 +138,15 @@ mod tests {
             commands::Command::Browser(browser) => browser,
             _ => panic!("expected browser command"),
         }
+    }
+
+    #[test]
+    fn target_rejects_paths_and_accepts_ids() {
+        assert!(super::target(Some("../etc/passwd")).is_err());
+        let id = "4f7c2b1e-9a3d-4e5f-8b6a-1c2d3e4f5a6b";
+        assert!(
+            matches!(super::target(Some(id)), Ok(Some(super::Target::Id(found))) if found == id)
+        );
     }
 
     #[test]
