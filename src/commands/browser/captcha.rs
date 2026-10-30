@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
 use crate::api::client::SteelClient;
-use crate::util::{api, output};
+use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -85,20 +85,17 @@ fn resolve_session_id(
 }
 
 async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
+    let mode = client.mode();
 
     let session_id = resolve_session_id(args.session_id.as_deref(), session)?;
 
     let raw = client
         .solve_captcha(
-            &base_url,
-            mode,
             &session_id,
             args.page_id.as_deref(),
             args.url.as_deref(),
             args.task_id.as_deref(),
-            &auth,
         )
         .await?;
     let success = raw["success"].as_bool().unwrap_or(false);
@@ -131,7 +128,6 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
 }
 
 async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let session_id = resolve_session_id(args.session_id.as_deref(), session)?;
@@ -141,7 +137,7 @@ async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<(
     let started = std::time::Instant::now();
     let (status, types) = loop {
         let pages = client
-            .captcha_status(&base_url, mode, &session_id, args.page_id.as_deref(), &auth)
+            .captcha_status(&session_id, args.page_id.as_deref())
             .await?;
         let (status, types) = normalize_captcha_status(&pages);
         if !args.wait || is_terminal_captcha_status(&status) {

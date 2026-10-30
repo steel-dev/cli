@@ -3,7 +3,6 @@ use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::api::session::Session;
-use crate::config::auth;
 use crate::util::output;
 
 #[derive(Parser)]
@@ -15,14 +14,9 @@ pub async fn run(_args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let url = match target.live_url {
         Some(url) => Some(url),
         None => {
-            let client = SteelClient::new()?;
-            let remote = client
-                .cli_get_session(
-                    &target.api_url,
-                    target.mode,
-                    &auth::resolve_auth(),
-                    &target.id,
-                )
+            let remote = SteelClient::new()?
+                .at(&target.api_url, target.mode)
+                .cli_get_session(&target.id)
                 .await?;
             Session::parse(remote)?.viewer_url(target.mode)
         }

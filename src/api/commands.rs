@@ -3,8 +3,6 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
-use crate::config::auth::Auth;
-use crate::config::settings::ApiMode;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(40);
 const FILE_TIMEOUT: Duration = Duration::from_secs(300);
@@ -46,9 +44,6 @@ impl Reply {
 
 pub struct Session<'a> {
     pub client: &'a SteelClient,
-    pub base_url: &'a str,
-    pub mode: ApiMode,
-    pub auth: &'a Auth,
     pub id: &'a str,
 }
 
@@ -63,15 +58,16 @@ const fn backoff(attempt: u32) -> Duration {
 }
 
 impl Session<'_> {
-    fn url(&self, path: &str) -> String {
-        format!("{}/sessions/{}{path}", self.base_url, self.id)
+    fn path(&self, suffix: &str) -> String {
+        format!("/sessions/{}{suffix}", self.id)
     }
 
     async fn post(&self, body: &Value, key: Option<&str>) -> Result<Reply, ApiError> {
-        let url = self.url("/commands");
+        let path = self.path("/commands");
+        let url = self.client.url(&path);
         let mut req = self
             .client
-            .authed(reqwest::Method::POST, &url, self.mode, self.auth)?
+            .authed(reqwest::Method::POST, &path)?
             .timeout(REQUEST_TIMEOUT)
             .json(body);
         if let Some(key) = key {
@@ -192,14 +188,15 @@ impl Session<'_> {
     }
 
     pub async fn upload_file(&self, bytes: Vec<u8>, name: &str) -> Result<String, ApiError> {
-        let url = self.url("/files");
+        let path = self.path("/files");
+        let url = self.client.url(&path);
         let part = reqwest::multipart::Part::bytes(bytes).file_name(name.to_string());
         let form = reqwest::multipart::Form::new()
             .part("file", part)
             .text("path", name.to_string());
         let resp = self
             .client
-            .authed(reqwest::Method::POST, &url, self.mode, self.auth)?
+            .authed(reqwest::Method::POST, &path)?
             .timeout(FILE_TIMEOUT)
             .multipart(form)
             .send()
@@ -225,10 +222,11 @@ impl Session<'_> {
             .split('/')
             .map(|segment| urlencoding::encode(segment).into_owned())
             .collect();
-        let url = self.url(&format!("/files/{}", encoded.join("/")));
+        let path = self.path(&format!("/files/{}", encoded.join("/")));
+        let url = self.client.url(&path);
         let resp = self
             .client
-            .authed(reqwest::Method::GET, &url, self.mode, self.auth)?
+            .authed(reqwest::Method::GET, &path)?
             .timeout(FILE_TIMEOUT)
             .send()
             .await
@@ -267,7 +265,8 @@ fn failed(status: reqwest::StatusCode, body: &Value) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::auth::AuthSource;
+    use crate::config::auth::{Auth, AuthSource};
+    use crate::config::settings::ApiMode;
     use wiremock::matchers::{body_partial_json, header, header_exists, method, path};
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
@@ -291,14 +290,9 @@ mod tests {
     }
 
     async fn run(server: &MockServer, body: Value) -> Result<Reply, ApiError> {
-        let client = SteelClient::new().unwrap();
-        let auth = auth();
-        let base = server.uri();
+        let client = SteelClient::with(server.uri(), ApiMode::Cloud, auth()).unwrap();
         let session = Session {
             client: &client,
-            base_url: &base,
-            mode: ApiMode::Cloud,
-            auth: &auth,
             id: ID,
         };
         session.run(body).await
@@ -534,16 +528,13 @@ mod tests {
 
     #[tokio::test]
     async fn missing_api_key_fails_before_sending() {
-        let client = SteelClient::new().unwrap();
         let auth = Auth {
             api_key: None,
             source: AuthSource::None,
         };
+        let client = SteelClient::with("http://127.0.0.1:1".into(), ApiMode::Cloud, auth).unwrap();
         let session = Session {
             client: &client,
-            base_url: "http://127.0.0.1:1",
-            mode: ApiMode::Cloud,
-            auth: &auth,
             id: ID,
         };
         let result = session.run(json!({"commands": []})).await;

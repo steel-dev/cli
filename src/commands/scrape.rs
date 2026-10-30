@@ -1,9 +1,9 @@
 use clap::Parser;
 
 use crate::api::client::SteelClient;
-use crate::api::top_level::{get_scrape_output_text, parse_scrape_formats};
+use crate::api::top_level::{Target, get_scrape_output_text, parse_scrape_formats};
+use crate::util::output;
 use crate::util::url::resolve_tool_url;
-use crate::util::{api, output};
 
 #[derive(Parser)]
 pub struct Args {
@@ -43,22 +43,14 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         None => vec!["markdown".into()],
     };
 
-    let (mode, base_url, auth) = api::resolve_with_auth();
-
-    let client = SteelClient::new()?;
-    let response = client
-        .scrape(
-            &base_url,
-            mode,
-            &auth,
-            &url,
-            &formats,
-            args.delay,
-            args.pdf,
-            args.screenshot,
-            args.use_proxy,
-            args.region.as_deref(),
-        )
+    let target = Target {
+        url: &url,
+        delay: args.delay,
+        use_proxy: args.use_proxy,
+        region: args.region.as_deref(),
+    };
+    let response = SteelClient::new()?
+        .scrape(&target, &formats, args.pdf, args.screenshot)
         .await?;
 
     if output::is_json() {

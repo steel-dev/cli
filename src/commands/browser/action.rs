@@ -9,9 +9,7 @@ use crate::api::client::{ApiError, SteelClient};
 use crate::api::commands::{Reply, Session};
 use crate::api::session::Session as RemoteSession;
 use crate::browser::state::{self, BrowserSession, SnapshotInfo};
-use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
-use crate::util::api;
 use crate::util::output::{self, SilentExit};
 
 use super::{DEFAULT_SESSION, start};
@@ -1198,38 +1196,32 @@ fn restarted(body: &Value) -> bool {
 
 pub struct Browser {
     client: SteelClient,
-    auth: Auth,
     pub state: BrowserSession,
 }
 
-async fn attach(
-    client: &SteelClient,
-    mode: ApiMode,
-    base_url: &str,
-    auth: &Auth,
-    id: &str,
-) -> Result<BrowserSession> {
-    let remote = RemoteSession::parse(client.cli_get_session(base_url, mode, auth, id).await?)?;
+async fn attach(client: &SteelClient, id: &str) -> Result<BrowserSession> {
+    let remote = RemoteSession::parse(client.cli_get_session(id).await?)?;
     if !remote.is_live() {
         bail!("Session {id} has ended. Start a new one with `steel browser start`.");
     }
-    let mut attached =
-        BrowserSession::new(id.to_string(), id.to_string(), mode, base_url.to_string());
-    attached.live_url = remote.viewer_url(mode);
+    let mut attached = BrowserSession::new(
+        id.to_string(),
+        id.to_string(),
+        client.mode(),
+        client.base_url().to_string(),
+    );
+    attached.live_url = remote.viewer_url(client.mode());
     state::save(&attached)?;
     Ok(attached)
 }
 
 impl Browser {
     pub async fn open(name: Option<&str>, start_default: bool) -> Result<Self> {
-        let (mode, base_url, auth) = api::resolve_with_auth();
         let client = SteelClient::new()?;
         let state = match name {
             Some(name) => match state::load(name)? {
                 Some(found) => found,
-                None if state::looks_like_session_id(name) => {
-                    attach(&client, mode, &base_url, &auth, name).await?
-                }
+                None if state::looks_like_session_id(name) => attach(&client, name).await?,
                 None => bail!(
                     "Session \"{name}\" is not running. It may have expired. Run `steel browser start --session {name}` to start a new one."
                 ),
@@ -1239,26 +1231,18 @@ impl Browser {
                 None if start_default => {
                     eprintln!("warning: session \"default\" is not running; starting a new one");
                     let options = start::default_options();
-                    start::create(&client, mode, &base_url, &auth, DEFAULT_SESSION, &options)
-                        .await?
-                        .0
+                    start::create(&client, DEFAULT_SESSION, &options).await?.0
                 }
                 None => bail!("No active browser session. Start one with `steel browser start`."),
             },
         };
-        Ok(Self {
-            client,
-            auth,
-            state,
-        })
+        let client = client.at(&state.api_url, state.mode);
+        Ok(Self { client, state })
     }
 
     fn session(&self) -> Session<'_> {
         Session {
             client: &self.client,
-            base_url: &self.state.api_url,
-            mode: self.state.mode,
-            auth: &self.auth,
             id: &self.state.id,
         }
     }

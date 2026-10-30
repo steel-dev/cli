@@ -124,7 +124,7 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
         });
     }
 
-    let Ok(client) = SteelClient::new() else {
+    let Ok(client) = SteelClient::with(base_url.to_string(), mode, auth.clone()) else {
         checks.push(Check {
             category: "api",
             name: "Failed to initialize HTTP client".into(),
@@ -139,14 +139,7 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
     let timed_sessions = async {
         let start = Instant::now();
         let result = client
-            .request(
-                base_url,
-                mode,
-                reqwest::Method::GET,
-                "/sessions",
-                None,
-                auth,
-            )
+            .request(reqwest::Method::GET, "/sessions", None)
             .await;
         (result, start.elapsed().as_millis())
     };
@@ -154,7 +147,7 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
     // silently skipped on any error so doctor never degrades because of it.
     let projects = async {
         if need_auth {
-            client.get_projects(base_url, mode, auth).await.ok()
+            client.get_projects().await.ok()
         } else {
             None
         }

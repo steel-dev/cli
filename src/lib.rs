@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_arguments)]
-
 mod api;
 mod browser;
 mod commands;
