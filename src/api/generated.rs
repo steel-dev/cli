@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::client::{ApiError, SteelClient};
-use crate::config::auth::Auth;
-use crate::config::settings::ApiMode;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct OperationMetadata {
@@ -336,129 +334,74 @@ fn build_get_session_agent_traces_path(
 impl SteelClient {
     pub async fn cli_get_session_agent_logs(
         &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
         session_id: &str,
         query: &GetSessionAgentLogsQuery,
     ) -> Result<Value, ApiError> {
         self.request(
-            base_url,
-            mode,
             reqwest::Method::GET,
             &build_get_session_agent_logs_path(session_id, query),
             None,
-            auth,
         )
         .await
     }
 
-    pub async fn cli_get_session(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
-        session_id: &str,
-    ) -> Result<Value, ApiError> {
+    pub async fn cli_get_session(&self, session_id: &str) -> Result<Value, ApiError> {
         self.request(
-            base_url,
-            mode,
             reqwest::Method::GET,
             &build_get_session_path(session_id),
             None,
-            auth,
         )
         .await
     }
 
-    pub async fn cli_get_sessions(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
-        query: &GetSessionsQuery,
-    ) -> Result<Value, ApiError> {
-        self.request(
-            base_url,
-            mode,
-            reqwest::Method::GET,
-            &build_get_sessions_path(query),
-            None,
-            auth,
-        )
-        .await
+    pub async fn cli_get_sessions(&self, query: &GetSessionsQuery) -> Result<Value, ApiError> {
+        self.request(reqwest::Method::GET, &build_get_sessions_path(query), None)
+            .await
     }
 
     pub async fn cli_get_session_logs(
         &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
         session_id: &str,
         query: &GetSessionLogsQuery,
     ) -> Result<Value, ApiError> {
         self.request(
-            base_url,
-            mode,
             reqwest::Method::GET,
             &build_get_session_logs_path(session_id, query),
             None,
-            auth,
         )
         .await
     }
 
-    pub async fn cli_release_session(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
-        session_id: &str,
-    ) -> Result<Value, ApiError> {
+    pub async fn cli_release_session(&self, session_id: &str) -> Result<Value, ApiError> {
         self.request(
-            base_url,
-            mode,
             reqwest::Method::POST,
             &build_release_session_path(session_id),
             None,
-            auth,
         )
         .await
     }
 
     pub async fn cli_release_all_sessions(
         &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
         query: &ReleaseAllSessionsQuery,
     ) -> Result<Value, ApiError> {
         self.request(
-            base_url,
-            mode,
             reqwest::Method::POST,
             &build_release_all_sessions_path(query),
             None,
-            auth,
         )
         .await
     }
 
     pub async fn cli_get_session_agent_traces(
         &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
         session_id: &str,
         query: &GetSessionAgentTracesQuery,
     ) -> Result<Value, ApiError> {
         self.request(
-            base_url,
-            mode,
             reqwest::Method::GET,
             &build_get_session_agent_traces_path(session_id, query),
             None,
-            auth,
         )
         .await
     }

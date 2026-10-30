@@ -29,8 +29,8 @@ impl Cli {
             .env("STEEL_API_URL", &self.api)
             .env("STEEL_API_KEY", "sk-test")
             .env("STEEL_TELEMETRY_DISABLED", "1")
-            .env_remove("STEEL_FORCE_TTY")
             .arg("--no-update-check")
+            .arg("--json")
             .args(args)
             .output()
             .await

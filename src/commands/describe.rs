@@ -394,6 +394,91 @@ fn has_visible_subcommands(cmd: &clap::Command) -> bool {
         .any(|s| !s.is_hide_set() && s.get_name() != "help")
 }
 
+const OVERVIEW_COLUMN: usize = 40;
+
+pub fn overview(root: &clap::Command) -> String {
+    let mut lines = Vec::new();
+    for sub in get_visible_subcommands(root) {
+        overview_lines(&sub, &format!("steel {}", sub.get_name()), &mut lines);
+    }
+    lines.join("\n")
+}
+
+fn overview_lines(cmd: &clap::Command, path: &str, lines: &mut Vec<String>) {
+    let (positionals, flags): (Vec<&clap::Arg>, Vec<&clap::Arg>) = cmd
+        .get_arguments()
+        .filter(|a| is_visible_arg(a))
+        .partition(|a| a.is_positional());
+    let usage = positionals.iter().fold(path.to_string(), |usage, arg| {
+        format!("{usage} {}", placeholder(arg))
+    });
+    let mut about = cmd.get_about().map(|a| a.to_string()).unwrap_or_default();
+    let aliases = get_aliases(cmd);
+    if !aliases.is_empty() {
+        about.push_str(&format!(" (aliases: {})", aliases.join(", ")));
+    }
+    lines.push(overview_row(2, &usage, &about));
+    for arg in flags {
+        lines.push(overview_row(4, &flag_usage(arg), &arg_summary(arg)));
+    }
+    for sub in get_visible_subcommands(cmd) {
+        overview_lines(&sub, &format!("{path} {}", sub.get_name()), lines);
+    }
+}
+
+fn overview_row(indent: usize, left: &str, right: &str) -> String {
+    let left = format!("{:indent$}{left}", "");
+    if right.is_empty() {
+        return left;
+    }
+    let width = OVERVIEW_COLUMN.max(left.len() + 2);
+    format!("{left:<width$}{right}")
+}
+
+fn value_name(arg: &clap::Arg) -> String {
+    arg.get_value_names()
+        .and_then(|names| names.first())
+        .map_or_else(|| arg.get_id().to_string(), |name| name.to_string())
+}
+
+fn takes_many(arg: &clap::Arg) -> bool {
+    arg.get_num_args()
+        .is_some_and(|range| range.max_values() > 1)
+}
+
+fn placeholder(arg: &clap::Arg) -> String {
+    let name = value_name(arg);
+    let many = if takes_many(arg) { "..." } else { "" };
+    if arg.is_required_set() {
+        format!("<{name}>{many}")
+    } else {
+        format!("[{name}]{many}")
+    }
+}
+
+fn flag_usage(arg: &clap::Arg) -> String {
+    let mut usage = match (arg.get_short(), arg.get_long()) {
+        (Some(short), Some(long)) => format!("-{short}, --{long}"),
+        (Some(short), None) => format!("-{short}"),
+        (None, Some(long)) => format!("--{long}"),
+        (None, None) => value_name(arg),
+    };
+    if arg.get_action().takes_values() {
+        usage.push_str(&format!(" <{}>", value_name(arg)));
+    }
+    usage
+}
+
+fn arg_summary(arg: &clap::Arg) -> String {
+    let mut summary = arg.get_help().map(|h| h.to_string()).unwrap_or_default();
+    if arg.get_action().takes_values()
+        && let Some(default) = arg.get_default_values().first()
+    {
+        summary.push_str(&format!(" [default: {}]", default.to_string_lossy()));
+    }
+    summary
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -599,5 +684,32 @@ mod tests {
         );
         assert_eq!(ops[0]["streaming"]["transport"], "websocket");
         assert_eq!(ops[0]["streaming"]["path"], "/v1/sessions/{id}/logs");
+    }
+
+    #[test]
+    fn generated_operation_ids_are_unique() {
+        let ids: Vec<_> = CLI_OPERATION_METADATA.iter().map(|op| op.id).collect();
+        let unique: std::collections::BTreeSet<_> = ids.iter().collect();
+        assert_eq!(ids.len(), unique.len());
+    }
+
+    #[test]
+    fn generated_command_paths_exist_in_clap_tree() {
+        let root = root_cmd();
+        for op in CLI_OPERATION_METADATA {
+            let mut current = root.clone();
+            for segment in op
+                .command
+                .split_whitespace()
+                .filter(|s| !s.starts_with('-'))
+            {
+                current = current
+                    .find_subcommand(segment)
+                    .unwrap_or_else(|| {
+                        panic!("generated command path does not exist: {}", op.command)
+                    })
+                    .clone();
+            }
+        }
     }
 }

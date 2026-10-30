@@ -1,6 +1,7 @@
 use clap::Parser;
+use serde_json::json;
 
-use crate::status;
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {
@@ -15,13 +16,21 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .join("steel");
 
     if !args.clean {
-        status!("Steel CLI cache directory: {}", cache_dir.display());
-        status!("Use --clean to remove all cached files.");
+        output::success(
+            json!({"cacheDir": cache_dir}),
+            &format!(
+                "Steel CLI cache directory: {}\nUse --clean to remove all cached files.\n",
+                cache_dir.display()
+            ),
+        );
         return Ok(());
     }
 
     if !cache_dir.exists() {
-        status!("Cache directory does not exist. Nothing to clean.");
+        output::success(
+            json!({"cacheDir": cache_dir, "removed": 0}),
+            "Cache directory does not exist. Nothing to clean.\n",
+        );
         return Ok(());
     }
 
@@ -37,8 +46,13 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         count += 1;
     }
 
-    status!("Removed {count} item(s) from cache.");
-    status!("Cache directory: {}", cache_dir.display());
+    output::success(
+        json!({"cacheDir": cache_dir, "removed": count}),
+        &format!(
+            "Removed {count} item(s) from cache.\nCache directory: {}\n",
+            cache_dir.display()
+        ),
+    );
 
     Ok(())
 }

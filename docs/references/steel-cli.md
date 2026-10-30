@@ -65,8 +65,8 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
   URLs with sensitive query keys redacted.
 - `steel scrape`, `steel screenshot`, and `steel pdf` share local/cloud endpoint
   resolution conventions with browser lifecycle commands.
-- `steel scrape` defaults to markdown-first output for token efficiency; use
-  `--raw` to print the full API JSON payload.
+- `steel scrape` prints markdown by default for token efficiency; use `--json`
+  to print the full API response.
 
 ## Core Config Paths
 
@@ -76,7 +76,7 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - Browser session state: `~/.config/steel/browser-sessions/<name>.json`
 - Profile metadata: `~/.config/steel/profiles/<name>.json`
 
-On the first run where telemetry is enabled, the CLI prints a one-time notice to stderr describing what is collected and how to opt out. The notice is suppressed in JSON/non-TTY output.
+On the first run where telemetry is enabled, the CLI prints a one-time notice to stderr describing what is collected and how to opt out. The notice is suppressed with `--json`.
 
 Telemetry can be disabled persistently in `config.json` with:
 
@@ -91,13 +91,11 @@ Telemetry can be disabled persistently in `config.json` with:
 ## Environment Variables (Common)
 
 - `STEEL_API_KEY`: cloud auth for the session and commands APIs.
-- `STEEL_API_URL`: cloud API endpoint override.
-- `STEEL_BROWSER_API_URL`: canonical self-hosted local endpoint override.
-- `STEEL_LOCAL_API_URL`: backward-compatible self-hosted alias.
+- `STEEL_API_URL`: API endpoint override, cloud or self-hosted.
+- `STEEL_WS_URL`: WebSocket endpoint for `steel sessions logs --follow` and `traces --follow`.
 - `STEEL_CONFIG_DIR`: override config directory root.
 - `STEEL_TELEMETRY_HOST`: override the PostHog ingest host.
 - `STEEL_TELEMETRY_DISABLED`: force telemetry off.
-- `STEEL_PROFILE`: default profile name for browser sessions.
 
 ## Key References
 

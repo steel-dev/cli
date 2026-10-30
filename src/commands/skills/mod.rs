@@ -264,10 +264,6 @@ pub async fn install_names(names: &[String], yes: bool) -> anyhow::Result<()> {
     install_names_with_options(names, None, false, yes).await
 }
 
-pub async fn install_all(yes: bool) -> anyhow::Result<()> {
-    install_all_with_options(None, false, yes).await
-}
-
 pub async fn install_catalog_flow() -> anyhow::Result<()> {
     run_npx(&["skills", "add", REPO_SPEC])
         .context("starting Steel skills installer. You can also run manually: npx skills add steel-dev/skills")?;

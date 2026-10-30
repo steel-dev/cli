@@ -5,8 +5,6 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::api::client::{ApiError, SteelClient};
-use crate::config::auth::Auth;
-use crate::config::settings::ApiMode;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,21 +51,8 @@ pub const fn environment_label(is_production: bool) -> &'static str {
 
 impl SteelClient {
     /// Fetch the projects visible to the current API key.
-    pub async fn get_projects(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
-    ) -> Result<Value, ApiError> {
-        self.request(
-            base_url,
-            mode,
-            reqwest::Method::GET,
-            "/projects",
-            None,
-            auth,
-        )
-        .await
+    pub async fn get_projects(&self) -> Result<Value, ApiError> {
+        self.request(reqwest::Method::GET, "/projects", None).await
     }
 }
 
@@ -189,7 +174,8 @@ mod tests {
 
     // --- get_projects against a mock server ---
 
-    use crate::config::auth::AuthSource;
+    use crate::config::auth::{Auth, AuthSource};
+    use crate::config::settings::ApiMode;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -212,16 +198,13 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = SteelClient::new().unwrap();
         let auth = Auth {
             api_key: Some("test-key".into()),
             source: AuthSource::Env,
         };
+        let client = SteelClient::with(server.uri(), ApiMode::Cloud, auth).unwrap();
 
-        let data = client
-            .get_projects(&server.uri(), ApiMode::Cloud, &auth)
-            .await
-            .unwrap();
+        let data = client.get_projects().await.unwrap();
 
         let projects = parse_projects(&data);
         let current = resolve_current_project(&projects).unwrap();

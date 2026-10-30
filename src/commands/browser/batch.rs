@@ -22,7 +22,7 @@ struct ActionParser {
 
 const MAX_COMMANDS: usize = 50;
 
-fn split_command_str(s: &str) -> Vec<String> {
+pub fn split_command_str(s: &str) -> Vec<String> {
     let mut args = Vec::new();
     let mut current = String::new();
     let mut in_quote: Option<char> = None;
@@ -127,7 +127,6 @@ mod tests {
             "tab new",
             "tab close",
             "dialog accept",
-            "close",
             "status x-1",
         ] {
             let err = run(

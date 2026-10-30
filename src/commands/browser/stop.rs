@@ -3,7 +3,6 @@ use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::browser::state::{self, BrowserSession};
-use crate::config::auth::{self, Auth};
 use crate::util::output;
 
 #[derive(Parser)]
@@ -13,16 +12,13 @@ pub struct Args {
     pub all: bool,
 }
 
-pub async fn release(
-    client: &SteelClient,
-    auth: &Auth,
-    session: &BrowserSession,
-) -> anyhow::Result<()> {
+pub async fn release(client: &SteelClient, session: &BrowserSession) -> anyhow::Result<()> {
     match client
-        .release_session(&session.api_url, session.mode, &session.id, auth)
+        .at(&session.api_url, session.mode)
+        .cli_release_session(&session.id)
         .await
     {
-        Ok(()) => {}
+        Ok(_) => {}
         Err(err) if err.is_not_found() => {}
         Err(err) => return Err(err.into()),
     }
@@ -36,7 +32,6 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     }
 
     let client = SteelClient::new()?;
-    let auth = auth::resolve_auth();
 
     let stopped: Vec<String> = if args.all {
         let sessions = state::list();
@@ -50,7 +45,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         }
         let mut stopped = Vec::new();
         for session in &sessions {
-            match release(&client, &auth, session).await {
+            match release(&client, session).await {
                 Ok(()) => stopped.push(session.name.clone()),
                 Err(err) => eprintln!("warning: could not stop \"{}\": {err}", session.name),
             }
@@ -58,7 +53,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         stopped
     } else {
         let target = super::existing_session(session)?;
-        release(&client, &auth, &target).await?;
+        release(&client, &target).await?;
         vec![target.name]
     };
 
