@@ -1,6 +1,5 @@
 //! Unified output formatting for human (text) and machine (JSON) modes.
 
-use std::io::IsTerminal;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::{Value, json};
@@ -9,20 +8,8 @@ static JSON_MODE: AtomicBool = AtomicBool::new(false);
 static NO_COLOR: AtomicBool = AtomicBool::new(false);
 
 /// Initialize output settings. Called once at startup.
-///
-/// - `explicit_json`: whether `--json` flag was passed
-/// - Detects TTY via `stdout().is_terminal()`
-/// - `STEEL_FORCE_TTY=1` overrides auto-detection
-/// - `NO_COLOR` env var is detected for future color support
-/// - Piped output (non-TTY) automatically enables JSON mode
-pub fn init(explicit_json: bool) {
-    let stdout_is_tty = std::io::stdout().is_terminal();
-    let force_tty = std::env::var("STEEL_FORCE_TTY").is_ok_and(|v| v == "1");
-    let tty = force_tty || stdout_is_tty;
-
+pub fn init(json: bool) {
     NO_COLOR.store(std::env::var("NO_COLOR").is_ok(), Ordering::Relaxed);
-
-    let json = explicit_json || !tty;
     JSON_MODE.store(json, Ordering::Relaxed);
 }
 

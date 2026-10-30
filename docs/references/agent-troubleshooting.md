@@ -32,7 +32,7 @@ From `steel browser start` output:
 
 Do not assume `connect_url` contains usable raw credentials.
 
-From action output (`--json`, or any piped output):
+From action output with `--json`:
 
 - `success`: whether the command did what it was asked.
 - `error_code`: the engine error code on failure, such as `stale_ref`.

@@ -135,7 +135,7 @@ Batch sends all commands in one request (at most 50). They run in order and stop
 - The CLI sends a random `Idempotency-Key` and the last operation id. If the API cannot reach the browser, it retries with the same key, so the command never runs twice.
 - When a command's response is lost, run the same command again. You get the stored result instead of a second run, with the note `This is the stored result of an earlier run`.
 - Text output prints the result. Notes about dialogs, new tabs, downloads, and replays go to stderr.
-- `--json` (or piped output) prints the engine response under `data`, with any `notices`.
+- `--json` prints the engine response under `data`, with any `notices`.
 - A failed command exits with code 1 and prints the engine error code, such as `stale_ref`, `not_actionable`, or `tab_required`.
 
 ## Removed in 0.5
