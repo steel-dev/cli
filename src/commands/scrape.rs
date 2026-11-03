@@ -55,12 +55,45 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     if output::is_json() {
         output::success_data(response);
-    } else {
-        match get_scrape_output_text(&response, &formats) {
-            Some(text) => println!("{text}"),
-            None => println!("{}", serde_json::to_string_pretty(&response)?),
+        return Ok(());
+    }
+
+    match get_scrape_output_text(&response, &formats) {
+        Some(text) => println!("{text}"),
+        None => println!("{}", serde_json::to_string_pretty(&response)?),
+    }
+    for (requested, key) in [(args.screenshot, "screenshot"), (args.pdf, "pdf")] {
+        if requested && let Some(url) = asset_url(&response[key]) {
+            println!("\n{key}: {url}");
         }
     }
 
     Ok(())
+}
+
+fn asset_url(value: &serde_json::Value) -> Option<&str> {
+    value
+        .as_str()
+        .or_else(|| value["url"].as_str())
+        .filter(|url| !url.trim().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn asset_urls_are_read_from_strings_or_objects() {
+        assert_eq!(
+            asset_url(&json!({"url": "https://cdn/x.png"})),
+            Some("https://cdn/x.png")
+        );
+        assert_eq!(
+            asset_url(&json!("https://cdn/x.pdf")),
+            Some("https://cdn/x.pdf")
+        );
+        assert_eq!(asset_url(&json!(null)), None);
+        assert_eq!(asset_url(&json!({"url": " "})), None);
+    }
 }
