@@ -86,7 +86,7 @@ pub struct ApiOperationInfo {
 // ── Entry point ─────────────────────────────────────────────────────
 
 pub async fn run(args: Args) -> Result<()> {
-    let root = super::Cli::command();
+    let root = root_command(args.all);
     let (cmd, resolved_path) = resolve_command(&root, &args.path)?;
 
     let output_data = if args.all {
@@ -98,6 +98,14 @@ pub async fn run(args: Args) -> Result<()> {
     let value = serde_json::to_value(output_data)?;
     output::success_data(value);
     Ok(())
+}
+
+fn root_command(all: bool) -> clap::Command {
+    let mut root = super::Cli::command();
+    if !all {
+        root.build();
+    }
+    root
 }
 
 // ── Command resolution ──────────────────────────────────────────────
@@ -530,6 +538,27 @@ mod tests {
         assert!(names.contains(&"snapshot"));
         assert!(names.contains(&"start"));
         assert!(names.contains(&"stop"));
+    }
+
+    #[test]
+    fn single_command_lists_inherited_global_flags() {
+        let root = root_command(false);
+        let path = vec!["browser".to_string(), "click".to_string()];
+        let (cmd, resolved) = resolve_command(&root, &path).unwrap();
+        let v = serde_json::to_value(describe_node(&cmd, &resolved)).unwrap();
+        let names = |key: &str| -> Vec<String> {
+            v[key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| p["name"].as_str().unwrap().to_string())
+                .collect()
+        };
+        let globals = names("global_args");
+        for name in ["session", "diff", "json", "local", "api-url"] {
+            assert!(globals.iter().any(|g| g == name), "{name}: {globals:?}");
+        }
+        assert!(!names("parameters").iter().any(|p| p == "session"));
     }
 
     #[test]
