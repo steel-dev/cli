@@ -32,7 +32,7 @@ pub enum Command {
     Logs(LogsArgs),
 
     /// Read raw CDP-derived agent events for a session
-    AgentLogs(LogsArgs),
+    AgentLogs(AgentLogsArgs),
 
     /// Read semantic agent trace timeline for a session
     Traces(TracesArgs),
@@ -82,7 +82,7 @@ pub struct ReleaseArgs {
     pub session_id: Option<String>,
 
     /// Release all active cloud sessions
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with_all = ["session_id", "session"])]
     pub all: bool,
 
     /// Resolve session ID from a local browser session name
@@ -113,6 +113,44 @@ pub struct LogsArgs {
 
     /// Alias for --start-time
     #[arg(long, alias = "since")]
+    pub since: Option<String>,
+
+    /// ISO timestamp upper bound
+    #[arg(long)]
+    pub end_time: Option<String>,
+
+    /// Event type filter, repeatable or comma-separated
+    #[arg(long, value_delimiter = ',')]
+    pub event_type: Vec<String>,
+
+    /// Number of events to return
+    #[arg(long)]
+    pub limit: Option<u16>,
+
+    /// Pagination offset
+    #[arg(long)]
+    pub offset: Option<u32>,
+}
+
+#[derive(Parser)]
+pub struct AgentLogsArgs {
+    /// Cloud session ID
+    pub session_id: Option<String>,
+
+    /// Resolve session ID from a local browser session name
+    #[arg(long)]
+    pub session: Option<String>,
+
+    /// Filter by namespace
+    #[arg(long)]
+    pub namespace: Option<String>,
+
+    /// ISO timestamp lower bound
+    #[arg(long)]
+    pub start_time: Option<String>,
+
+    /// Alias for --start-time
+    #[arg(long)]
     pub since: Option<String>,
 
     /// ISO timestamp upper bound
@@ -257,7 +295,7 @@ async fn run_logs(args: LogsArgs, stream_kind: StreamKind, label: &str) -> Resul
     Ok(())
 }
 
-async fn run_agent_logs(args: LogsArgs) -> Result<()> {
+async fn run_agent_logs(args: AgentLogsArgs) -> Result<()> {
     let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let query = GetSessionAgentLogsQuery {
         namespace: args.namespace,
@@ -301,10 +339,22 @@ fn resolve_session_id(session_id: Option<&str>, session: Option<&str>) -> Result
         session_id.map(str::trim).filter(|id| !id.is_empty()),
         session,
     ) {
-        (Some(id), _) => Ok(id.to_string()),
+        (Some(id), _) => {
+            if !is_valid_session_id(id) {
+                anyhow::bail!("Invalid session ID: {id}");
+            }
+            Ok(id.to_string())
+        }
         (None, Some(session)) => Ok(super::browser::existing_session(Some(session))?.id),
         (None, None) => anyhow::bail!("Missing session ID. Pass <session-id> or --session <name>."),
     }
+}
+
+fn is_valid_session_id(id: &str) -> bool {
+    !matches!(id, "." | "..")
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 async fn follow_if_live(
@@ -595,6 +645,24 @@ mod tests {
             url,
             "ws://localhost:3000/v1/sessions/sess/logs?apiKey=sk_test"
         );
+    }
+
+    #[test]
+    fn session_ids_cannot_change_the_request_path() {
+        assert!(is_valid_session_id("4f7c2b1e-9a3d-4e5f-8b6a-1c2d3e4f5a6b"));
+        assert!(is_valid_session_id("sess_1.v2"));
+        for id in ["x/..", "..", ".", "a?b", "a#b", "a%2fb", "a b"] {
+            assert!(!is_valid_session_id(id), "{id}");
+        }
+        assert!(resolve_session_id(Some("x/.."), None).is_err());
+        assert!(resolve_session_id(Some("  "), None).is_err());
+    }
+
+    #[test]
+    fn release_all_conflicts_with_a_session() {
+        assert!(ReleaseArgs::try_parse_from(["release", "--all"]).is_ok());
+        assert!(ReleaseArgs::try_parse_from(["release", "abc", "--all"]).is_err());
+        assert!(ReleaseArgs::try_parse_from(["release", "--session", "work", "--all"]).is_err());
     }
 
     #[test]
