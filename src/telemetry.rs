@@ -448,10 +448,7 @@ fn telemetry_mode() -> &'static str {
 
 fn error_class(err: &anyhow::Error) -> String {
     if let Some(silent) = err.downcast_ref::<crate::util::output::SilentExit>() {
-        return silent
-            .error_code
-            .clone()
-            .unwrap_or_else(|| "command_failed".to_string());
+        return silent.error_code.clone();
     }
     if let Some(api_err) = err.downcast_ref::<crate::api::client::ApiError>() {
         let class = match api_err {
@@ -707,14 +704,8 @@ mod tests {
 
     #[test]
     fn reported_failures_keep_their_error_code() {
-        let reported: anyhow::Error = crate::util::output::SilentExit {
-            code: 1,
-            error_code: Some("stale_ref".into()),
-        }
-        .into();
+        let reported: anyhow::Error = crate::util::output::SilentExit::new("stale_ref").into();
         assert_eq!(error_class(&reported), "stale_ref");
-        let silent: anyhow::Error = crate::util::output::SilentExit::new(1).into();
-        assert_eq!(error_class(&silent), "command_failed");
         assert_eq!(error_class(&anyhow::anyhow!("boom")), "internal_error");
     }
 

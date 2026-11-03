@@ -48,14 +48,14 @@ pub mod exit_code {
 #[derive(Debug)]
 pub struct SilentExit {
     pub code: i32,
-    pub error_code: Option<String>,
+    pub error_code: String,
 }
 
 impl SilentExit {
-    pub const fn new(code: i32) -> Self {
+    pub fn new(error_code: &str) -> Self {
         Self {
-            code,
-            error_code: None,
+            code: exit_code::GENERAL,
+            error_code: error_code.to_string(),
         }
     }
 }
@@ -78,11 +78,7 @@ pub fn fail(code: &str, message: &str, data: Option<&Value>) -> anyhow::Error {
     } else {
         eprintln!("Error: {message}");
     }
-    SilentExit {
-        code: exit_code::GENERAL,
-        error_code: Some(code.to_string()),
-    }
-    .into()
+    SilentExit::new(code).into()
 }
 
 // --- Pure formatting functions (no I/O) ---

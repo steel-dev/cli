@@ -16,6 +16,7 @@ use crate::util::output;
 const DEFAULT_MANIFEST_URL: &str =
     "https://raw.githubusercontent.com/steel-dev/skills/main/manifest.json";
 const REPO_SPEC: &str = "steel-dev/skills";
+const DOCTOR_FAILURE_CODE: &str = "skills_doctor_failed";
 const FALLBACK_MANIFEST: &str = r#"{
   "version": "2026.06.02",
   "schema": 1,
@@ -417,7 +418,7 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
         });
         if has_fail {
             return Err(output::fail(
-                "skills_doctor_failed",
+                DOCTOR_FAILURE_CODE,
                 "Some checks failed.",
                 Some(&data),
             ));
@@ -442,7 +443,7 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
     }
 
     if has_fail {
-        return Err(output::SilentExit::new(output::exit_code::GENERAL).into());
+        return Err(output::SilentExit::new(DOCTOR_FAILURE_CODE).into());
     }
     Ok(())
 }

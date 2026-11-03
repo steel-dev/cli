@@ -12,6 +12,7 @@ use crate::util::output;
 use crate::util::version::is_newer;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+const FAILURE_CODE: &str = "doctor_failed";
 
 #[derive(Parser)]
 pub struct Args {
@@ -77,7 +78,7 @@ impl Report {
         if output::is_json() {
             if self.failed() {
                 return Err(output::fail(
-                    "doctor_failed",
+                    FAILURE_CODE,
                     "Some checks failed.",
                     Some(&self.to_json()),
                 ));
@@ -87,7 +88,7 @@ impl Report {
         }
         self.print_text();
         if self.failed() {
-            return Err(output::SilentExit::new(output::exit_code::GENERAL).into());
+            return Err(output::SilentExit::new(FAILURE_CODE).into());
         }
         Ok(())
     }
@@ -415,9 +416,8 @@ fn format_category(s: &str) -> &str {
 mod tests {
     use super::*;
 
-    #[test]
-    fn failed_report_is_detected() {
-        let report = Report {
+    fn failing_report() -> Report {
+        Report {
             checks: vec![Check {
                 category: "auth",
                 name: "API key not configured".into(),
@@ -426,10 +426,22 @@ mod tests {
                 fix: Some("steel login"),
                 transient: false,
             }],
-        };
+        }
+    }
+
+    #[test]
+    fn failed_report_is_detected() {
+        let report = failing_report();
         assert!(report.failed());
         assert_eq!(report.to_json()["overall"], "fail");
         assert_eq!(report.to_json()["checks"][0]["fix"], "steel login");
+    }
+
+    #[test]
+    fn failed_report_exits_with_the_doctor_error_code() {
+        let err = failing_report().emit().unwrap_err();
+        let silent = err.downcast_ref::<output::SilentExit>().unwrap();
+        assert_eq!(silent.error_code, "doctor_failed");
     }
 
     #[test]
