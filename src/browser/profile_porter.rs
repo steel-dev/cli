@@ -384,7 +384,7 @@ struct KeyProvider {
     source_key_len: usize,
     source_algorithm: CryptoAlgorithm,
     v10_key: Option<[u8; 16]>,
-    warning: Option<String>,
+    keyring_missing: bool,
 }
 
 fn get_key_provider(browser: BrowserId) -> Result<KeyProvider> {
@@ -434,7 +434,7 @@ fn get_macos_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         source_key_len: 16,
         source_algorithm: CryptoAlgorithm::Aes128Cbc,
         v10_key: None,
-        warning: None,
+        keyring_missing: false,
     })
 }
 
@@ -486,13 +486,6 @@ fn get_linux_key_provider(browser: BrowserId) -> Result<KeyProvider> {
             .filter(|s| !s.is_empty())
             .or_else(|| try_kwallet_password(browser))
     });
-    let warning = keyring.is_none().then(|| {
-        format!(
-            "Could not read the {} password from the keyring, so cookies it encrypted (v11) will be left out. Unlock the keyring and try again.",
-            browser.display_name()
-        )
-    });
-
     let key_16 = derive_key(keyring.as_deref().unwrap_or(""), 1);
     let mut source_key = [0u8; 32];
     source_key[..16].copy_from_slice(&key_16);
@@ -502,7 +495,7 @@ fn get_linux_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         source_key_len: 16,
         source_algorithm: CryptoAlgorithm::Aes128Cbc,
         v10_key: Some(derive_target_key()),
-        warning,
+        keyring_missing: keyring.is_none(),
     })
 }
 
@@ -578,7 +571,7 @@ fn get_windows_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         source_key_len: 32,
         source_algorithm: CryptoAlgorithm::Aes256Gcm,
         v10_key: None,
-        warning: None,
+        keyring_missing: false,
     })
 }
 
@@ -699,6 +692,7 @@ struct ReencryptResult {
     buffer: Vec<u8>,
     converted: u64,
     skipped: u64,
+    skipped_v11: u64,
 }
 
 fn copy_sqlite_db(original_path: &Path, dir: &Path) -> Result<PathBuf> {
@@ -755,6 +749,7 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
 
     let mut converted: u64 = 0;
     let mut skipped: u64 = 0;
+    let mut skipped_v11: u64 = 0;
     let tx = conn.unchecked_transaction()?;
     {
         let mut update = tx.prepare("UPDATE cookies SET encrypted_value = ? WHERE rowid = ?")?;
@@ -807,6 +802,9 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
             let Some(plaintext) = plaintext else {
                 delete.execute(rusqlite::params![rowid])?;
                 skipped += 1;
+                if encrypted_value.starts_with(b"v11") {
+                    skipped_v11 += 1;
+                }
                 continue;
             };
 
@@ -826,6 +824,16 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
         buffer,
         converted,
         skipped,
+        skipped_v11,
+    })
+}
+
+fn keyring_warning(browser: BrowserId, provider: &KeyProvider, skipped_v11: u64) -> Option<String> {
+    (provider.keyring_missing && skipped_v11 > 0).then(|| {
+        format!(
+            "Could not read the {} password from the keyring, so {skipped_v11} cookie(s) it encrypted (v11) were left out. Unlock the keyring and try again.",
+            browser.display_name()
+        )
     })
 }
 
@@ -939,7 +947,7 @@ pub fn package_profile(
 
     on_progress("Reading encryption key...");
     let provider = get_key_provider(browser)?;
-    let mut warnings: Vec<String> = provider.warning.iter().cloned().collect();
+    let mut warnings = Vec::new();
 
     let mut zip_files: Vec<(String, Vec<u8>)> = Vec::new();
     let mut cookies_reencrypted: u64 = 0;
@@ -959,6 +967,7 @@ pub fn package_profile(
             if *entry_name == "Cookies" {
                 on_progress("Re-encrypting Cookies...");
                 let result = reencrypt_cookies_db(&full_path, &provider)?;
+                warnings.extend(keyring_warning(browser, &provider, result.skipped_v11));
                 zip_files.push((format!("Default/{entry_name}"), result.buffer));
                 cookies_reencrypted = result.converted;
                 cookies_skipped = result.skipped;
@@ -1677,7 +1686,7 @@ mod tests {
             source_key_len: 16,
             source_algorithm: CryptoAlgorithm::Aes128Cbc,
             v10_key: None,
-            warning: None,
+            keyring_missing: false,
         };
 
         let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
@@ -1737,7 +1746,7 @@ mod tests {
             source_key_len: 16,
             source_algorithm: CryptoAlgorithm::Aes128Cbc,
             v10_key: None,
-            warning: None,
+            keyring_missing: false,
         };
 
         let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
@@ -1781,7 +1790,7 @@ mod tests {
             source_key_len: 16,
             source_algorithm: CryptoAlgorithm::Aes128Cbc,
             v10_key: None,
-            warning: None,
+            keyring_missing: false,
         };
 
         let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
@@ -1827,7 +1836,7 @@ mod tests {
             source_key_len: 16,
             source_algorithm: CryptoAlgorithm::Aes128Cbc,
             v10_key: Some(derive_target_key()),
-            warning: None,
+            keyring_missing: false,
         };
 
         let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
@@ -1838,6 +1847,55 @@ mod tests {
             &[(".a.com", "v10", "old"), (".b.com", "v11", "new")],
             meta_version,
         );
+    }
+
+    #[test]
+    fn keyring_warning_only_when_v11_cookies_are_left_out() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cookies_path = tmp.path().join("Cookies");
+        let meta_version = 20;
+
+        let v10 = encrypt_cookie(b"old", &derive_target_key(), ".a.com", meta_version);
+        let v11 = with_prefix(
+            encrypt_cookie(
+                b"new",
+                &derive_key("keyring-secret", 1),
+                ".b.com",
+                meta_version,
+            ),
+            b"v11",
+        );
+        create_test_cookies_db(
+            &cookies_path,
+            meta_version,
+            &[
+                (".a.com", "v10", v10.as_slice()),
+                (".b.com", "v11", v11.as_slice()),
+            ],
+        );
+
+        let mut sk = [0u8; 32];
+        sk[..16].copy_from_slice(&derive_key("", 1));
+        let provider = KeyProvider {
+            source_key: sk,
+            source_key_len: 16,
+            source_algorithm: CryptoAlgorithm::Aes128Cbc,
+            v10_key: Some(derive_target_key()),
+            keyring_missing: true,
+        };
+
+        let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
+        assert_eq!(result.converted, 1);
+        assert_eq!(result.skipped, 1);
+        assert_eq!(result.skipped_v11, 1);
+        let warning = keyring_warning(BrowserId::Chrome, &provider, result.skipped_v11).unwrap();
+        assert!(warning.contains("1 cookie(s)"), "{warning}");
+        assert!(keyring_warning(BrowserId::Chrome, &provider, 0).is_none());
+        let unlocked = KeyProvider {
+            keyring_missing: false,
+            ..provider
+        };
+        assert!(keyring_warning(BrowserId::Chrome, &unlocked, 1).is_none());
     }
 
     #[test]
@@ -1868,7 +1926,7 @@ mod tests {
             source_key_len: 16,
             source_algorithm: CryptoAlgorithm::Aes128Cbc,
             v10_key: None,
-            warning: None,
+            keyring_missing: false,
         };
 
         let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
