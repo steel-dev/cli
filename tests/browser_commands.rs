@@ -372,18 +372,18 @@ async fn stop_all_forgets_attached_sessions_without_stopping_them() {
     assert!(cli.state(ID).is_none());
 }
 
-#[tokio::test]
-async fn start_reports_the_session_it_replaced() {
-    const NEW: &str = "0d6e7f80-91a2-4b3c-8d4e-5f60718293a4";
+const NEW_ID: &str = "0d6e7f80-91a2-4b3c-8d4e-5f60718293a4";
+
+async fn start_replacing_work(release: ResponseTemplate) -> Output {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path(format!("/v1/sessions/{ID}/release")))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"success": true})))
+        .respond_with(release)
         .expect(1)
         .mount(&server)
         .await;
     let mut created = session_json();
-    created["id"] = json!(NEW);
+    created["id"] = json!(NEW_ID);
     Mock::given(method("POST"))
         .and(path("/v1/sessions"))
         .respond_with(ResponseTemplate::new(200).set_body_json(created))
@@ -395,11 +395,30 @@ async fn start_reports_the_session_it_replaced() {
 
     let out = cli.run(&["browser", "start", "--session", "work"]).await;
     assert!(out.status.success(), "{out:?}");
+    assert_eq!(cli.state("work").unwrap()["id"], NEW_ID);
+    out
+}
+
+#[tokio::test]
+async fn start_reports_the_session_it_replaced() {
+    let out =
+        start_replacing_work(ResponseTemplate::new(200).set_body_json(json!({"success": true})))
+            .await;
     let data = &json_out(&out)["data"];
-    assert_eq!(data["id"], NEW);
+    assert_eq!(data["id"], NEW_ID);
     assert_eq!(data["replacedSessionId"], ID);
+    assert_eq!(data["replacedSessionReleased"], true);
     assert!(String::from_utf8_lossy(&out.stderr).contains("replacing session \"work\""));
-    assert_eq!(cli.state("work").unwrap()["id"], NEW);
+}
+
+#[tokio::test]
+async fn start_reports_a_replaced_session_it_could_not_release() {
+    let out = start_replacing_work(ResponseTemplate::new(500)).await;
+    let data = &json_out(&out)["data"];
+    assert_eq!(data["id"], NEW_ID);
+    assert_eq!(data["replacedSessionId"], ID);
+    assert_eq!(data["replacedSessionReleased"], false);
+    assert!(String::from_utf8_lossy(&out.stderr).contains("could not release session"));
 }
 
 #[tokio::test]

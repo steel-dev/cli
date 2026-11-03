@@ -74,6 +74,8 @@ Output fields:
 - `name` (when set)
 - `live_url` (when available)
 - `connect_url` (when available)
+- `replacedSessionId` and `replacedSessionReleased` (JSON only, when the name already
+  had a session; `false` means the old session could not be released and is still running)
 
 Security contract:
 

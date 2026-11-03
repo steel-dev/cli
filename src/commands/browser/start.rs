@@ -140,11 +140,15 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
                 "note: replacing session \"{session_name}\" ({})",
                 existing.id
             );
-            if let Err(err) = super::stop::release(&client, &existing).await {
-                eprintln!("warning: could not release session {}: {err}", existing.id);
-                state::remove(&session_name)?;
-            }
-            Some(existing.id)
+            let released = match super::stop::release(&client, &existing).await {
+                Ok(()) => true,
+                Err(err) => {
+                    eprintln!("warning: could not release session {}: {err}", existing.id);
+                    state::remove(&session_name)?;
+                    false
+                }
+            };
+            Some((existing.id, released))
         }
         None => None,
     };
@@ -187,12 +191,16 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     properties.insert("inactivity_timeout_ms".into(), json!(inactivity_timeout_ms));
     crate::telemetry::track_event("browser_session_started", properties);
 
-    display_session_info(&created, connect_url.as_deref(), replaced.as_deref());
+    display_session_info(&created, connect_url.as_deref(), replaced.as_ref());
 
     Ok(())
 }
 
-fn display_session_info(info: &BrowserSession, connect_url: Option<&str>, replaced: Option<&str>) {
+fn display_session_info(
+    info: &BrowserSession,
+    connect_url: Option<&str>,
+    replaced: Option<&(String, bool)>,
+) {
     let remaining = remaining_time_str(info);
 
     if output::is_json() {
@@ -201,8 +209,9 @@ fn display_session_info(info: &BrowserSession, connect_url: Option<&str>, replac
             "mode": info.mode.to_string(),
         });
         data["name"] = json!(&info.name);
-        if let Some(id) = replaced {
+        if let Some((id, released)) = replaced {
             data["replacedSessionId"] = json!(id);
+            data["replacedSessionReleased"] = json!(released);
         }
         if let Some(ref url) = info.live_url {
             data["liveUrl"] = json!(url);
