@@ -5,7 +5,11 @@
 //! They do NOT import any library code — they treat the CLI as an opaque
 //! executable, ensuring the user-facing contract is preserved.
 
+use std::path::Path;
 use std::process::{Command, Output};
+
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Build a `Command` targeting the `steel` binary with a sanitized environment.
 ///
@@ -454,6 +458,108 @@ fn browser_action_without_session_warns_before_starting_default() {
         err.contains("warning: session \"default\" is not running"),
         "stderr should warn that a default session is being started, got: {err}"
     );
+}
+
+fn single_json_result(output: &Output) -> serde_json::Value {
+    let out = stdout(output);
+    let lines: Vec<&str> = out.lines().filter(|line| !line.trim().is_empty()).collect();
+    assert_eq!(
+        lines.len(),
+        1,
+        "expected one JSON result, got stdout={out} stderr={}",
+        stderr(output)
+    );
+    serde_json::from_str(lines[0]).unwrap()
+}
+
+async fn init_against(server: &MockServer) -> Output {
+    let (mut cmd, _tmp) = steel_cmd();
+    cmd.env("STEEL_API_URL", format!("{}/v1", server.uri()))
+        .env("STEEL_API_KEY", "sk-test")
+        .args(["--json", "init", "--no-skills"]);
+    tokio::process::Command::from(cmd).output().await.unwrap()
+}
+
+#[tokio::test]
+async fn init_json_prints_one_result() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/sessions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"sessions": []})))
+        .mount(&server)
+        .await;
+
+    let output = init_against(&server).await;
+
+    assert!(output.status.success(), "{output:?}");
+    let result = single_json_result(&output);
+    assert_eq!(result["success"], true);
+    assert_eq!(result["data"]["doctor"]["overall"], "pass");
+    assert_eq!(result["data"]["skills"], "skipped");
+}
+
+#[tokio::test]
+async fn init_json_prints_one_result_when_preflight_fails() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/sessions"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let output = init_against(&server).await;
+
+    assert_eq!(output.status.code(), Some(1));
+    let result = single_json_result(&output);
+    assert_eq!(result["success"], false);
+    assert_eq!(result["error_code"], "doctor_failed");
+    assert_eq!(result["data"]["overall"], "fail");
+}
+
+fn pinned_cookbook_ref() -> String {
+    let source = include_str!("../src/commands/forge.rs");
+    let line = source
+        .lines()
+        .find(|line| line.starts_with("const COOKBOOK_REF"))
+        .unwrap();
+    line.split('"').nth(1).unwrap()[..12].to_string()
+}
+
+#[test]
+fn forge_json_prints_the_created_project() {
+    let home = tempfile::tempdir().unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let steel = |args: &[&str]| {
+        let (mut cmd, _tmp) = steel_cmd();
+        cmd.env("HOME", home.path())
+            .env_remove("XDG_CACHE_HOME")
+            .current_dir(work.path())
+            .args(args);
+        cmd.output().unwrap()
+    };
+
+    let cache = single_json_result(&steel(&["--json", "cache"]));
+    let cookbook = Path::new(cache["data"]["cacheDir"].as_str().unwrap())
+        .join("cookbook")
+        .join(pinned_cookbook_ref());
+    let template = cookbook.join("examples/demo-ts");
+    std::fs::create_dir_all(&template).unwrap();
+    std::fs::write(template.join("index.ts"), "console.log('hi')").unwrap();
+    std::fs::write(
+        cookbook.join("registry.yaml"),
+        "- title: Demo\n  path: examples/demo-ts\n  language: typescript\n",
+    )
+    .unwrap();
+
+    let output = steel(&["--json", "forge", "demo-ts", "--name", "proj"]);
+
+    assert!(output.status.success(), "{output:?}");
+    let result = single_json_result(&output);
+    assert_eq!(result["data"]["name"], "proj");
+    assert_eq!(result["data"]["template"], "demo-ts");
+    assert_eq!(result["data"]["language"], "typescript");
+    assert!(Path::new(result["data"]["path"].as_str().unwrap()).ends_with("proj"));
+    assert!(work.path().join("proj/index.ts").exists());
 }
 
 // ─── Environment variable contracts ─────────────────────────────────

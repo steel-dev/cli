@@ -54,9 +54,13 @@ impl Cli {
     }
 
     fn write_state(&self, name: &str) {
+        self.write_session(name, ID);
+    }
+
+    fn write_session(&self, name: &str, id: &str) {
         let dir = self.config.path().join("browser-sessions");
         std::fs::create_dir_all(&dir).unwrap();
-        let state = json!({"name": name, "id": ID, "mode": "cloud", "apiUrl": self.api});
+        let state = json!({"name": name, "id": id, "mode": "cloud", "apiUrl": self.api});
         std::fs::write(dir.join(format!("{name}.json")), state.to_string()).unwrap();
     }
 }
@@ -153,6 +157,7 @@ async fn start_act_and_stop_without_a_daemon() {
     let out = json_out(&started);
     assert_eq!(out["data"]["id"], ID);
     assert_eq!(out["data"]["name"], "work");
+    assert!(out["data"].get("replacedSessionId").is_none());
     assert_eq!(cli.state("work").unwrap()["id"], ID);
 
     let clicked = cli
@@ -320,6 +325,81 @@ async fn a_session_id_attaches_without_a_local_start() {
     assert!(out.status.success(), "{out:?}");
     assert_eq!(json_out(&out)["data"]["results"][0]["value"], "Example");
     assert_eq!(cli.state(ID).unwrap()["id"], ID);
+}
+
+#[tokio::test]
+async fn stop_all_forgets_attached_sessions_without_stopping_them() {
+    const OWN: &str = "9b1c2d3e-4f5a-4b6c-8d7e-0f1a2b3c4d5e";
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/sessions/{ID}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(session_json()))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(commands_path()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(completed(
+            "op_1",
+            json!([{"ok": true, "effect": "none", "value": "Example"}]),
+        )))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!("/v1/sessions/{OWN}/release")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"success": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!("/v1/sessions/{ID}/release")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"success": true})))
+        .expect(0)
+        .mount(&server)
+        .await;
+    let cli = Cli::new(&server);
+
+    let attached = cli.run(&["browser", "get", "title", "--session", ID]).await;
+    assert!(attached.status.success(), "{attached:?}");
+    assert_eq!(cli.state(ID).unwrap()["attached"], true);
+    cli.write_session("own", OWN);
+
+    let out = cli.run(&["browser", "stop", "--all"]).await;
+    assert!(out.status.success(), "{out:?}");
+    let data = &json_out(&out)["data"];
+    assert_eq!(data["stoppedSessions"], json!(["own"]));
+    assert_eq!(data["detachedSessions"], json!([ID]));
+    assert!(cli.state("own").is_none());
+    assert!(cli.state(ID).is_none());
+}
+
+#[tokio::test]
+async fn start_reports_the_session_it_replaced() {
+    const NEW: &str = "0d6e7f80-91a2-4b3c-8d4e-5f60718293a4";
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(format!("/v1/sessions/{ID}/release")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"success": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut created = session_json();
+    created["id"] = json!(NEW);
+    Mock::given(method("POST"))
+        .and(path("/v1/sessions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(created))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let out = cli.run(&["browser", "start", "--session", "work"]).await;
+    assert!(out.status.success(), "{out:?}");
+    let data = &json_out(&out)["data"];
+    assert_eq!(data["id"], NEW);
+    assert_eq!(data["replacedSessionId"], ID);
+    assert!(String::from_utf8_lossy(&out.stderr).contains("replacing session \"work\""));
+    assert_eq!(cli.state("work").unwrap()["id"], NEW);
 }
 
 #[tokio::test]
