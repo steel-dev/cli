@@ -5,7 +5,6 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use tokio::sync::Notify;
 
 use crate::config;
 use crate::config::settings::ApiMode;
@@ -16,6 +15,8 @@ const BATCH_PATH: &str = "/batch/";
 const FLUSH_INTERVAL: Duration = Duration::from_secs(10);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+const FLUSH_CHILD_ARG: &str = "__telemetry-flush";
+const FLUSH_CHILD_TIMEOUT: Duration = Duration::from_secs(5);
 
 static GLOBAL: OnceLock<Mutex<GlobalTelemetry>> = OnceLock::new();
 
@@ -35,7 +36,6 @@ struct GlobalTelemetry {
 }
 
 struct FlusherHandle {
-    shutdown: Arc<Notify>,
     join: tokio::task::JoinHandle<()>,
 }
 
@@ -184,11 +184,9 @@ pub fn init_from_env() {
     if let Some(bootstrap) = bootstrap.as_ref()
         && let Ok(handle) = tokio::runtime::Handle::try_current()
     {
-        let shutdown = Arc::new(Notify::new());
         let client = Arc::clone(&bootstrap.client);
-        let shutdown_clone = Arc::clone(&shutdown);
-        let join = handle.spawn(run_flusher(client, shutdown_clone));
-        global().lock().flusher = Some(FlusherHandle { shutdown, join });
+        let join = handle.spawn(run_flusher(client));
+        global().lock().flusher = Some(FlusherHandle { join });
     }
 
     let install_created = bootstrap
@@ -268,17 +266,88 @@ fn apply_onboarding_source(properties: &mut Map<String, Value>, source: Option<&
 }
 
 pub async fn flush_best_effort() {
-    let flusher = {
+    let (flusher, client, events) = {
         let mut state = global().lock();
-        state.flusher.take()
+        (
+            state.flusher.take(),
+            state.client.clone(),
+            std::mem::take(&mut state.queue),
+        )
     };
 
-    let Some(flusher) = flusher else {
+    if let Some(flusher) = flusher {
+        flusher.join.abort();
+    }
+
+    let Some(client) = client else {
         return;
     };
+    if events.is_empty() {
+        return;
+    }
 
-    flusher.shutdown.notify_one();
-    let _ = tokio::time::timeout(SHUTDOWN_TIMEOUT, flusher.join).await;
+    let payload = build_batch_payload(&client.api_key, &client.distinct_id, &events);
+    if hand_off(&client.batch_url, &payload) {
+        return;
+    }
+    let send = client.http.post(&client.batch_url).json(&payload).send();
+    let _ = tokio::time::timeout(SHUTDOWN_TIMEOUT, send).await;
+}
+
+#[cfg(not(test))]
+fn hand_off(url: &str, payload: &Value) -> bool {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let Ok(mut child) = Command::new(exe)
+        .arg(FLUSH_CHILD_ARG)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    let Some(mut stdin) = child.stdin.take() else {
+        return false;
+    };
+    let request = json!({ "url": url, "payload": payload }).to_string();
+    stdin.write_all(request.as_bytes()).is_ok()
+}
+
+#[cfg(test)]
+const fn hand_off(_url: &str, _payload: &Value) -> bool {
+    false
+}
+
+pub fn is_flush_child() -> bool {
+    std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == FLUSH_CHILD_ARG)
+}
+
+pub async fn run_flush_child() {
+    let mut input = String::new();
+    if std::io::Read::read_to_string(&mut std::io::stdin(), &mut input).is_err() {
+        return;
+    }
+    let Ok(request) = serde_json::from_str::<Value>(&input) else {
+        return;
+    };
+    let (Some(url), Some(payload)) = (request["url"].as_str(), request.get("payload")) else {
+        return;
+    };
+    let Ok(http) = reqwest::Client::builder()
+        .user_agent(format!("steel-cli/{}", env!("CARGO_PKG_VERSION")))
+        .timeout(FLUSH_CHILD_TIMEOUT)
+        .build()
+    else {
+        return;
+    };
+    let _ = http.post(url).json(payload).send().await;
 }
 
 fn track(event: &str, mut properties: Map<String, Value>) {
@@ -294,21 +363,14 @@ fn track(event: &str, mut properties: Map<String, Value>) {
     });
 }
 
-async fn run_flusher(client: Arc<TelemetryClient>, shutdown: Arc<Notify>) {
+async fn run_flusher(client: Arc<TelemetryClient>) {
     let mut interval = tokio::time::interval(FLUSH_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     interval.tick().await;
 
     loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                flush_once(&client).await;
-            }
-            () = shutdown.notified() => {
-                flush_once(&client).await;
-                break;
-            }
-        }
+        interval.tick().await;
+        flush_once(&client).await;
     }
 }
 
