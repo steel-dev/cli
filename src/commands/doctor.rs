@@ -9,6 +9,7 @@ use crate::browser::state::{self, BrowserSession};
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
 use crate::util::output;
+use crate::util::version::is_newer;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -324,7 +325,7 @@ async fn check_version() -> Vec<Check> {
             let data: Value = r.json().await.unwrap_or_default();
             if let Some(tag) = data.get("tag_name").and_then(|v| v.as_str()) {
                 let latest = tag.strip_prefix('v').unwrap_or(tag);
-                return if is_version_newer(latest, current) {
+                return if is_newer(latest, current) {
                     vec![Check {
                         category: "version",
                         name: format!("Update available: v{current} → v{latest}"),
@@ -410,55 +411,9 @@ fn format_category(s: &str) -> &str {
     }
 }
 
-fn is_version_newer(latest: &str, current: &str) -> bool {
-    let parse = |s: &str| -> Vec<u64> {
-        s.split('.')
-            .map(|p| p.parse::<u64>().unwrap_or(0))
-            .collect()
-    };
-    let l = parse(latest);
-    let c = parse(current);
-    for i in 0..l.len().max(c.len()) {
-        let lv = l.get(i).copied().unwrap_or(0);
-        let cv = c.get(i).copied().unwrap_or(0);
-        if lv > cv {
-            return true;
-        }
-        if lv < cv {
-            return false;
-        }
-    }
-    false
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn version_newer_patch() {
-        assert!(is_version_newer("0.3.1", "0.3.0"));
-    }
-
-    #[test]
-    fn version_newer_minor() {
-        assert!(is_version_newer("0.4.0", "0.3.9"));
-    }
-
-    #[test]
-    fn version_same() {
-        assert!(!is_version_newer("0.3.0", "0.3.0"));
-    }
-
-    #[test]
-    fn version_older() {
-        assert!(!is_version_newer("0.2.0", "0.3.0"));
-    }
-
-    #[test]
-    fn version_multi_digit() {
-        assert!(is_version_newer("0.10.0", "0.9.1"));
-    }
 
     #[test]
     fn failed_report_is_detected() {
