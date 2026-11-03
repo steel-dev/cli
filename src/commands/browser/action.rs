@@ -1205,6 +1205,7 @@ async fn attach(client: &SteelClient, id: &str) -> Result<BrowserSession> {
         client.base_url().to_string(),
     );
     attached.live_url = remote.viewer_url(client.mode());
+    attached.attached = true;
     state::save(&attached)?;
     Ok(attached)
 }
