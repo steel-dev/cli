@@ -12,7 +12,7 @@ steel browser stop [--session <name>]    # release the session (-a for all; alia
 ```
 
 - Actions without `--session` use the `default` session. It starts on first use.
-- `--session <name>` targets a named session. A session ID also works, so you can drive a session that the SDK, the MCP server, or the dashboard created.
+- `--session <name>` targets a named session. A session ID also works, so you can drive a session that the SDK, the MCP server, or the dashboard created. `steel browser stop --all` forgets those sessions but does not stop them; stop one with `steel browser stop --session <session-id>`.
 - New sessions are released after 10 minutes without commands. Change this with `steel browser start --inactivity-timeout <ms>`. `0` turns it off.
 - The CLI keeps each session in `~/.config/steel/browser-sessions/<name>.json`: the session ID, the last operation id, the current tab, the event cursor, and the last snapshot.
 
@@ -127,7 +127,7 @@ Dialogs stay open until you answer them. A command that opens one prints the dia
 steel browser batch "fill e3 Seoul" "fill e4 Tokyo" "click e5" "snapshot -i"
 ```
 
-Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, and `cancel` must run on their own. `stop` is not a batch command.
+Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. Each command is one string. Group words with double or single quotes (`"fill e3 'New York'"`); inside double quotes, `\"` and `\\` are escapes. An apostrophe inside a word stays as typed, and an unclosed quote is an error. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, and `cancel` must run on their own. `stop` is not a batch command.
 
 ## Retries and output
 

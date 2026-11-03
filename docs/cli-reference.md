@@ -242,8 +242,8 @@ steel browser start
 - `--timeout` (string, optional): Session timeout in milliseconds (create-time only)
 - `--inactivity-timeout` (string, optional): Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
 - `--solve-captcha` (boolean, optional): Enable manual CAPTCHA solving on new sessions (create-time only)
-- `--profile` (string, optional): Named profile to persist browser state across sessions
-- `--update-profile` (boolean, optional): Save session state back to the profile when the session ends
+- `--profile` (string, optional): Named profile to load (see `steel profile list`)
+- `--update-profile` (boolean, optional): Save session state back to the profile when the session ends; creates the profile if it does not exist
 - `--namespace` (string, optional): Credential namespace
 - `--credentials` (boolean, optional): Inject credentials
 
@@ -261,7 +261,7 @@ Aliases: `close`, `quit`, `exit`
 
 ### Parameters
 
-- `-a, --all` (boolean, optional): Stop all sessions
+- `-a, --all` (boolean, optional): Stop every session this CLI started. Sessions you only attached to by ID are forgotten, not stopped
 
 ## steel browser sessions
 
@@ -343,7 +343,7 @@ steel browser batch
 
 ### Parameters
 
-- `commands` (string[], required): Commands to run in order (each as a quoted string, e.g. "click e3"). They stop at the first failure
+- `commands` (string[], required): Commands to run in order, each as one string (e.g. "click e3" or "fill e3 'New York'"). They stop at the first failure
 
 ## steel browser navigate
 
@@ -1213,7 +1213,6 @@ steel sessions agent-logs
 
 - `session_id` (string, optional): Cloud session ID
 - `--session` (string, optional): Resolve session ID from a local browser session name
-- `-f, --follow` (boolean, optional): Stream live frames over WebSocket after printing historical data
 - `--namespace` (string, optional): Filter by namespace
 - `--start-time` (string, optional): ISO timestamp lower bound
 - `--since` (string, optional): Alias for --start-time

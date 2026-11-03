@@ -97,7 +97,7 @@ steel browser click e5 --diff
 steel browser batch "fill e3 Seoul" "click e7" "snapshot -i"
 ```
 
-- The `default` session starts on first use. Use `--session <name>` for more, or `--session <session-id>` to drive a session created elsewhere.
+- The `default` session starts on first use. Use `--session <name>` for more, or `--session <session-id>` to drive a session created elsewhere. `steel browser stop --all` leaves sessions created elsewhere running.
 - Sessions are released after 10 minutes without commands (`steel browser start --inactivity-timeout <ms>`).
 - A retried command never runs twice. Run the same command again after a lost response to get the stored result.
 - Self-hosted Steel Browser serves these commands only with `ENABLE_COMMANDS_API=true`. `steel dev start` does not set it yet.
