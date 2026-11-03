@@ -30,25 +30,18 @@ pub fn split_command_str(s: &str) -> Result<Vec<String>, String> {
 
     while let Some(c) = chars.next() {
         match c {
-            '"' => {
+            '"' | '\'' if !started || current.ends_with('=') => {
                 started = true;
                 loop {
                     match chars.next() {
-                        Some('"') => break,
-                        Some('\\') if matches!(chars.peek(), Some('"' | '\\')) => {
+                        Some(q) if q == c && chars.peek().is_none_or(|n| n.is_whitespace()) => {
+                            break;
+                        }
+                        Some('\\') if c == '"' && matches!(chars.peek(), Some('"' | '\\')) => {
                             current.extend(chars.next());
                         }
                         Some(other) => current.push(other),
-                        None => return Err("unclosed double quote".to_string()),
-                    }
-                }
-            }
-            '\'' if !started || current.ends_with('=') => {
-                started = true;
-                loop {
-                    match chars.next() {
-                        Some('\'') if chars.peek().is_none_or(|next| next.is_whitespace()) => break,
-                        Some(other) => current.push(other),
+                        None if c == '"' => return Err("unclosed double quote".to_string()),
                         None => return Err("unclosed single quote".to_string()),
                     }
                 }
@@ -160,6 +153,22 @@ mod tests {
         assert_eq!(
             split(r#"fill e3 "it's fine""#),
             vec!["fill", "e3", "it's fine"]
+        );
+    }
+
+    #[test]
+    fn quotes_inside_words_are_kept() {
+        assert_eq!(
+            split(r#"eval document.querySelector("h1").textContent"#),
+            vec!["eval", r#"document.querySelector("h1").textContent"#]
+        );
+        assert_eq!(
+            split(r#"eval "document.querySelector("h1").textContent""#),
+            vec!["eval", r#"document.querySelector("h1").textContent"#]
+        );
+        assert_eq!(
+            split("eval 'document.querySelector('h1').textContent'"),
+            vec!["eval", "document.querySelector('h1').textContent"]
         );
     }
 

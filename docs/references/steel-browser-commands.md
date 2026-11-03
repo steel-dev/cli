@@ -127,7 +127,7 @@ Dialogs stay open until you answer them. A command that opens one prints the dia
 steel browser batch "fill e3 Seoul" "fill e4 Tokyo" "click e5" "snapshot -i"
 ```
 
-Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. Each command is one string. Group words with double or single quotes (`"fill e3 'New York'"`); inside double quotes, `\"` and `\\` are escapes. An apostrophe inside a word stays as typed, and an unclosed quote is an error. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, and `cancel` must run on their own. `stop` is not a batch command.
+Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. Each command is one string. Group words with double or single quotes (`"fill e3 'New York'"`). A quote opens only at the start of a word or right after `=`, and closes only at the end of a word. Quotes anywhere else stay as typed, so `"eval document.querySelector('h1').textContent"` works as written. Inside double quotes, `\"` and `\\` are escapes. An unclosed quote is an error. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, and `cancel` must run on their own. `stop` is not a batch command.
 
 ## Retries and output
 
