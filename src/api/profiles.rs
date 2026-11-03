@@ -3,9 +3,13 @@ use std::time::Duration;
 use reqwest::multipart::{Form, Part};
 use serde_json::Value;
 
-use crate::api::client::{ApiError, SteelClient};
+use crate::api::client::{ApiError, REQUEST_TIMEOUT, SteelClient};
 
-const UPLOAD_TIMEOUT: Duration = Duration::from_secs(600);
+const MIN_UPLOAD_BYTES_PER_SEC: u64 = 64 * 1024;
+
+fn upload_timeout(size: usize) -> Duration {
+    REQUEST_TIMEOUT + Duration::from_secs(size as u64 / MIN_UPLOAD_BYTES_PER_SEC)
+}
 
 fn profile_form(zip: Vec<u8>) -> Result<Form, ApiError> {
     let part = Part::bytes(zip)
@@ -18,7 +22,7 @@ impl SteelClient {
     pub async fn create_profile(&self, zip: Vec<u8>) -> anyhow::Result<String> {
         let req = self
             .authed(reqwest::Method::POST, "/profiles")?
-            .timeout(UPLOAD_TIMEOUT)
+            .timeout(upload_timeout(zip.len()))
             .multipart(profile_form(zip)?);
         let body = self.send(req, "/profiles").await?;
         body.get("id")
@@ -31,7 +35,7 @@ impl SteelClient {
         let path = format!("/profiles/{}", urlencoding::encode(profile_id));
         let req = self
             .authed(reqwest::Method::PATCH, &path)?
-            .timeout(UPLOAD_TIMEOUT)
+            .timeout(upload_timeout(zip.len()))
             .multipart(profile_form(zip)?);
         self.send(req, &path).await?;
         Ok(())
@@ -40,13 +44,26 @@ impl SteelClient {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use serde_json::json;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::api::client::{ApiError, SteelClient};
+    use super::upload_timeout;
+    use crate::api::client::{ApiError, REQUEST_TIMEOUT, SteelClient};
     use crate::config::auth::{Auth, AuthSource};
     use crate::config::settings::ApiMode;
+
+    #[test]
+    fn upload_timeout_grows_with_the_profile_size() {
+        assert_eq!(upload_timeout(0), REQUEST_TIMEOUT);
+        assert_eq!(
+            upload_timeout(64 * 1024 * 60),
+            REQUEST_TIMEOUT + Duration::from_secs(60)
+        );
+        assert!(upload_timeout(500 * 1024 * 1024) > Duration::from_secs(2 * 60 * 60));
+    }
 
     fn client(server: &MockServer) -> SteelClient {
         let auth = Auth {
