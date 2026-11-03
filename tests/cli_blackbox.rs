@@ -17,6 +17,7 @@ fn steel_cmd() -> (Command, tempfile::TempDir) {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_steel"));
     cmd.env("STEEL_CONFIG_DIR", tmp.path());
+    cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     cmd.env_remove("STEEL_API_KEY");
     // Suppress update checks so they don't interfere with output
     cmd.arg("--no-update-check");
@@ -464,6 +465,7 @@ fn steel_config_dir_is_respected() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_steel"));
     cmd.env("STEEL_CONFIG_DIR", &config_dir);
+    cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     cmd.env_remove("STEEL_API_KEY");
     cmd.args(["--no-update-check", "config"]);
 
