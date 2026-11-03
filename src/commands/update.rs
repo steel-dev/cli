@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use clap::Parser;
 
 use crate::status;
@@ -17,7 +19,9 @@ pub struct Args {
 pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("Checking for updates...");
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?;
     let current_version = env!("CARGO_PKG_VERSION");
 
     // Check GitHub releases for latest version

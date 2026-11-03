@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 use serde_json::{Value, json};
@@ -9,6 +9,8 @@ use crate::browser::state::{self, BrowserSession};
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
 use crate::util::output;
+
+const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Parser)]
 pub struct Args {
@@ -167,7 +169,7 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
     let timed_sessions = async {
         let start = Instant::now();
         let result = client
-            .request(reqwest::Method::GET, "/sessions", None)
+            .request_within(reqwest::Method::GET, "/sessions", None, Some(PROBE_TIMEOUT))
             .await;
         (result, start.elapsed().as_millis())
     };
@@ -175,7 +177,10 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
     // silently skipped on any error so doctor never degrades because of it.
     let projects = async {
         if need_auth {
-            client.get_projects().await.ok()
+            tokio::time::timeout(PROBE_TIMEOUT, client.get_projects())
+                .await
+                .ok()
+                .and_then(Result::ok)
         } else {
             None
         }
@@ -300,7 +305,12 @@ fn check_sessions(sessions: &[BrowserSession]) -> Vec<Check> {
 
 async fn check_version() -> Vec<Check> {
     let current = env!("CARGO_PKG_VERSION");
-    let client = reqwest::Client::new();
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    else {
+        return vec![];
+    };
 
     let resp = client
         .get("https://api.github.com/repos/steel-dev/cli/releases/latest")
