@@ -5,7 +5,6 @@ use crate::api::client::SteelClient;
 use crate::api::session::CreateSessionOptions;
 use crate::browser::profile_store;
 use crate::browser::state::{self, BrowserSession};
-use crate::status;
 use crate::util::output;
 
 pub const DEFAULT_INACTIVITY_TIMEOUT_MS: u64 = 600_000;
@@ -40,12 +39,12 @@ pub struct Args {
     #[arg(long, alias = "session-solve-captcha")]
     pub solve_captcha: bool,
 
-    /// Named profile to persist browser state across sessions
+    /// Named profile to load (see `steel profile list`)
     #[arg(long)]
     pub profile: Option<String>,
 
-    /// Save session state back to the profile when the session ends
-    #[arg(long = "update-profile")]
+    /// Save session state back to the profile when the session ends; creates the profile if it does not exist
+    #[arg(long = "update-profile", requires = "profile")]
     pub update_profile: bool,
 
     /// Credential namespace
@@ -114,6 +113,10 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
             resolved_profile_id = Some(data.profile_id);
             stored_browser_profile = data.browser_profile;
             stored_browser = data.browser;
+        } else if !args.update_profile {
+            anyhow::bail!(
+                "Profile \"{profile_name}\" not found. Import one with `steel profile import {profile_name}`, or add --update-profile to create it from this session."
+            );
         }
     }
 
@@ -131,13 +134,20 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
 
     let client = SteelClient::new()?;
 
-    if let Some(existing) = state::load(&session_name)? {
-        status!("Replacing existing session \"{session_name}\"...");
-        if let Err(err) = super::stop::release(&client, &existing).await {
-            eprintln!("warning: could not release session {}: {err}", existing.id);
-            state::remove(&session_name)?;
+    let replaced = match state::load(&session_name)? {
+        Some(existing) => {
+            eprintln!(
+                "note: replacing session \"{session_name}\" ({})",
+                existing.id
+            );
+            if let Err(err) = super::stop::release(&client, &existing).await {
+                eprintln!("warning: could not release session {}: {err}", existing.id);
+                state::remove(&session_name)?;
+            }
+            Some(existing.id)
         }
-    }
+        None => None,
+    };
 
     let options = CreateSessionOptions {
         stealth: args.stealth,
@@ -177,12 +187,12 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     properties.insert("inactivity_timeout_ms".into(), json!(inactivity_timeout_ms));
     crate::telemetry::track_event("browser_session_started", properties);
 
-    display_session_info(&created, connect_url.as_deref());
+    display_session_info(&created, connect_url.as_deref(), replaced.as_deref());
 
     Ok(())
 }
 
-fn display_session_info(info: &BrowserSession, connect_url: Option<&str>) {
+fn display_session_info(info: &BrowserSession, connect_url: Option<&str>, replaced: Option<&str>) {
     let remaining = remaining_time_str(info);
 
     if output::is_json() {
@@ -191,6 +201,9 @@ fn display_session_info(info: &BrowserSession, connect_url: Option<&str>) {
             "mode": info.mode.to_string(),
         });
         data["name"] = json!(&info.name);
+        if let Some(id) = replaced {
+            data["replacedSessionId"] = json!(id);
+        }
         if let Some(ref url) = info.live_url {
             data["liveUrl"] = json!(url);
         }

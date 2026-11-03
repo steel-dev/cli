@@ -115,7 +115,9 @@ async fn run_list(_args: ListArgs) -> anyhow::Result<()> {
     }
 
     if profiles.is_empty() {
-        println!("No profiles found. Use --profile <name> with steel browser start to create one.");
+        println!(
+            "No profiles found. Import one with `steel profile import <name>`, or create one with `steel browser start --profile <name> --update-profile`."
+        );
         return Ok(());
     }
 
