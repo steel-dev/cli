@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn long_help_examples_parse() {
         for example in EXAMPLES {
-            let args = browser::batch::split_command_str(example);
+            let args = browser::batch::split_command_str(example).unwrap();
             if let Err(err) = Cli::try_parse_from(&args) {
                 panic!("{example}: {err}");
             }
