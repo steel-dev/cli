@@ -384,9 +384,15 @@ fn telemetry_mode() -> &'static str {
     }
 }
 
-fn error_class(err: &anyhow::Error) -> &'static str {
+fn error_class(err: &anyhow::Error) -> String {
+    if let Some(silent) = err.downcast_ref::<crate::util::output::SilentExit>() {
+        return silent
+            .error_code
+            .clone()
+            .unwrap_or_else(|| "command_failed".to_string());
+    }
     if let Some(api_err) = err.downcast_ref::<crate::api::client::ApiError>() {
-        return match api_err {
+        let class = match api_err {
             crate::api::client::ApiError::MissingAuth => "auth_required",
             crate::api::client::ApiError::Unreachable { .. } => "network_unreachable",
             crate::api::client::ApiError::RequestFailed { status, .. } => match *status {
@@ -399,13 +405,14 @@ fn error_class(err: &anyhow::Error) -> &'static str {
             },
             crate::api::client::ApiError::Other(_) => "network_error",
         };
+        return class.to_string();
     }
 
     if err.chain().any(|source| source.is::<std::io::Error>()) {
-        return "io_error";
+        return "io_error".to_string();
     }
 
-    "internal_error"
+    "internal_error".to_string()
 }
 
 struct TelemetryIdentity {
@@ -634,6 +641,19 @@ mod tests {
 
         assert!(!id.distinct_id.is_empty());
         assert!(id.is_new);
+    }
+
+    #[test]
+    fn reported_failures_keep_their_error_code() {
+        let reported: anyhow::Error = crate::util::output::SilentExit {
+            code: 1,
+            error_code: Some("stale_ref".into()),
+        }
+        .into();
+        assert_eq!(error_class(&reported), "stale_ref");
+        let silent: anyhow::Error = crate::util::output::SilentExit::new(1).into();
+        assert_eq!(error_class(&silent), "command_failed");
+        assert_eq!(error_class(&anyhow::anyhow!("boom")), "internal_error");
     }
 
     #[test]

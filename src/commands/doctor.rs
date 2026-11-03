@@ -26,10 +26,78 @@ struct Check {
     transient: bool,
 }
 
+pub struct Report {
+    checks: Vec<Check>,
+}
+
+impl Report {
+    pub fn failed(&self) -> bool {
+        self.checks.iter().any(|c| c.status == "fail")
+    }
+
+    fn overall(&self) -> &'static str {
+        if self.failed() {
+            "fail"
+        } else if self.checks.iter().any(|c| c.status == "degraded") {
+            "degraded"
+        } else {
+            "pass"
+        }
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "overall": self.overall(),
+            "checks": self.checks.iter().map(|c| {
+                let mut obj = json!({
+                    "category": c.category,
+                    "name": c.name,
+                    "status": c.status,
+                    "transient": c.transient,
+                });
+                if !c.detail.is_null() && c.detail != json!({}) {
+                    obj["detail"] = c.detail.clone();
+                }
+                if let Some(fix) = c.fix {
+                    obj["fix"] = json!(fix);
+                }
+                obj
+            }).collect::<Vec<_>>(),
+        })
+    }
+
+    pub fn print_text(&self) {
+        print_text(&self.checks);
+    }
+
+    pub fn emit(&self) -> anyhow::Result<()> {
+        if output::is_json() {
+            if self.failed() {
+                return Err(output::fail(
+                    "doctor_failed",
+                    "Some checks failed.",
+                    Some(&self.to_json()),
+                ));
+            }
+            output::success_data(self.to_json());
+            return Ok(());
+        }
+        self.print_text();
+        if self.failed() {
+            return Err(output::SilentExit::new(output::exit_code::GENERAL).into());
+        }
+        Ok(())
+    }
+}
+
 pub async fn run(args: Args) -> anyhow::Result<()> {
+    report(args.preflight).await.emit()
+}
+
+pub async fn report(preflight: bool) -> Report {
     let (mode, base_url, auth) = crate::util::api::resolve_with_auth();
 
-    let mut checks = if args.preflight {
+    let mut checks = if preflight {
         check_auth_and_api(mode, &base_url, &auth).await
     } else {
         let (auth_api, version) =
@@ -45,47 +113,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     const ORDER: &[&str] = &["auth", "project", "api", "sessions", "version"];
     checks.sort_by_key(|c| ORDER.iter().position(|&o| o == c.category).unwrap_or(99));
 
-    let has_fail = checks.iter().any(|c| c.status == "fail");
-    let has_degraded = checks.iter().any(|c| c.status == "degraded");
-    let overall = if has_fail {
-        "fail"
-    } else if has_degraded {
-        "degraded"
-    } else {
-        "pass"
-    };
-
-    if output::is_json() {
-        let data = json!({
-            "overall": overall,
-            "checks": checks.iter().map(|c| {
-                let mut obj = json!({
-                    "category": c.category,
-                    "name": c.name,
-                    "status": c.status,
-                    "transient": c.transient,
-                });
-                if !c.detail.is_null() && c.detail != json!({}) {
-                    obj["detail"] = c.detail.clone();
-                }
-                if let Some(fix) = c.fix {
-                    obj["fix"] = json!(fix);
-                }
-                obj
-            }).collect::<Vec<_>>(),
-        });
-        output::success_data(data);
-    } else {
-        print_text(&checks);
-    }
-
-    if has_fail {
-        return Err(
-            crate::util::output::SilentExit(crate::util::output::exit_code::GENERAL).into(),
-        );
-    }
-
-    Ok(())
+    Report { checks }
 }
 
 async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<Check> {
@@ -420,6 +448,23 @@ mod tests {
     #[test]
     fn version_multi_digit() {
         assert!(is_version_newer("0.10.0", "0.9.1"));
+    }
+
+    #[test]
+    fn failed_report_is_detected() {
+        let report = Report {
+            checks: vec![Check {
+                category: "auth",
+                name: "API key not configured".into(),
+                status: "fail",
+                detail: json!(null),
+                fix: Some("steel login"),
+                transient: false,
+            }],
+        };
+        assert!(report.failed());
+        assert_eq!(report.to_json()["overall"], "fail");
+        assert_eq!(report.to_json()["checks"][0]["fix"], "steel login");
     }
 
     #[test]

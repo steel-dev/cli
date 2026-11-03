@@ -1,6 +1,7 @@
 use clap::Parser;
 
 use crate::status;
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {
@@ -61,12 +62,17 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("Updating v{current_version} -> v{latest}...");
 
     // Use cargo-dist installer
+    let stdout = if output::is_json() {
+        std::process::Stdio::from(std::io::stderr())
+    } else {
+        std::process::Stdio::inherit()
+    };
     let status = std::process::Command::new("sh")
         .args([
             "-c",
             "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steel-dev/cli/releases/latest/download/steel-cli-installer.sh | sh",
         ])
-        .stdout(std::process::Stdio::inherit())
+        .stdout(stdout)
         .stderr(std::process::Stdio::inherit())
         .status();
 

@@ -46,15 +46,44 @@ pub mod exit_code {
 /// Sentinel error: the command already printed its own output and reported
 /// failure; the process should exit with `code` without printing anything else.
 #[derive(Debug)]
-pub struct SilentExit(pub i32);
+pub struct SilentExit {
+    pub code: i32,
+    pub error_code: Option<String>,
+}
+
+impl SilentExit {
+    pub const fn new(code: i32) -> Self {
+        Self {
+            code,
+            error_code: None,
+        }
+    }
+}
 
 impl std::fmt::Display for SilentExit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "exit {}", self.0)
+        write!(f, "exit {}", self.code)
     }
 }
 
 impl std::error::Error for SilentExit {}
+
+pub fn fail(code: &str, message: &str, data: Option<&Value>) -> anyhow::Error {
+    if is_json() {
+        let mut obj = json!({"success": false, "error": message, "error_code": code});
+        if let Some(data) = data {
+            obj["data"] = data.clone();
+        }
+        println!("{obj}");
+    } else {
+        eprintln!("Error: {message}");
+    }
+    SilentExit {
+        code: exit_code::GENERAL,
+        error_code: Some(code.to_string()),
+    }
+    .into()
+}
 
 // --- Pure formatting functions (no I/O) ---
 
@@ -140,8 +169,8 @@ pub fn print_table(header: &[&str], rows: &[Vec<String>]) {
 
 /// Format a top-level error for output, then exit. Called from main.
 pub fn handle_error(err: &anyhow::Error) -> ! {
-    if let Some(SilentExit(code)) = err.downcast_ref::<SilentExit>() {
-        std::process::exit(*code);
+    if let Some(silent) = err.downcast_ref::<SilentExit>() {
+        std::process::exit(silent.code);
     }
 
     let (code, error_code, hint) = classify_error(err);

@@ -346,6 +346,15 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         _ => status!("  npm install"),
     }
 
+    if output::is_json() {
+        output::success_data(json!({
+            "name": project_name,
+            "path": target_dir,
+            "template": slug,
+            "language": recipe.language,
+        }));
+    }
+
     Ok(())
 }
 

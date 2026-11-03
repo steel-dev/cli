@@ -1,11 +1,13 @@
 use std::time::Duration;
 
 use clap::Parser;
+use serde_json::json;
 
 use crate::api::client::SteelClient;
-use crate::api::projects::{environment_label, parse_projects, resolve_current_project};
+use crate::api::projects::{Project, environment_label, parse_projects, resolve_current_project};
 use crate::config::auth;
 use crate::config::settings::{ApiMode, read_config};
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {}
@@ -13,57 +15,83 @@ pub struct Args {}
 pub async fn run(_args: Args) -> anyhow::Result<()> {
     let auth = auth::resolve_auth();
     let config = read_config().ok();
+    let (mode, api_url) = crate::util::api::resolve();
 
     if auth.api_key.is_none() && config.is_none() {
-        println!("You are not logged in. Please run `steel login` to authenticate.");
+        output::success(
+            json!({ "loggedIn": false, "apiUrl": api_url, "mode": mode.to_string() }),
+            "You are not logged in. Please run `steel login` to authenticate.\n",
+        );
         return Ok(());
     }
 
+    let mut data = json!({
+        "loggedIn": auth.api_key.is_some(),
+        "apiUrl": api_url,
+        "mode": mode.to_string(),
+    });
+    let mut lines = Vec::new();
+
     if let Some(ref key) = auth.api_key {
-        let masked = if key.len() > 7 {
-            format!("{}...", &key[..7])
-        } else {
-            key.clone()
-        };
-        println!("apiKey: {masked}");
-        println!("source: {}", auth.source);
+        let masked = mask(key);
+        lines.push(format!("apiKey: {masked}"));
+        lines.push(format!("source: {}", auth.source));
+        data["apiKey"] = json!(masked);
+        data["source"] = json!(auth.source.to_string());
+    }
+    lines.push(format!("apiUrl: {api_url} ({mode})"));
+
+    if let Some(project) = current_project().await {
+        let environment = environment_label(project.is_production);
+        lines.push(format!("project: {} ({})", project.name, project.slug));
+        lines.push(format!("environment: {environment}"));
+        data["project"] = json!({
+            "name": project.name,
+            "slug": project.slug,
+            "environment": environment,
+        });
     }
 
-    print_project_info().await;
-
-    if let Some(ref cfg) = config
-        && let Some(ref browser) = cfg.browser
-        && let Some(ref url) = browser.api_url
+    if let Some(url) = config
+        .as_ref()
+        .and_then(|cfg| cfg.browser.as_ref())
+        .and_then(|browser| browser.api_url.as_deref())
     {
-        println!("browser.apiUrl: {url}");
+        lines.push(format!("browser.apiUrl: {url}"));
+        data["browserApiUrl"] = json!(url);
     }
 
     if let Some(ref cfg) = config {
-        println!("telemetry.disabled: {}", cfg.telemetry_disabled());
+        lines.push(format!("telemetry.disabled: {}", cfg.telemetry_disabled()));
+        data["telemetryDisabled"] = json!(cfg.telemetry_disabled());
     }
 
+    output::success(data, &format!("{}\n", lines.join("\n")));
     Ok(())
 }
 
-/// Print the project (environment) the API key is scoped to.
+fn mask(key: &str) -> String {
+    if key.chars().count() > 7 {
+        format!("{}...", key.chars().take(7).collect::<String>())
+    } else {
+        key.to_string()
+    }
+}
+
+/// Fetch the project (environment) the API key is scoped to.
 /// Best-effort: skipped in local mode, without a key, or on any fetch error,
 /// so `steel config` stays usable offline.
-async fn print_project_info() {
-    let Ok(client) = SteelClient::new() else {
-        return;
-    };
+async fn current_project() -> Option<Project> {
+    let client = SteelClient::new().ok()?;
     if client.mode() != ApiMode::Cloud || client.auth().api_key.is_none() {
-        return;
+        return None;
     }
 
     let fetch = client.get_projects();
     let Ok(Ok(data)) = tokio::time::timeout(Duration::from_secs(2), fetch).await else {
-        return;
+        return None;
     };
 
     let projects = parse_projects(&data);
-    if let Some(project) = resolve_current_project(&projects) {
-        println!("project: {} ({})", project.name, project.slug);
-        println!("environment: {}", environment_label(project.is_production));
-    }
+    resolve_current_project(&projects).cloned()
 }
