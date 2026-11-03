@@ -31,6 +31,7 @@ fn global() -> &'static Mutex<GlobalTelemetry> {
 struct GlobalTelemetry {
     client: Option<Arc<TelemetryClient>>,
     queue: Vec<QueuedEvent>,
+    in_flight: Vec<QueuedEvent>,
     flusher: Option<FlusherHandle>,
     onboarding_source: Option<String>,
 }
@@ -174,6 +175,7 @@ pub fn init_from_env() {
             .and_then(|config| config.onboarding_source())
             .map(str::to_string);
         state.queue.clear();
+        state.in_flight.clear();
         state.flusher.take()
     };
 
@@ -266,18 +268,18 @@ fn apply_onboarding_source(properties: &mut Map<String, Value>, source: Option<&
 }
 
 pub async fn flush_best_effort() {
-    let (flusher, client, events) = {
-        let mut state = global().lock();
-        (
-            state.flusher.take(),
-            state.client.clone(),
-            std::mem::take(&mut state.queue),
-        )
-    };
-
+    let flusher = global().lock().flusher.take();
     if let Some(flusher) = flusher {
         flusher.join.abort();
+        let _ = flusher.join.await;
     }
+
+    let (client, events) = {
+        let mut state = global().lock();
+        let mut events = std::mem::take(&mut state.in_flight);
+        events.append(&mut state.queue);
+        (state.client.clone(), events)
+    };
 
     let Some(client) = client else {
         return;
@@ -375,20 +377,21 @@ async fn run_flusher(client: Arc<TelemetryClient>) {
 }
 
 async fn flush_once(client: &TelemetryClient) {
-    let events = {
+    let payload = {
         let mut state = global().lock();
-        std::mem::take(&mut state.queue)
+        if state.queue.is_empty() {
+            return;
+        }
+        state.in_flight = std::mem::take(&mut state.queue);
+        build_batch_payload(&client.api_key, &client.distinct_id, &state.in_flight)
     };
-    if events.is_empty() {
-        return;
-    }
-    let payload = build_batch_payload(&client.api_key, &client.distinct_id, &events);
     let _ = client
         .http
         .post(&client.batch_url)
         .json(&payload)
         .send()
         .await;
+    global().lock().in_flight.clear();
 }
 
 fn build_batch_payload(api_key: &str, distinct_id: &str, events: &[QueuedEvent]) -> Value {
@@ -554,10 +557,17 @@ fn now_unix_ms() -> u64 {
 }
 
 #[cfg(test)]
+pub fn test_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
+#[cfg(test)]
 pub fn reset_for_test() {
     let flusher = {
         let mut state = global().lock();
         state.queue.clear();
+        state.in_flight.clear();
         state.client = None;
         state.onboarding_source = None;
         state.flusher.take()
@@ -730,5 +740,58 @@ mod tests {
         assert_eq!(batch[0]["properties"]["command_path"], "config");
         assert_eq!(batch[0]["properties"]["$process_person_profile"], false);
         assert_eq!(batch[0]["timestamp"], "2023-11-14T22:13:20Z");
+    }
+
+    #[tokio::test]
+    async fn shutdown_resends_a_batch_that_was_still_in_flight() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let _guard = test_lock().lock().await;
+        reset_for_test();
+        let temp = tempfile::TempDir::new().unwrap();
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/batch/"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(10)))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/batch/"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        set_test_override(temp.path(), &server.uri());
+        init_from_env();
+        track_event("first", Map::new());
+
+        let client = global().lock().client.clone().unwrap();
+        let sending = tokio::spawn(async move { flush_once(&client).await });
+        let replaced = global()
+            .lock()
+            .flusher
+            .replace(FlusherHandle { join: sending });
+        if let Some(replaced) = replaced {
+            replaced.join.abort();
+        }
+        while server.received_requests().await.unwrap().is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        track_event("second", Map::new());
+
+        flush_best_effort().await;
+
+        let requests = server.received_requests().await.unwrap();
+        reset_for_test();
+        assert_eq!(requests.len(), 2);
+        let last: Value = serde_json::from_slice(&requests[1].body).unwrap();
+        let events: Vec<&str> = last["batch"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|event| event["event"].as_str().unwrap())
+            .collect();
+        assert_eq!(events, ["install_created", "first", "second"]);
     }
 }
