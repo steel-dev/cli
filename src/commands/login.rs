@@ -1,7 +1,9 @@
-use std::io::{BufRead, BufReader, Write as IoWrite};
+use std::time::Duration;
 
 use clap::Parser;
-use tokio::net::TcpListener;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::task::JoinSet;
 
 use crate::config;
 use crate::config::auth;
@@ -11,7 +13,9 @@ use crate::status;
 #[derive(Parser)]
 pub struct Args {}
 
-const LOGIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+const LOGIN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const CALLBACK_READ_TIMEOUT: Duration = Duration::from_secs(10);
+const API_KEY_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub async fn run(_args: Args) -> anyhow::Result<()> {
     // Check if already logged in
@@ -48,70 +52,99 @@ async fn login_flow() -> anyhow::Result<(String, String)> {
         state
     );
 
-    status!("Opening your browser for authentication...");
-    status!("If it does not open automatically, please click:");
-    status!("{auth_url}");
+    eprintln!("Opening your browser for authentication...");
+    eprintln!("If it does not open automatically, please click:");
+    eprintln!("{auth_url}");
 
     if let Err(e) = open::that(&auth_url) {
-        status!("Warning: could not open browser automatically: {e}");
-        status!("Please open the URL above manually.");
+        eprintln!("Warning: could not open browser automatically: {e}");
+        eprintln!("Please open the URL above manually.");
     }
 
-    // Wait for the callback with timeout
-    let result = tokio::time::timeout(LOGIN_TIMEOUT, async {
-        let (stream, _) = listener.accept().await?;
-        stream.readable().await?;
+    let jwt = tokio::time::timeout(LOGIN_TIMEOUT, wait_for_callback(&listener, &state))
+        .await
+        .map_err(|_| anyhow::anyhow!("Login timed out. Please try again."))??;
 
-        let std_stream = stream.into_std()?;
-        let mut reader = BufReader::new(&std_stream);
+    create_api_key_using_jwt(&jwt).await
+}
 
-        let mut request_line = String::new();
-        reader.read_line(&mut request_line)?;
-
-        // Parse query params from GET /callback?jwt=...&state=...
-        let query = parse_query_from_request(&request_line);
-
-        let received_state = query
-            .iter()
-            .find(|(k, _)| k == "state")
-            .map(|(_, v)| v.as_str());
-
-        if received_state != Some(&state) {
-            send_response(&std_stream, 400, "Error: Invalid state parameter.")?;
-            anyhow::bail!("Invalid state parameter. Possible CSRF attack.");
+async fn wait_for_callback(listener: &TcpListener, state: &str) -> anyhow::Result<String> {
+    let mut connections = JoinSet::new();
+    loop {
+        tokio::select! {
+            accepted = listener.accept() => {
+                let (stream, _) = accepted?;
+                let state = state.to_string();
+                connections.spawn(async move { handle_callback(stream, &state).await });
+            }
+            Some(handled) = connections.join_next() => {
+                if let Some(jwt) = handled?? {
+                    return Ok(jwt);
+                }
+            }
         }
-
-        let jwt = query
-            .iter()
-            .find(|(k, _)| k == "jwt")
-            .map(|(_, v)| v.clone());
-
-        let Some(jwt) = jwt else {
-            send_response(&std_stream, 400, "Error: JWT not found in callback.")?;
-            anyhow::bail!("Callback did not include a JWT.");
-        };
-
-        // Redirect browser to success page
-        let redirect = format!(
-            "HTTP/1.1 302 Found\r\nLocation: {}\r\nConnection: close\r\n\r\n",
-            config::SUCCESS_URL
-        );
-        (&std_stream).write_all(redirect.as_bytes())?;
-        (&std_stream).flush()?;
-
-        // Exchange JWT for API key
-        create_api_key_using_jwt(&jwt).await
-    })
-    .await;
-
-    match result {
-        Ok(inner) => inner,
-        Err(_) => anyhow::bail!("Login timed out. Please try again."),
     }
 }
 
+async fn handle_callback(stream: TcpStream, state: &str) -> anyhow::Result<Option<String>> {
+    let mut reader = BufReader::new(stream);
+    let mut request_line = String::new();
+    let read =
+        tokio::time::timeout(CALLBACK_READ_TIMEOUT, reader.read_line(&mut request_line)).await;
+    if !matches!(read, Ok(Ok(bytes)) if bytes > 0) {
+        return Ok(None);
+    }
+    let mut stream = reader.into_inner();
+
+    // Parse query params from GET /callback?jwt=...&state=...
+    let query = parse_query_from_request(&request_line);
+    let param = |key: &str| query.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
+
+    let Some(received_state) = param("state") else {
+        respond(&mut stream, "404 Not Found", "").await;
+        return Ok(None);
+    };
+    if received_state != state {
+        respond(
+            &mut stream,
+            "400 Bad Request",
+            "Error: Invalid state parameter.",
+        )
+        .await;
+        anyhow::bail!("Invalid state parameter. Possible CSRF attack.");
+    }
+
+    let Some(jwt) = param("jwt") else {
+        respond(
+            &mut stream,
+            "400 Bad Request",
+            "Error: JWT not found in callback.",
+        )
+        .await;
+        anyhow::bail!("Callback did not include a JWT.");
+    };
+
+    let redirect = format!(
+        "HTTP/1.1 302 Found\r\nLocation: {}\r\nConnection: close\r\n\r\n",
+        config::SUCCESS_URL
+    );
+    let _ = stream.write_all(redirect.as_bytes()).await;
+    let _ = stream.flush().await;
+
+    Ok(Some(jwt))
+}
+
+async fn respond(stream: &mut TcpStream, status: &str, body: &str) {
+    let response =
+        format!("HTTP/1.1 {status}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{body}");
+    let _ = stream.write_all(response.as_bytes()).await;
+    let _ = stream.flush().await;
+}
+
 async fn create_api_key_using_jwt(jwt: &str) -> anyhow::Result<(String, String)> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(API_KEY_TIMEOUT)
+        .build()?;
     let response = client
         .post(config::API_KEYS_URL)
         .header("Content-Type", "application/json")
@@ -181,16 +214,6 @@ fn parse_query_from_request(request_line: &str) -> Vec<(String, String)> {
             ))
         })
         .collect()
-}
-
-fn send_response(stream: &std::net::TcpStream, status: u16, body: &str) -> anyhow::Result<()> {
-    let response = format!(
-        "HTTP/1.1 {status} Error\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{body}"
-    );
-    let mut stream = stream;
-    stream.write_all(response.as_bytes())?;
-    stream.flush()?;
-    Ok(())
 }
 
 fn generate_random_hex(bytes: usize) -> String {
@@ -269,6 +292,64 @@ mod tests {
     }
 
     // --- generate_random_hex ---
+
+    async fn callback(
+        request: &'static str,
+        state: &'static str,
+    ) -> (anyhow::Result<Option<String>>, String) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let client = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(addr).await.unwrap();
+            stream.write_all(request.as_bytes()).await.unwrap();
+            let mut reply = String::new();
+            let _ = tokio::io::AsyncReadExt::read_to_string(&mut stream, &mut reply).await;
+            reply
+        });
+        let (stream, _) = listener.accept().await.unwrap();
+        let result = handle_callback(stream, state).await;
+        (result, client.await.unwrap())
+    }
+
+    #[tokio::test]
+    async fn callback_returns_the_jwt_and_redirects() {
+        let (result, reply) =
+            callback("GET /callback?jwt=abc&state=s1 HTTP/1.1\r\n\r\n", "s1").await;
+        assert_eq!(result.unwrap().as_deref(), Some("abc"));
+        assert!(reply.starts_with("HTTP/1.1 302"), "{reply}");
+    }
+
+    #[tokio::test]
+    async fn unrelated_requests_are_ignored() {
+        let (result, reply) = callback("GET /favicon.ico HTTP/1.1\r\n\r\n", "s1").await;
+        assert!(result.unwrap().is_none());
+        assert!(reply.starts_with("HTTP/1.1 404"), "{reply}");
+    }
+
+    #[tokio::test]
+    async fn wrong_state_is_rejected() {
+        let (result, reply) =
+            callback("GET /callback?jwt=abc&state=evil HTTP/1.1\r\n\r\n", "s1").await;
+        assert!(result.is_err());
+        assert!(reply.starts_with("HTTP/1.1 400"), "{reply}");
+    }
+
+    #[tokio::test]
+    async fn waits_past_idle_connections() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let idle = TcpStream::connect(addr).await.unwrap();
+        let mut real = TcpStream::connect(addr).await.unwrap();
+        real.write_all(b"GET /callback?jwt=abc&state=s1 HTTP/1.1\r\n\r\n")
+            .await
+            .unwrap();
+        let jwt = tokio::time::timeout(Duration::from_secs(5), wait_for_callback(&listener, "s1"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(jwt, "abc");
+        drop(idle);
+    }
 
     #[test]
     fn random_hex_length() {
