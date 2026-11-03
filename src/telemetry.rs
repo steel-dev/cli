@@ -42,6 +42,7 @@ struct FlusherHandle {
 
 #[derive(Clone)]
 struct QueuedEvent {
+    uuid: String,
     event: String,
     properties: Map<String, Value>,
     timestamp_ms: u64,
@@ -359,6 +360,7 @@ fn track(event: &str, mut properties: Map<String, Value>) {
     }
     apply_onboarding_source(&mut properties, state.onboarding_source.as_deref());
     state.queue.push(QueuedEvent {
+        uuid: generate_uuid_like_id(),
         event: event.to_string(),
         properties,
         timestamp_ms: now_unix_ms(),
@@ -403,6 +405,7 @@ fn build_batch_payload(api_key: &str, distinct_id: &str, events: &[QueuedEvent])
             properties.insert("$lib".into(), json!("steel-cli"));
             properties.insert("$lib_version".into(), json!(env!("CARGO_PKG_VERSION")));
             json!({
+                "uuid": e.uuid,
                 "event": e.event,
                 "distinct_id": distinct_id,
                 "properties": properties,
@@ -525,7 +528,7 @@ fn write_telemetry_state(path: &Path, state: &TelemetryState) -> anyhow::Result<
 
 fn generate_uuid_like_id() -> String {
     let mut bytes = [0u8; 16];
-    getrandom::fill(&mut bytes).expect("failed to generate telemetry install id");
+    getrandom::fill(&mut bytes).expect("failed to generate a telemetry id");
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     format!(
@@ -725,6 +728,7 @@ mod tests {
         properties.insert("command_path".into(), json!("config"));
 
         let events = vec![QueuedEvent {
+            uuid: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b".into(),
             event: "command_started".into(),
             properties,
             timestamp_ms: 1_700_000_000_000,
@@ -735,11 +739,30 @@ mod tests {
         assert_eq!(payload["api_key"], "phc_test");
         let batch = payload["batch"].as_array().unwrap();
         assert_eq!(batch.len(), 1);
+        assert_eq!(batch[0]["uuid"], "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b");
         assert_eq!(batch[0]["event"], "command_started");
         assert_eq!(batch[0]["distinct_id"], "anon-123");
         assert_eq!(batch[0]["properties"]["command_path"], "config");
         assert_eq!(batch[0]["properties"]["$process_person_profile"], false);
         assert_eq!(batch[0]["timestamp"], "2023-11-14T22:13:20Z");
+    }
+
+    #[test]
+    fn event_ids_are_random_v4_uuids() {
+        let id = generate_uuid_like_id();
+        let groups: Vec<usize> = id.split('-').map(str::len).collect();
+        assert_eq!(groups, [8, 4, 4, 4, 12], "{id}");
+        assert!(
+            id.chars()
+                .all(|c| c == '-' || matches!(c, '0'..='9' | 'a'..='f')),
+            "{id}"
+        );
+        assert_eq!(id.as_bytes()[14], b'4', "{id}");
+        assert!(
+            matches!(id.as_bytes()[19], b'8' | b'9' | b'a' | b'b'),
+            "{id}"
+        );
+        assert_ne!(id, generate_uuid_like_id());
     }
 
     #[tokio::test]
@@ -785,13 +808,26 @@ mod tests {
         let requests = server.received_requests().await.unwrap();
         reset_for_test();
         assert_eq!(requests.len(), 2);
-        let last: Value = serde_json::from_slice(&requests[1].body).unwrap();
-        let events: Vec<&str> = last["batch"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|event| event["event"].as_str().unwrap())
-            .collect();
-        assert_eq!(events, ["install_created", "first", "second"]);
+        let batch = |index: usize| -> Vec<(String, String)> {
+            let body: Value = serde_json::from_slice(&requests[index].body).unwrap();
+            body["batch"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|event| {
+                    (
+                        event["event"].as_str().unwrap().to_string(),
+                        event["uuid"].as_str().unwrap().to_string(),
+                    )
+                })
+                .collect()
+        };
+        let (sent, resent) = (batch(0), batch(1));
+        let names: Vec<&str> = resent.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["install_created", "first", "second"]);
+        assert_eq!(resent[..2], sent[..]);
+        let ids: std::collections::HashSet<&str> =
+            resent.iter().map(|(_, id)| id.as_str()).collect();
+        assert_eq!(ids.len(), 3);
     }
 }
