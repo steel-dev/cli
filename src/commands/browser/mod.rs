@@ -10,12 +10,12 @@ use clap::{Parser, Subcommand};
 
 use crate::browser::state::{self, BrowserSession};
 
-pub(crate) const DEFAULT_SESSION: &str = "default";
+pub const DEFAULT_SESSION: &str = "default";
 
 #[derive(Parser)]
 pub struct BrowserArgs {
     /// Named session to target, or a session ID
-    #[arg(long, global = true)]
+    #[arg(long, global = true, alias = "session-id")]
     pub session: Option<String>,
 
     /// Print what the command changed on the page (a diff against the last snapshot)
@@ -32,6 +32,7 @@ pub enum Command {
     Start(start::Args),
 
     /// Stop a browser session
+    #[command(aliases = ["close", "quit", "exit"])]
     Stop(stop::Args),
 
     /// List active browser sessions
@@ -68,26 +69,42 @@ impl Command {
     }
 }
 
-pub(crate) fn existing_session(name: Option<&str>) -> anyhow::Result<BrowserSession> {
+pub enum Target {
+    Saved(Box<BrowserSession>),
+    Id(String),
+}
+
+pub fn target(name: Option<&str>) -> anyhow::Result<Option<Target>> {
     let wanted = name.unwrap_or(DEFAULT_SESSION);
+    if let Some(err) = state::validate_session_name(wanted) {
+        anyhow::bail!("{err}");
+    }
     if let Some(found) = state::load(wanted)? {
-        return Ok(found);
+        return Ok(Some(Target::Saved(Box::new(found))));
     }
     if state::looks_like_session_id(wanted) {
-        let (mode, base_url) = crate::util::api::resolve();
-        return Ok(BrowserSession::new(
-            wanted.to_string(),
-            wanted.to_string(),
-            mode,
-            base_url,
-        ));
+        return Ok(Some(Target::Id(wanted.to_string())));
     }
+    Ok(None)
+}
+
+pub fn not_running(name: Option<&str>) -> anyhow::Error {
     match name {
-        Some(name) => anyhow::bail!(
-            "Session \"{name}\" is not running. Start it with `steel browser start --session {name}`."
+        Some(name) => anyhow::anyhow!(
+            "Session \"{name}\" is not running. It may have expired. Start it with `steel browser start --session {name}`."
         ),
-        None => anyhow::bail!("No active browser session. Start one with `steel browser start`."),
+        None => anyhow::anyhow!("No active browser session. Start one with `steel browser start`."),
     }
+}
+
+pub fn existing_session(name: Option<&str>) -> anyhow::Result<BrowserSession> {
+    Ok(match target(name)?.ok_or_else(|| not_running(name))? {
+        Target::Saved(found) => *found,
+        Target::Id(id) => {
+            let (mode, base_url) = crate::util::api::resolve();
+            BrowserSession::new(id.clone(), id, mode, base_url)
+        }
+    })
 }
 
 pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
@@ -121,6 +138,38 @@ mod tests {
         match Cli::try_parse_from(argv).unwrap().command {
             commands::Command::Browser(browser) => browser,
             _ => panic!("expected browser command"),
+        }
+    }
+
+    #[test]
+    fn target_rejects_paths_and_accepts_ids() {
+        assert!(super::target(Some("../etc/passwd")).is_err());
+        let id = "4f7c2b1e-9a3d-4e5f-8b6a-1c2d3e4f5a6b";
+        assert!(
+            matches!(super::target(Some(id)), Ok(Some(super::Target::Id(found))) if found == id)
+        );
+    }
+
+    #[test]
+    fn old_names_still_parse() {
+        let args = parse(&[
+            "start",
+            "--session-timeout",
+            "1000",
+            "--session-solve-captcha",
+        ]);
+        let Command::Start(start) = args.command else {
+            panic!("expected start");
+        };
+        assert_eq!(start.timeout, Some(1000));
+        assert!(start.solve_captcha);
+
+        let id = "4f7c2b1e-9a3d-4e5f-8b6a-1c2d3e4f5a6b";
+        let args = parse(&["captcha", "solve", "--session-id", id]);
+        assert_eq!(args.session.as_deref(), Some(id));
+
+        for name in ["close", "quit", "exit"] {
+            assert!(matches!(parse(&[name]).command, Command::Stop(_)), "{name}");
         }
     }
 

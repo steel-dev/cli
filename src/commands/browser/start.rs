@@ -3,16 +3,10 @@ use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::api::session::CreateSessionOptions;
-use crate::browser::lifecycle::{
-    get_session_created_at_ms, get_session_inactivity_timeout, get_session_timeout,
-    sanitize_connect_url, to_session_summary,
-};
 use crate::browser::profile_store;
 use crate::browser::state::{self, BrowserSession};
-use crate::config::auth::Auth;
-use crate::config::settings::ApiMode;
 use crate::status;
-use crate::util::{api, output};
+use crate::util::output;
 
 pub const DEFAULT_INACTIVITY_TIMEOUT_MS: u64 = 600_000;
 
@@ -27,24 +21,24 @@ pub struct Args {
     pub proxy: Option<String>,
 
     /// Session timeout in milliseconds (create-time only)
-    #[arg(long = "session-timeout")]
-    pub session_timeout: Option<u64>,
+    #[arg(long, alias = "session-timeout")]
+    pub timeout: Option<u64>,
 
     /// Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
     #[arg(long = "inactivity-timeout")]
     pub inactivity_timeout: Option<u64>,
 
     /// Create new sessions in headless mode (create-time only)
-    #[arg(long = "session-headless", hide = true)]
-    pub session_headless: Option<bool>,
+    #[arg(long, alias = "session-headless", hide = true)]
+    pub headless: Option<bool>,
 
     /// Preferred session region (create-time only)
-    #[arg(long = "session-region", hide = true)]
-    pub session_region: Option<String>,
+    #[arg(long, alias = "session-region", hide = true)]
+    pub region: Option<String>,
 
     /// Enable manual CAPTCHA solving on new sessions (create-time only)
-    #[arg(long = "session-solve-captcha")]
-    pub session_solve_captcha: bool,
+    #[arg(long, alias = "session-solve-captcha")]
+    pub solve_captcha: bool,
 
     /// Named profile to persist browser state across sessions
     #[arg(long)]
@@ -79,33 +73,29 @@ fn now_ms() -> Option<u64> {
 
 pub async fn create(
     client: &SteelClient,
-    mode: ApiMode,
-    base_url: &str,
-    auth: &Auth,
     name: &str,
     options: &CreateSessionOptions,
 ) -> anyhow::Result<(BrowserSession, Option<String>)> {
-    let session = client.create_session(base_url, mode, options, auth).await?;
-    let summary = to_session_summary(&session, mode, Some(name), auth)?;
+    let session = client.create_session(options).await?;
+    let mode = client.mode();
     let mut created = BrowserSession::new(
         name.to_string(),
-        summary.id.clone(),
+        session.id.clone(),
         mode,
-        base_url.to_string(),
+        client.base_url().to_string(),
     );
-    created.live_url = summary.viewer_url;
-    created.profile_id = summary.profile_id;
-    created.timeout_ms = get_session_timeout(&session).or(options.timeout_ms);
-    created.inactivity_timeout_ms =
-        get_session_inactivity_timeout(&session).or(options.inactivity_timeout_ms);
-    created.created_at_ms = get_session_created_at_ms(&session).or_else(now_ms);
+    created.live_url = session.viewer_url(mode);
+    created.profile_id = session.profile_id.clone();
+    created.timeout_ms = session.timeout_ms().or(options.timeout_ms);
+    created.inactivity_timeout_ms = session
+        .inactivity_timeout_ms()
+        .or(options.inactivity_timeout_ms);
+    created.created_at_ms = session.created_at_ms().or_else(now_ms);
     state::save(&created)?;
-    Ok((created, summary.connect_url))
+    Ok((created, session.connect_url(mode, client.auth())))
 }
 
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
-
     let session_name = session.unwrap_or("default").to_string();
     if state::looks_like_session_id(&session_name) {
         anyhow::bail!(
@@ -131,11 +121,11 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let proxy_enabled = args.proxy.is_some();
     let namespace_set = args.namespace.is_some();
     let inactivity_timeout_ms = resolve_inactivity_timeout(args.inactivity_timeout);
-    if let (Some(timeout), Some(inactivity)) = (args.session_timeout, inactivity_timeout_ms)
+    if let (Some(timeout), Some(inactivity)) = (args.timeout, inactivity_timeout_ms)
         && inactivity >= timeout
     {
         eprintln!(
-            "warning: --inactivity-timeout ({inactivity}ms) >= --session-timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
+            "warning: --inactivity-timeout ({inactivity}ms) >= --timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
         );
     }
 
@@ -143,7 +133,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
 
     if let Some(existing) = state::load(&session_name)? {
         status!("Replacing existing session \"{session_name}\"...");
-        if let Err(err) = super::stop::release(&client, &auth, &existing).await {
+        if let Err(err) = super::stop::release(&client, &existing).await {
             eprintln!("warning: could not release session {}: {err}", existing.id);
             state::remove(&session_name)?;
         }
@@ -152,19 +142,18 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let options = CreateSessionOptions {
         stealth: args.stealth,
         proxy_url: args.proxy,
-        timeout_ms: args.session_timeout,
+        timeout_ms: args.timeout,
         inactivity_timeout_ms,
-        headless: args.session_headless,
-        region: args.session_region,
-        solve_captcha: args.session_solve_captcha,
+        headless: args.headless,
+        region: args.region,
+        solve_captcha: args.solve_captcha,
         profile_id: resolved_profile_id,
         persist_profile,
         namespace: args.namespace,
         credentials: args.credentials,
     };
 
-    let (created, connect_url) =
-        create(&client, mode, &base_url, &auth, &session_name, &options).await?;
+    let (created, connect_url) = create(&client, &session_name, &options).await?;
 
     if let Some(ref profile_name) = args.profile
         && let Some(ref returned_profile_id) = created.profile_id
@@ -184,10 +173,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     properties.insert("persist_profile".into(), json!(persist_profile));
     properties.insert("credentials".into(), json!(args.credentials));
     properties.insert("namespace_set".into(), json!(namespace_set));
-    properties.insert(
-        "session_timeout_set".into(),
-        json!(args.session_timeout.is_some()),
-    );
+    properties.insert("session_timeout_set".into(), json!(args.timeout.is_some()));
     properties.insert("inactivity_timeout_ms".into(), json!(inactivity_timeout_ms));
     crate::telemetry::track_event("browser_session_started", properties);
 
@@ -263,6 +249,32 @@ fn humanize_secs(secs: u64) -> String {
     }
 }
 
+fn sanitize_connect_url(url: &str) -> String {
+    if let Ok(mut parsed) = url::Url::parse(url) {
+        let pairs: Vec<(String, String)> = parsed
+            .query_pairs()
+            .map(|(k, v)| {
+                if k == "apiKey" && v.len() > 7 {
+                    (k.to_string(), format!("{}...", &v[..7]))
+                } else {
+                    (k.to_string(), v.to_string())
+                }
+            })
+            .collect();
+
+        if !pairs.is_empty() {
+            parsed.query_pairs_mut().clear();
+            for (k, v) in &pairs {
+                parsed.query_pairs_mut().append_pair(k, v);
+            }
+        }
+
+        parsed.to_string()
+    } else {
+        url.to_string()
+    }
+}
+
 const fn resolve_inactivity_timeout(explicit: Option<u64>) -> Option<u64> {
     match explicit {
         None => Some(DEFAULT_INACTIVITY_TIMEOUT_MS),
@@ -300,6 +312,20 @@ mod tests {
         assert_eq!(options.inactivity_timeout_ms, Some(600_000));
         assert_eq!(options.timeout_ms, None);
         assert!(!options.stealth);
+    }
+
+    #[test]
+    fn sanitize_masks_long_api_keys_only() {
+        let masked =
+            sanitize_connect_url("wss://connect.steel.dev?apiKey=sk-12345678&sessionId=s1");
+        assert!(masked.contains("sk-1234..."));
+        assert!(masked.contains("sessionId=s1"));
+        assert!(!masked.contains("sk-12345678"));
+        let short = "wss://connect.steel.dev?apiKey=short&sessionId=s1";
+        assert!(sanitize_connect_url(short).contains("apiKey=short"));
+        let local = "ws://localhost:3000/ws?sessionId=sess-1";
+        assert_eq!(sanitize_connect_url(local), local);
+        assert_eq!(sanitize_connect_url("not a valid url"), "not a valid url");
     }
 
     #[test]

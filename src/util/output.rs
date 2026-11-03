@@ -1,47 +1,21 @@
 //! Unified output formatting for human (text) and machine (JSON) modes.
 
-use std::io::IsTerminal;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::{Value, json};
 
 static JSON_MODE: AtomicBool = AtomicBool::new(false);
-static IS_TTY: AtomicBool = AtomicBool::new(true);
 static NO_COLOR: AtomicBool = AtomicBool::new(false);
 
 /// Initialize output settings. Called once at startup.
-///
-/// - `explicit_json`: whether `--json` flag was passed
-/// - Detects TTY via `stdout().is_terminal()`
-/// - `STEEL_FORCE_TTY=1` overrides auto-detection
-/// - `NO_COLOR` env var is detected for future color support
-/// - Piped output (non-TTY) automatically enables JSON mode
-pub fn init(explicit_json: bool) {
-    let stdout_is_tty = std::io::stdout().is_terminal();
-    let force_tty = std::env::var("STEEL_FORCE_TTY").is_ok_and(|v| v == "1");
-    let tty = force_tty || stdout_is_tty;
-
-    IS_TTY.store(tty, Ordering::Relaxed);
+pub fn init(json: bool) {
     NO_COLOR.store(std::env::var("NO_COLOR").is_ok(), Ordering::Relaxed);
-
-    let json = explicit_json || !tty;
     JSON_MODE.store(json, Ordering::Relaxed);
-}
-
-/// Enable JSON output mode directly. For tests only.
-#[cfg(test)]
-pub fn set_json_mode(enabled: bool) {
-    JSON_MODE.store(enabled, Ordering::Relaxed);
 }
 
 /// Check if JSON output mode is active.
 pub fn is_json() -> bool {
     JSON_MODE.load(Ordering::Relaxed)
-}
-
-/// Check if stdout is a TTY (terminal).
-pub fn is_tty() -> bool {
-    IS_TTY.load(Ordering::Relaxed)
 }
 
 /// Check if `NO_COLOR` environment variable is set.
@@ -110,38 +84,6 @@ fn format_success_silent(json_mode: bool) -> Option<String> {
     }
 }
 
-fn format_success_field(json_mode: bool, data: &Value, field: &str) -> Option<String> {
-    if json_mode {
-        Some(format_success_data(json_mode, data))
-    } else {
-        let v = &data[field];
-        if let Some(s) = v.as_str() {
-            Some(s.to_string())
-        } else if !v.is_null() {
-            Some(v.to_string())
-        } else {
-            None
-        }
-    }
-}
-
-fn format_success_text(json_mode: bool, data: &Value) -> Option<String> {
-    if json_mode {
-        Some(format_success_data(json_mode, data))
-    } else {
-        data.as_str().map(|s| s.to_string())
-    }
-}
-
-#[cfg(test)]
-fn format_error(json_mode: bool, msg: &str) -> String {
-    if json_mode {
-        json!({"success": false, "error": msg}).to_string()
-    } else {
-        format!("Error: {msg}")
-    }
-}
-
 // --- Public I/O functions (delegate to format_*) ---
 
 /// Print a success response. In JSON mode, wraps data in `{"success": true, "data": ...}`.
@@ -164,21 +106,6 @@ pub fn success_data(data: Value) {
 /// Print a silent success (for commands that produce no output on success).
 pub fn success_silent() {
     if let Some(output) = format_success_silent(is_json()) {
-        println!("{output}");
-    }
-}
-
-/// Print success: JSON wraps in envelope, text prints `data[field]`.
-/// Strings are printed without quotes; numbers/bools are printed as-is.
-pub fn success_field(data: Value, field: &str) {
-    if let Some(output) = format_success_field(is_json(), &data, field) {
-        println!("{output}");
-    }
-}
-
-/// Print success: JSON wraps in envelope, text prints data as a string.
-pub fn success_text(data: Value) {
-    if let Some(output) = format_success_text(is_json(), &data) {
         println!("{output}");
     }
 }
@@ -252,11 +179,6 @@ fn classify_error(err: &anyhow::Error) -> (i32, &'static str, Option<&'static st
                 exit_code::NETWORK,
                 "unreachable",
                 Some("Check your network connection and API URL."),
-            ),
-            crate::api::client::ApiError::RetryLater { .. } => (
-                exit_code::API_SERVER,
-                "not_ready",
-                Some("The API asked to retry later. Try again shortly."),
             ),
             crate::api::client::ApiError::RequestFailed { status, .. } => match *status {
                 401 => (
@@ -351,79 +273,6 @@ mod tests {
     #[test]
     fn format_success_silent_text_mode() {
         assert!(format_success_silent(false).is_none());
-    }
-
-    // --- format_success_field ---
-
-    #[test]
-    fn format_success_field_json_mode() {
-        let data = json!({"url": "https://example.com"});
-        let out = format_success_field(true, &data, "url").unwrap();
-        let parsed: Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(parsed["success"], true);
-        assert_eq!(parsed["data"]["url"], "https://example.com");
-    }
-
-    #[test]
-    fn format_success_field_text_string() {
-        let data = json!({"name": "Alice"});
-        let out = format_success_field(false, &data, "name").unwrap();
-        assert_eq!(out, "Alice");
-    }
-
-    #[test]
-    fn format_success_field_text_number() {
-        let data = json!({"count": 42});
-        let out = format_success_field(false, &data, "count").unwrap();
-        assert_eq!(out, "42");
-    }
-
-    #[test]
-    fn format_success_field_text_null() {
-        let data = json!({"missing": null});
-        let out = format_success_field(false, &data, "missing");
-        assert!(out.is_none());
-    }
-
-    // --- format_success_text ---
-
-    #[test]
-    fn format_success_text_json_mode() {
-        let data = json!("hello");
-        let out = format_success_text(true, &data).unwrap();
-        let parsed: Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(parsed["success"], true);
-        assert_eq!(parsed["data"], "hello");
-    }
-
-    #[test]
-    fn format_success_text_text_string() {
-        let data = json!("hello");
-        let out = format_success_text(false, &data).unwrap();
-        assert_eq!(out, "hello");
-    }
-
-    #[test]
-    fn format_success_text_text_non_string() {
-        let data = json!(123);
-        let out = format_success_text(false, &data);
-        assert!(out.is_none());
-    }
-
-    // --- format_error ---
-
-    #[test]
-    fn format_error_json_mode() {
-        let out = format_error(true, "something broke");
-        let parsed: Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(parsed["success"], false);
-        assert_eq!(parsed["error"], "something broke");
-    }
-
-    #[test]
-    fn format_error_text_mode() {
-        let out = format_error(false, "something broke");
-        assert_eq!(out, "Error: something broke");
     }
 
     // --- classify_error ---

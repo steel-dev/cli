@@ -8,8 +8,7 @@ Every `steel browser` action sends one request to the session's commands API (`P
 steel browser start [--session <name>]   # create a session (default name: default)
 steel browser sessions                   # list local sessions that are still live
 steel browser live                       # print the live viewer URL
-steel browser stop [--session <name>]    # release the session (-a for all)
-steel browser close                      # same as stop (aliases: quit, exit)
+steel browser stop [--session <name>]    # release the session (-a for all; aliases: close, quit, exit)
 ```
 
 - Actions without `--session` use the `default` session. It starts on first use.
@@ -128,14 +127,14 @@ Dialogs stay open until you answer them. A command that opens one prints the dia
 steel browser batch "fill e3 Seoul" "fill e4 Tokyo" "click e5" "snapshot -i"
 ```
 
-Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, `cancel`, and `close` must run on their own.
+Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, and `cancel` must run on their own. `stop` is not a batch command.
 
 ## Retries and output
 
 - The CLI sends a random `Idempotency-Key` and the last operation id. If the API cannot reach the browser, it retries with the same key, so the command never runs twice.
 - When a command's response is lost, run the same command again. You get the stored result instead of a second run, with the note `This is the stored result of an earlier run`.
 - Text output prints the result. Notes about dialogs, new tabs, downloads, and replays go to stderr.
-- `--json` (or piped output) prints the engine response under `data`, with any `notices`.
+- `--json` prints the engine response under `data`, with any `notices`.
 - A failed command exits with code 1 and prints the engine error code, such as `stale_ref`, `not_actionable`, or `tab_required`.
 
 ## Removed in 0.5

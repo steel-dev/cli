@@ -27,13 +27,6 @@ pub enum ApiError {
         body: Option<Value>,
     },
 
-    #[error("Steel API request failed ({status}): {message}")]
-    RetryLater {
-        status: u16,
-        message: Cow<'static, str>,
-        seconds: u64,
-    },
-
     #[error(transparent)]
     Other(#[from] reqwest::Error),
 }
@@ -80,72 +73,88 @@ fn extract_error_message(body: &Value, status_text: &str) -> Cow<'static, str> {
 
 pub struct SteelClient {
     http: Client,
+    base_url: String,
+    mode: ApiMode,
+    auth: Auth,
 }
 
 impl SteelClient {
     pub fn new() -> Result<Self, reqwest::Error> {
+        let (mode, base_url, auth) = crate::util::api::resolve_with_auth();
+        Self::with(base_url, mode, auth)
+    }
+
+    pub fn with(base_url: String, mode: ApiMode, auth: Auth) -> Result<Self, reqwest::Error> {
         let http = Client::builder().user_agent("steel-cli").build()?;
-        Ok(Self { http })
+        Ok(Self {
+            http,
+            base_url,
+            mode,
+            auth,
+        })
+    }
+
+    pub fn at(&self, base_url: &str, mode: ApiMode) -> Self {
+        Self {
+            http: self.http.clone(),
+            base_url: base_url.to_string(),
+            mode,
+            auth: self.auth.clone(),
+        }
+    }
+
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    pub const fn mode(&self) -> ApiMode {
+        self.mode
+    }
+
+    pub const fn auth(&self) -> &Auth {
+        &self.auth
+    }
+
+    pub fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.base_url)
     }
 
     pub fn authed(
         &self,
         method: reqwest::Method,
-        url: &str,
-        mode: ApiMode,
-        auth: &Auth,
+        path: &str,
     ) -> Result<reqwest::RequestBuilder, ApiError> {
-        if mode == ApiMode::Cloud && auth.api_key.is_none() {
+        if self.mode == ApiMode::Cloud && self.auth.api_key.is_none() {
             return Err(ApiError::MissingAuth);
         }
-        let mut req = self.http.request(method, url);
-        if let Some(key) = &auth.api_key {
+        let mut req = self.http.request(method, self.url(path));
+        if let Some(key) = &self.auth.api_key {
             req = req.header("Steel-Api-Key", key);
         }
         Ok(req)
     }
 
-    /// Make an authenticated API request.
-    /// Matches the shared request pattern in TS `requestApi()` and `requestTopLevelApi()`.
     pub async fn request(
         &self,
-        base_url: &str,
-        mode: ApiMode,
         method: reqwest::Method,
         path: &str,
         body: Option<Value>,
-        auth: &Auth,
     ) -> Result<Value, ApiError> {
-        // Cloud mode requires auth
-        if mode == ApiMode::Cloud && auth.api_key.is_none() {
-            return Err(ApiError::MissingAuth);
-        }
-
-        let url = format!("{base_url}{path}");
-
-        let mut req = self.http.request(method, &url);
-        req = req.header("Content-Type", "application/json");
-
-        if let Some(key) = &auth.api_key {
-            req = req.header("Steel-Api-Key", key);
-        }
-
+        let mut req = self
+            .authed(method, path)?
+            .header("Content-Type", "application/json");
         if let Some(body) = body {
             req = req.json(&body);
         }
 
-        let resp = req.send().await.map_err(|e| ApiError::Unreachable {
-            url: url.clone(),
-            source: e,
+        let resp = req.send().await.map_err(|source| ApiError::Unreachable {
+            url: self.url(path),
+            source,
         })?;
 
         let status = resp.status();
-        let status_code = status.as_u16();
         let status_text = status.canonical_reason().unwrap_or("").to_string();
-
-        // Read body as text, then try to parse as JSON
         let response_text = resp.text().await.map_err(ApiError::Other)?;
-
         let response_data: Value = if response_text.trim().is_empty() {
             Value::Null
         } else {
@@ -155,74 +164,13 @@ impl SteelClient {
         if !status.is_success() {
             let message = extract_error_message(&response_data, &status_text);
             return Err(ApiError::RequestFailed {
-                status: status_code,
+                status: status.as_u16(),
                 message,
                 body: Some(response_data),
             });
         }
 
         Ok(response_data)
-    }
-
-    pub async fn request_raw(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        method: reqwest::Method,
-        path: &str,
-        body: Option<Value>,
-        auth: &Auth,
-    ) -> Result<reqwest::Response, ApiError> {
-        if mode == ApiMode::Cloud && auth.api_key.is_none() {
-            return Err(ApiError::MissingAuth);
-        }
-
-        let url = format!("{base_url}{path}");
-        let mut req = self.http.request(method, &url);
-        req = req.header("Content-Type", "application/json");
-        if let Some(key) = &auth.api_key {
-            req = req.header("Steel-Api-Key", key);
-        }
-        if let Some(body) = body {
-            req = req.json(&body);
-        }
-
-        let resp = req.send().await.map_err(|e| ApiError::Unreachable {
-            url: url.clone(),
-            source: e,
-        })?;
-
-        let status = resp.status();
-        if status.is_success() {
-            return Ok(resp);
-        }
-
-        let status_code = status.as_u16();
-        let status_text = status.canonical_reason().unwrap_or("").to_string();
-        let retry_after = resp
-            .headers()
-            .get(reqwest::header::RETRY_AFTER)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.trim().parse::<u64>().ok());
-        let response_text = resp.text().await.map_err(ApiError::Other)?;
-        let response_data: Value = if response_text.trim().is_empty() {
-            Value::Null
-        } else {
-            serde_json::from_str(&response_text).unwrap_or(Value::String(response_text))
-        };
-        let message = extract_error_message(&response_data, &status_text);
-        if let Some(seconds) = retry_after {
-            return Err(ApiError::RetryLater {
-                status: status_code,
-                message,
-                seconds,
-            });
-        }
-        Err(ApiError::RequestFailed {
-            status: status_code,
-            message,
-            body: Some(response_data),
-        })
     }
 }
 
@@ -286,22 +234,13 @@ mod tests {
 
     #[tokio::test]
     async fn missing_auth_in_cloud_mode() {
-        let client = SteelClient::new().unwrap();
         let auth = Auth {
             api_key: None,
             source: crate::config::auth::AuthSource::None,
         };
+        let client = SteelClient::with("http://localhost".into(), ApiMode::Cloud, auth).unwrap();
 
-        let result = client
-            .request(
-                "http://localhost",
-                ApiMode::Cloud,
-                reqwest::Method::GET,
-                "/test",
-                None,
-                &auth,
-            )
-            .await;
+        let result = client.request(reqwest::Method::GET, "/test", None).await;
 
         assert!(matches!(result, Err(ApiError::MissingAuth)));
     }
@@ -309,22 +248,13 @@ mod tests {
     #[tokio::test]
     async fn local_mode_allows_no_auth() {
         // This will fail to connect, but should NOT fail with MissingAuth
-        let client = SteelClient::new().unwrap();
         let auth = Auth {
             api_key: None,
             source: crate::config::auth::AuthSource::None,
         };
+        let client = SteelClient::with("http://127.0.0.1:1".into(), ApiMode::Local, auth).unwrap();
 
-        let result = client
-            .request(
-                "http://127.0.0.1:1",
-                ApiMode::Local,
-                reqwest::Method::GET,
-                "/test",
-                None,
-                &auth,
-            )
-            .await;
+        let result = client.request(reqwest::Method::GET, "/test", None).await;
 
         assert!(matches!(result, Err(ApiError::Unreachable { .. })));
     }

@@ -16,43 +16,10 @@ fn steel_cmd() -> Command {
 }
 
 /// Helper: run `steel` with a temporary STEEL_CONFIG_DIR so tests are isolated.
-/// Also sets STEEL_FORCE_TTY=1 to keep text output in piped test environments.
 fn steel_with_tmp_config(tmp: &tempfile::TempDir) -> Command {
     let mut cmd = steel_cmd();
     cmd.env("STEEL_CONFIG_DIR", tmp.path());
-    cmd.env("STEEL_FORCE_TTY", "1");
     cmd
-}
-
-// ─── repo_path derivation ────────────────────────────────────────────────────
-
-#[test]
-fn repo_path_is_config_dir_plus_steel_browser() {
-    // The config module is public, so we can verify the derivation in-process.
-    let dir = steel_cli::config::config_dir_with(Some("/tmp/test-steel-cfg"));
-    let repo = dir.join("steel-browser");
-    assert_eq!(
-        repo,
-        std::path::PathBuf::from("/tmp/test-steel-cfg/steel-browser"),
-    );
-}
-
-#[test]
-fn repo_path_respects_steel_config_dir_env() {
-    // When STEEL_CONFIG_DIR is set, config_dir() picks it up.
-    let dir = steel_cli::config::config_dir_with(Some("/custom/dir"));
-    assert_eq!(dir, std::path::PathBuf::from("/custom/dir"));
-}
-
-#[test]
-fn repo_path_falls_back_to_home_config() {
-    // When env var is absent, falls back to ~/.config/steel
-    let dir = steel_cli::config::config_dir_with(None);
-    assert!(
-        dir.ends_with(".config/steel"),
-        "expected path ending with .config/steel, got: {}",
-        dir.display()
-    );
 }
 
 // ─── Help output: verify flags exist ─────────────────────────────────────────
@@ -209,7 +176,7 @@ fn start_default_port_is_3000() {
     // Verify via clap introspection that port default is None (meaning the code
     // falls back to 3000 in run_start).
     use clap::CommandFactory;
-    let root = steel_cli::commands::Cli::command();
+    let root = steel_cli::Cli::command();
     let dev = root
         .get_subcommands()
         .find(|s| s.get_name() == "dev")

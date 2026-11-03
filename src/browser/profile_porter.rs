@@ -53,7 +53,6 @@ impl BrowserId {
     pub const fn descriptor(self) -> BrowserDescriptor {
         match self {
             Self::Chrome => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Google/Chrome"),
                     win32: Some("Google/Chrome/User Data"),
@@ -71,7 +70,6 @@ impl BrowserId {
                 },
             },
             Self::Edge => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Microsoft Edge"),
                     win32: Some("Microsoft/Edge/User Data"),
@@ -89,7 +87,6 @@ impl BrowserId {
                 },
             },
             Self::Brave => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("BraveSoftware/Brave-Browser"),
                     win32: Some("BraveSoftware/Brave-Browser/User Data"),
@@ -107,7 +104,6 @@ impl BrowserId {
                 },
             },
             Self::Arc => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Arc/User Data"),
                     win32: None,
@@ -125,7 +121,6 @@ impl BrowserId {
                 },
             },
             Self::Opera => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("com.operasoftware.Opera"),
                     win32: Some("Opera Software/Opera Stable"),
@@ -144,7 +139,6 @@ impl BrowserId {
                 },
             },
             Self::Vivaldi => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Vivaldi"),
                     win32: Some("Vivaldi/User Data"),
@@ -195,7 +189,6 @@ pub struct PlatformStrs {
 }
 
 pub struct BrowserDescriptor {
-    pub id: BrowserId,
     pub profile_base_dirs: PlatformStr,
     pub process_names: PlatformStrs,
     pub keychain_service: PlatformStr,
@@ -279,7 +272,6 @@ pub struct BrowserProfile {
     pub dir_name: String,
     pub display_name: String,
     pub email: Option<String>,
-    pub browser: BrowserId,
 }
 
 pub fn find_browser_profiles(browser: BrowserId) -> Vec<BrowserProfile> {
@@ -310,7 +302,6 @@ pub fn find_browser_profiles(browser: BrowserId) -> Vec<BrowserProfile> {
             dir_name,
             display_name,
             email,
-            browser,
         });
     }
     profiles.sort_by(|a, b| a.dir_name.cmp(&b.dir_name));
@@ -1210,14 +1201,6 @@ mod tests {
     #[test]
     fn browser_id_from_str_unknown() {
         assert!("firefox".parse::<BrowserId>().is_err());
-    }
-
-    #[test]
-    fn all_browsers_have_descriptors() {
-        for id in BrowserId::all() {
-            let desc = id.descriptor();
-            assert_eq!(desc.id, *id);
-        }
     }
 
     #[test]

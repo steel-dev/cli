@@ -12,27 +12,16 @@ Each `steel browser` action is one HTTP request to the session's commands API:
 
 The full command list is in [./steel-browser-commands.md](./steel-browser-commands.md).
 
-## Modes
-
-- Cloud mode (default): no mode flag required.
-- Self-hosted mode: use `--local` or `--api-url <url>`.
-
-`--api-url` implies self-hosted mode.
-
 ## Endpoint Resolution
 
-Self-hosted endpoint precedence:
+The API URL is chosen in this order:
 
 1. `--api-url <url>`
-2. `STEEL_BROWSER_API_URL`
-3. `STEEL_LOCAL_API_URL`
-4. `browser.apiUrl` in `~/.config/steel/config.json`
-5. `http://localhost:3000/v1`
+2. `--local`: `browser.apiUrl` in `~/.config/steel/config.json`, or `http://localhost:3000/v1`
+3. `STEEL_API_URL`
+4. `https://api.steel.dev/v1`
 
-Cloud endpoint precedence:
-
-1. `STEEL_API_URL`
-2. `https://api.steel.dev/v1`
+URLs on `steel.dev` are Steel Cloud and need an API key. Any other URL is treated as self-hosted.
 
 ## Steel-Owned Command Contracts
 
@@ -47,9 +36,9 @@ Main flags:
 - `--session <name>`
 - `--stealth`
 - `--proxy <url>`
-- `--session-timeout <ms>`
+- `--timeout <ms>`
 - `--inactivity-timeout <ms>` (default 600000; `0` turns it off)
-- `--session-solve-captcha`
+- `--solve-captcha`
 - `--namespace <name>`
 - `--credentials`
 - `--profile <name>`
@@ -61,7 +50,7 @@ Flag semantics:
   - `stealthConfig.humanizeInteractions = true`
   - `stealthConfig.autoCaptchaSolving = true`
   - `solveCaptcha = true`
-- `--session-solve-captcha` enables manual CAPTCHA solving for new sessions:
+- `--solve-captcha` enables manual CAPTCHA solving for new sessions:
   - `solveCaptcha = true`
   - `stealthConfig.autoCaptchaSolving` is not forced on
 - `--proxy <url>` sets `proxyUrl` on session creation. The Sessions API may return
@@ -135,14 +124,12 @@ Purpose: manually trigger CAPTCHA solving for a target session.
 
 Main flags:
 
-- `--session-id <id>`
-- `--session <name>`
+- `--session <name|id>`
 - `--page-id <id>`
 - `--url <url>`
 - `--task-id <id>`
 - `--local`
 - `--api-url <url>`
-- `--raw`
 
 API mapping:
 
@@ -199,7 +186,7 @@ Self-hosted steel-browser serves the commands API only when it runs with
 - CAPTCHA solving notes:
   - CAPTCHA solving requires a paid Steel plan.
   - `--stealth` enables auto solving; wait and monitor with screenshots.
-  - `--session-solve-captcha` enables manual solving; use `steel browser captcha solve`.
+  - `--solve-captcha` enables manual solving; use `steel browser captcha solve`.
   - Default sessions do not solve captchas; restart with CAPTCHA solving enabled and navigate back.
   - Proxy + CAPTCHA solving together is a strong anti-bot evasion combination.
 - Need hard reset of stale session mapping:

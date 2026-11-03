@@ -7,14 +7,12 @@ use serde_json::{Map, Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
 use crate::api::commands::{Reply, Session};
-use crate::browser::lifecycle::{get_viewer_url, is_session_live};
+use crate::api::session::Session as RemoteSession;
 use crate::browser::state::{self, BrowserSession, SnapshotInfo};
-use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
-use crate::util::api;
 use crate::util::output::{self, SilentExit};
 
-use super::{DEFAULT_SESSION, start};
+use super::{DEFAULT_SESSION, Target, start};
 
 #[derive(Parser)]
 pub struct SelectorArg {
@@ -124,9 +122,6 @@ pub enum ActionCommand {
     Status(ExecutionArgs),
     /// Stop a command that is still running
     Cancel(ExecutionArgs),
-    /// Close the browser session
-    #[command(aliases = ["quit", "exit"])]
-    Close,
 
     #[command(hide = true)]
     Cookies(RemovedArgs),
@@ -184,7 +179,6 @@ impl ActionCommand {
             Self::Dialog(_) => "dialog",
             Self::Status(_) => "status",
             Self::Cancel(_) => "cancel",
-            Self::Close => "close",
             Self::Cookies(_) => "cookies",
             Self::Storage(_) => "storage",
             Self::Set(_) => "set",
@@ -524,7 +518,7 @@ fn parse_tab(value: &str) -> Result<String, String> {
     }
 }
 
-pub(crate) enum Output {
+pub enum Output {
     None,
     Snapshot,
     Value,
@@ -538,7 +532,7 @@ pub(crate) enum Output {
     Dialog,
 }
 
-pub(crate) struct Step {
+pub struct Step {
     pub commands: Vec<Value>,
     pub output: Output,
     pub uploads: Vec<(PathBuf, String)>,
@@ -553,7 +547,7 @@ impl Step {
         }
     }
 
-    pub(crate) fn batchable(&self) -> bool {
+    pub fn batchable(&self) -> bool {
         !matches!(self.output, Output::Switch(_) | Output::TabOpened)
             && !self
                 .commands
@@ -562,10 +556,9 @@ impl Step {
     }
 }
 
-pub(crate) enum Plan {
+pub enum Plan {
     Run(Step),
     Control(Value, Output),
-    Close,
 }
 
 struct Cmd(Map<String, Value>);
@@ -633,7 +626,7 @@ fn image_format(output: &str) -> Option<&'static str> {
 }
 
 impl ActionCommand {
-    pub(crate) fn plan(self) -> Result<Plan> {
+    pub fn plan(self) -> Result<Plan> {
         use Output as O;
         match self {
             Self::Navigate(a) => {
@@ -877,7 +870,6 @@ impl ActionCommand {
                 cmd("cancel").set("execution", a.execution).done(),
                 O::Execution,
             )),
-            Self::Close => Ok(Plan::Close),
             Self::Cookies(_) => Err(removed(
                 "cookies",
                 "Read cookies with `steel browser eval \"document.cookie\"` (HttpOnly cookies are not visible). Keep logins across sessions with `steel browser start --profile <name>`.",
@@ -1022,7 +1014,7 @@ fn session_flag(name: &str) -> String {
     }
 }
 
-pub(crate) fn fail(code: &str, message: &str, data: Option<&Value>) -> anyhow::Error {
+pub fn fail(code: &str, message: &str, data: Option<&Value>) -> anyhow::Error {
     if output::is_json() {
         let mut obj = json!({"success": false, "error": message, "error_code": code});
         if let Some(data) = data {
@@ -1196,69 +1188,48 @@ fn restarted(body: &Value) -> bool {
         })
 }
 
-pub(crate) struct Browser {
+pub struct Browser {
     client: SteelClient,
-    auth: Auth,
     pub state: BrowserSession,
 }
 
-async fn attach(
-    client: &SteelClient,
-    mode: ApiMode,
-    base_url: &str,
-    auth: &Auth,
-    id: &str,
-) -> Result<BrowserSession> {
-    let session = client.get_session(base_url, mode, id, auth).await?;
-    if !is_session_live(&session) {
+async fn attach(client: &SteelClient, id: &str) -> Result<BrowserSession> {
+    let remote = RemoteSession::parse(client.cli_get_session(id).await?)?;
+    if !remote.is_live() {
         bail!("Session {id} has ended. Start a new one with `steel browser start`.");
     }
-    let mut attached =
-        BrowserSession::new(id.to_string(), id.to_string(), mode, base_url.to_string());
-    attached.live_url = get_viewer_url(&session, mode, id);
+    let mut attached = BrowserSession::new(
+        id.to_string(),
+        id.to_string(),
+        client.mode(),
+        client.base_url().to_string(),
+    );
+    attached.live_url = remote.viewer_url(client.mode());
     state::save(&attached)?;
     Ok(attached)
 }
 
 impl Browser {
-    pub(crate) async fn open(name: Option<&str>, start_default: bool) -> Result<Self> {
-        let (mode, base_url, auth) = api::resolve_with_auth();
+    pub async fn open(name: Option<&str>, start_default: bool) -> Result<Self> {
         let client = SteelClient::new()?;
-        let state = match name {
-            Some(name) => match state::load(name)? {
-                Some(found) => found,
-                None if state::looks_like_session_id(name) => {
-                    attach(&client, mode, &base_url, &auth, name).await?
-                }
-                None => bail!(
-                    "Session \"{name}\" is not running. It may have expired. Run `steel browser start --session {name}` to start a new one."
-                ),
-            },
-            None => match state::load(DEFAULT_SESSION)? {
-                Some(found) => found,
-                None if start_default => {
-                    eprintln!("warning: session \"default\" is not running; starting a new one");
-                    let options = start::default_options();
-                    start::create(&client, mode, &base_url, &auth, DEFAULT_SESSION, &options)
-                        .await?
-                        .0
-                }
-                None => bail!("No active browser session. Start one with `steel browser start`."),
-            },
+        let state = match super::target(name)? {
+            Some(Target::Saved(found)) => *found,
+            Some(Target::Id(id)) => attach(&client, &id).await?,
+            None if name.is_none() && start_default => {
+                eprintln!("warning: session \"default\" is not running; starting a new one");
+                start::create(&client, DEFAULT_SESSION, &start::default_options())
+                    .await?
+                    .0
+            }
+            None => return Err(super::not_running(name)),
         };
-        Ok(Self {
-            client,
-            auth,
-            state,
-        })
+        let client = client.at(&state.api_url, state.mode);
+        Ok(Self { client, state })
     }
 
     fn session(&self) -> Session<'_> {
         Session {
             client: &self.client,
-            base_url: &self.state.api_url,
-            mode: self.state.mode,
-            auth: &self.auth,
             id: &self.state.id,
         }
     }
@@ -1409,7 +1380,7 @@ impl Browser {
         }
     }
 
-    pub(crate) async fn execute(&mut self, steps: Vec<Step>, diff: bool) -> Result<()> {
+    pub async fn execute(&mut self, steps: Vec<Step>, diff: bool) -> Result<()> {
         for (path, name) in steps.iter().flat_map(|step| step.uploads.iter()) {
             let bytes = std::fs::read(path)
                 .with_context(|| format!("Could not read {}", path.display()))?;
@@ -1575,7 +1546,7 @@ impl Browser {
         })
     }
 
-    pub(crate) async fn control(&mut self, mut command: Value, output: Output) -> Result<()> {
+    pub async fn control(&mut self, mut command: Value, output: Output) -> Result<()> {
         if command["command"] == "dialog" && command.get("dialog").is_none() {
             let Some(id) = self.state.dialog.clone() else {
                 bail!(
@@ -1640,7 +1611,6 @@ pub async fn run(action: ActionCommand, session: Option<&str>, diff: bool) -> Re
             let mut browser = Browser::open(session, false).await?;
             browser.control(command, output).await
         }
-        Plan::Close => super::stop::run(super::stop::Args { all: false }, session).await,
     }
 }
 
@@ -1864,7 +1834,6 @@ mod tests {
             plan(&["status", "x-7"]).unwrap(),
             Plan::Control(ref c, Output::Execution) if *c == json!({"command": "status", "execution": "x-7"})
         ));
-        assert!(matches!(plan(&["close"]).unwrap(), Plan::Close));
     }
 
     #[test]
