@@ -1,9 +1,11 @@
 //! Top-level API: scrape, screenshot, pdf.
 //! Ported from: cli/source/utils/topLevelTools.ts
 
+use std::time::Duration;
+
 use serde_json::{Value, json};
 
-use crate::api::client::{ApiError, SteelClient};
+use crate::api::client::{ApiError, REQUEST_TIMEOUT, SteelClient};
 
 /// Supported scrape output formats.
 pub const SCRAPE_FORMATS: &[&str] = &["html", "readability", "cleaned_html", "markdown"];
@@ -97,6 +99,10 @@ impl Target<'_> {
         }
         body
     }
+
+    fn timeout(&self) -> Duration {
+        REQUEST_TIMEOUT + Duration::from_millis(self.delay.unwrap_or(0))
+    }
 }
 
 impl SteelClient {
@@ -115,8 +121,13 @@ impl SteelClient {
         if screenshot {
             body["screenshot"] = json!(true);
         }
-        self.request(reqwest::Method::POST, "/scrape", Some(body))
-            .await
+        self.request_within(
+            reqwest::Method::POST,
+            "/scrape",
+            Some(body),
+            Some(target.timeout()),
+        )
+        .await
     }
 
     pub async fn screenshot(
@@ -128,13 +139,23 @@ impl SteelClient {
         if full_page {
             body["fullPage"] = json!(true);
         }
-        self.request(reqwest::Method::POST, "/screenshot", Some(body))
-            .await
+        self.request_within(
+            reqwest::Method::POST,
+            "/screenshot",
+            Some(body),
+            Some(target.timeout()),
+        )
+        .await
     }
 
     pub async fn pdf(&self, target: &Target<'_>) -> Result<Value, ApiError> {
-        self.request(reqwest::Method::POST, "/pdf", Some(target.body()))
-            .await
+        self.request_within(
+            reqwest::Method::POST,
+            "/pdf",
+            Some(target.body()),
+            Some(target.timeout()),
+        )
+        .await
     }
 }
 
@@ -270,6 +291,16 @@ mod tests {
             use_proxy: false,
             region: None,
         }
+    }
+
+    #[test]
+    fn delay_extends_the_request_timeout() {
+        assert_eq!(target("https://example.com").timeout(), REQUEST_TIMEOUT);
+        let delayed = Target {
+            delay: Some(30_000),
+            ..target("https://example.com")
+        };
+        assert_eq!(delayed.timeout(), REQUEST_TIMEOUT + Duration::from_secs(30));
     }
 
     #[test]

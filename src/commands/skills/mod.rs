@@ -16,6 +16,7 @@ use crate::util::output;
 const DEFAULT_MANIFEST_URL: &str =
     "https://raw.githubusercontent.com/steel-dev/skills/main/manifest.json";
 const REPO_SPEC: &str = "steel-dev/skills";
+const DOCTOR_FAILURE_CODE: &str = "skills_doctor_failed";
 const FALLBACK_MANIFEST: &str = r#"{
   "version": "2026.06.02",
   "schema": 1,
@@ -248,12 +249,18 @@ pub async fn run(command: SkillsCommand) -> anyhow::Result<()> {
                 if !names.is_empty() {
                     anyhow::bail!("cannot combine --all with explicit skill names");
                 }
-                install_all_with_options(agent.as_deref(), global, yes).await
+                install_all_with_options(agent.as_deref(), global, yes).await?;
             } else {
-                install_names_with_options(&names, agent.as_deref(), global, yes).await
+                install_names_with_options(&names, agent.as_deref(), global, yes).await?;
             }
+            output::success_silent();
+            Ok(())
         }
-        SkillsCommand::Update { names, yes } => update(names, yes).await,
+        SkillsCommand::Update { names, yes } => {
+            update(names, yes).await?;
+            output::success_silent();
+            Ok(())
+        }
         SkillsCommand::Doctor { offline } => doctor(offline).await,
         SkillsCommand::Open { name } => open_skill(&name).await,
         SkillsCommand::Paths => paths().await,
@@ -267,7 +274,6 @@ pub async fn install_names(names: &[String], yes: bool) -> anyhow::Result<()> {
 pub async fn install_catalog_flow() -> anyhow::Result<()> {
     run_npx(&["skills", "add", REPO_SPEC])
         .context("starting Steel skills installer. You can also run manually: npx skills add steel-dev/skills")?;
-    output::success_silent();
     Ok(())
 }
 
@@ -332,7 +338,6 @@ async fn install_names_with_options(
         })?;
         status!("Installed {name}");
     }
-    output::success_silent();
     Ok(())
 }
 
@@ -354,7 +359,6 @@ async fn install_all_with_options(
     }
     run_npx(&args).context("installing all Steel skills. You can also run manually: npx skills add steel-dev/skills --all")?;
     status!("Installed all Steel skills");
-    output::success_silent();
     Ok(())
 }
 
@@ -374,7 +378,6 @@ async fn update(names: Vec<String>, yes: bool) -> anyhow::Result<()> {
         run_npx(&args).with_context(|| format!("updating {name}"))?;
         status!("Updated {name}");
     }
-    output::success_silent();
     Ok(())
 }
 
@@ -403,7 +406,7 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
     let has_fail = !npx_ok || auth.api_key.is_none();
 
     if output::is_json() {
-        output::success_data(json!({
+        let data = json!({
             "overall": if has_fail { "fail" } else if !manifest_ok { "degraded" } else { "pass" },
             "checks": {
                 "manifest": manifest_ok,
@@ -412,7 +415,16 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
                 "installed_paths": installed_count,
             },
             "paths": agent_paths,
-        }));
+        });
+        if has_fail {
+            return Err(output::fail(
+                DOCTOR_FAILURE_CODE,
+                "Some checks failed.",
+                Some(&data),
+            ));
+        }
+        output::success_data(data);
+        return Ok(());
     } else {
         println!("Steel Skills Doctor\n");
         println!("Manifest reachable: {}", yes_no(manifest_ok));
@@ -431,7 +443,7 @@ async fn doctor(offline: bool) -> anyhow::Result<()> {
     }
 
     if has_fail {
-        return Err(output::SilentExit(output::exit_code::GENERAL).into());
+        return Err(output::SilentExit::new(DOCTOR_FAILURE_CODE).into());
     }
     Ok(())
 }
@@ -616,7 +628,12 @@ fn npx_available() -> bool {
 }
 
 fn run_npx(args: &[&str]) -> anyhow::Result<()> {
-    let status = ProcessCommand::new("npx").args(args).status();
+    let mut command = ProcessCommand::new("npx");
+    command.args(args);
+    if output::is_json() {
+        command.stdout(std::process::Stdio::from(std::io::stderr()));
+    }
+    let status = command.status();
     match status {
         Ok(status) if status.success() => Ok(()),
         Ok(status) => Err(anyhow::anyhow!("npx exited with status {status}")),

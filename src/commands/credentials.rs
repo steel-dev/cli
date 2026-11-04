@@ -132,10 +132,7 @@ async fn run_list(args: ListArgs) -> anyhow::Result<()> {
         format!("/credentials?{}", query_params.join("&"))
     };
 
-    let data = client
-        .request(reqwest::Method::GET, &path, None)
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let data = client.request(reqwest::Method::GET, &path, None).await?;
 
     // Normalize response — could be array or { credentials: [...] }
     let credentials = if let Some(arr) = data.as_array() {
@@ -167,8 +164,7 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
     let password = args
         .password
         .as_deref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.trim().is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --password"))?;
 
     let client = SteelClient::new()?;
@@ -203,8 +199,7 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
 
     let result = client
         .request(reqwest::Method::POST, "/credentials", Some(body))
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .await?;
 
     if output::is_json() {
         output::success_data(result);
@@ -255,11 +250,10 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
                 value["username"] = json!(trimmed);
             }
         }
-        if let Some(ref p) = args.password {
-            let trimmed = p.trim();
-            if !trimmed.is_empty() {
-                value["password"] = json!(trimmed);
-            }
+        if let Some(ref p) = args.password
+            && !p.trim().is_empty()
+        {
+            value["password"] = json!(p);
         }
         if let Some(ref t) = args.totp_secret {
             let trimmed = t.trim();
@@ -284,8 +278,7 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
 
     let result = client
         .request(reqwest::Method::PUT, "/credentials", Some(body))
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .await?;
 
     if output::is_json() {
         output::success_data(result);
@@ -326,8 +319,7 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
 
     client
         .request(reqwest::Method::DELETE, "/credentials", Some(body))
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .await?;
 
     if output::is_json() {
         let mut data = json!({"origin": origin});

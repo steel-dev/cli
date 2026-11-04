@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::time::Duration;
 
 use reqwest::Client;
 use serde_json::Value;
@@ -6,6 +7,9 @@ use thiserror::Error;
 
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
+
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -85,7 +89,11 @@ impl SteelClient {
     }
 
     pub fn with(base_url: String, mode: ApiMode, auth: Auth) -> Result<Self, reqwest::Error> {
-        let http = Client::builder().user_agent("steel-cli").build()?;
+        let http = Client::builder()
+            .user_agent("steel-cli")
+            .connect_timeout(CONNECT_TIMEOUT)
+            .timeout(REQUEST_TIMEOUT)
+            .build()?;
         Ok(Self {
             http,
             base_url,
@@ -140,13 +148,29 @@ impl SteelClient {
         path: &str,
         body: Option<Value>,
     ) -> Result<Value, ApiError> {
+        self.request_within(method, path, body, None).await
+    }
+
+    pub async fn request_within(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Value>,
+        timeout: Option<Duration>,
+    ) -> Result<Value, ApiError> {
         let mut req = self
             .authed(method, path)?
             .header("Content-Type", "application/json");
         if let Some(body) = body {
             req = req.json(&body);
         }
+        if let Some(timeout) = timeout {
+            req = req.timeout(timeout);
+        }
+        self.send(req, path).await
+    }
 
+    pub async fn send(&self, req: reqwest::RequestBuilder, path: &str) -> Result<Value, ApiError> {
         let resp = req.send().await.map_err(|source| ApiError::Unreachable {
             url: self.url(path),
             source,
@@ -243,6 +267,34 @@ mod tests {
         let result = client.request(reqwest::Method::GET, "/test", None).await;
 
         assert!(matches!(result, Err(ApiError::MissingAuth)));
+    }
+
+    #[tokio::test]
+    async fn requests_time_out_instead_of_hanging() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _server = tokio::spawn(async move {
+            let (_stream, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let auth = Auth {
+            api_key: None,
+            source: crate::config::auth::AuthSource::None,
+        };
+        let client = SteelClient::with(format!("http://{addr}"), ApiMode::Local, auth).unwrap();
+
+        let result = client
+            .request_within(
+                reqwest::Method::GET,
+                "/test",
+                None,
+                Some(Duration::from_millis(200)),
+            )
+            .await;
+
+        assert!(
+            matches!(result, Err(ApiError::Unreachable { ref source, .. }) if source.is_timeout())
+        );
     }
 
     #[tokio::test]

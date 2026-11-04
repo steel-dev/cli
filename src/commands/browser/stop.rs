@@ -7,7 +7,7 @@ use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {
-    /// Stop all sessions
+    /// Stop every session this CLI started. Sessions you only attached to by ID are forgotten, not stopped
     #[arg(short, long)]
     pub all: bool,
 }
@@ -33,43 +33,58 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
 
     let client = SteelClient::new()?;
 
-    let stopped: Vec<String> = if args.all {
+    let mut stopped = Vec::new();
+    let mut detached = Vec::new();
+    if args.all {
         let sessions = state::list();
         if sessions.is_empty() {
             if output::is_json() {
-                output::success_data(json!({ "stoppedSessions": [] }));
+                output::success_data(json!({ "stoppedSessions": [], "detachedSessions": [] }));
             } else {
                 println!("No active browser sessions to stop.");
             }
             return Ok(());
         }
-        let mut stopped = Vec::new();
         for session in &sessions {
+            if session.attached {
+                state::remove(&session.name)?;
+                detached.push(session.name.clone());
+                continue;
+            }
             match release(&client, session).await {
                 Ok(()) => stopped.push(session.name.clone()),
                 Err(err) => eprintln!("warning: could not stop \"{}\": {err}", session.name),
             }
         }
-        stopped
     } else {
         let target = super::existing_session(session)?;
         release(&client, &target).await?;
-        vec![target.name]
-    };
+        stopped.push(target.name);
+    }
 
     if output::is_json() {
-        output::success_data(json!({ "stoppedSessions": stopped }));
-    } else if let [name] = stopped.as_slice()
-        && !args.all
-    {
-        println!("Stopped session \"{name}\".");
+        output::success_data(json!({ "stoppedSessions": stopped, "detachedSessions": detached }));
     } else {
-        println!("Stopped {} sessions.", stopped.len());
+        if let [name] = stopped.as_slice()
+            && !args.all
+        {
+            println!("Stopped session \"{name}\".");
+        } else {
+            println!("Stopped {} sessions.", stopped.len());
+        }
+        if !detached.is_empty() {
+            println!(
+                "Left {} attached session(s) running: {}",
+                detached.len(),
+                detached.join(", ")
+            );
+        }
     }
 
     let mut properties = serde_json::Map::new();
     properties.insert("all".into(), json!(args.all));
     properties.insert("stopped_count".into(), json!(stopped.len()));
+    properties.insert("detached_count".into(), json!(detached.len()));
     crate::telemetry::track_event("browser_session_stopped", properties);
 
     Ok(())

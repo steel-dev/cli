@@ -60,9 +60,10 @@ Flag semantics:
 - `--credentials` enables credential injection for the session. Sends
   `credentials: {}` in the session creation payload.
 - `--profile <name>` loads a previously imported browser profile (cookies, local
-  storage, etc.) into the session.
-- `--update-profile` saves session state back to the profile when the session ends.
-  Requires `--profile`.
+  storage, etc.) into the session. An unknown name is an error unless
+  `--update-profile` is also set.
+- `--update-profile` saves session state back to the profile when the session ends,
+  and creates the profile if it does not exist yet. Requires `--profile`.
 - `--inactivity-timeout <ms>` releases the session after this long without
   commands, CDP messages, or live-view input. Commands count as activity.
 
@@ -73,6 +74,8 @@ Output fields:
 - `name` (when set)
 - `live_url` (when available)
 - `connect_url` (when available)
+- `replacedSessionId` and `replacedSessionReleased` (JSON only, when the name already
+  had a session; `false` means the old session could not be released and is still running)
 
 Security contract:
 
@@ -87,6 +90,7 @@ Agent parsing contract:
 - Treat `connect_url` as display metadata, not a secret-bearing credential.
 - Prefer `--session <name>` for cross-command and cross-process continuity.
 - `--session <session-id>` drives a session created elsewhere (SDK, MCP, dashboard).
+  `steel browser stop --all` forgets these sessions without stopping them.
 
 ### `steel browser stop`
 

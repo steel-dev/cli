@@ -24,6 +24,8 @@ pub struct BrowserSession {
     pub id: String,
     pub mode: ApiMode,
     pub api_url: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub attached: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub live_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -53,6 +55,7 @@ impl BrowserSession {
             id,
             mode,
             api_url,
+            attached: false,
             live_url: None,
             profile_id: None,
             timeout_ms: None,
@@ -239,6 +242,19 @@ mod tests {
         let loaded = load_in("x", dir.path()).unwrap().unwrap();
         assert_eq!(loaded.next, None);
         assert_eq!(loaded.snapshot, None);
+        assert!(!loaded.attached);
+    }
+
+    #[test]
+    fn attached_flag_roundtrips_and_is_omitted_when_false() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut s = session("ext");
+        s.attached = true;
+        save_in(&s, dir.path()).unwrap();
+        assert!(load_in("ext", dir.path()).unwrap().unwrap().attached);
+        save_in(&session("own"), dir.path()).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join("own.json")).unwrap();
+        assert!(!raw.contains("attached"));
     }
 
     #[test]

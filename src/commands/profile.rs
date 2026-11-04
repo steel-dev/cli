@@ -1,9 +1,11 @@
 use clap::{Parser, Subcommand};
 use serde_json::json;
 
+use crate::api::client::{ApiError, SteelClient};
 use crate::browser::{profile_porter, profile_store};
+use crate::config::settings::ApiMode;
 use crate::status;
-use crate::util::{api, output};
+use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -115,7 +117,9 @@ async fn run_list(_args: ListArgs) -> anyhow::Result<()> {
     }
 
     if profiles.is_empty() {
-        println!("No profiles found. Use --profile <name> with steel browser start to create one.");
+        println!(
+            "No profiles found. Import one with `steel profile import <name>`, or create one with `steel browser start --profile <name> --update-profile`."
+        );
         return Ok(());
     }
 
@@ -161,12 +165,12 @@ fn resolve_name(positional: Option<String>, flag: Option<String>) -> anyhow::Res
         .ok_or_else(|| anyhow::anyhow!("Profile name is required."))
 }
 
-fn resolve_api() -> anyhow::Result<(String, String)> {
-    let (_, base_url, auth) = api::resolve_with_auth();
-    let api_key = auth.api_key.ok_or_else(|| {
-        anyhow::anyhow!("Not authenticated. Run `steel login` or set STEEL_API_KEY.")
-    })?;
-    Ok((api_key, base_url))
+fn api_client() -> anyhow::Result<SteelClient> {
+    let client = SteelClient::new()?;
+    if client.mode() == ApiMode::Cloud && client.auth().api_key.is_none() {
+        return Err(ApiError::MissingAuth.into());
+    }
+    Ok(client)
 }
 
 fn parse_browser(name: &str) -> anyhow::Result<profile_porter::BrowserId> {
@@ -222,7 +226,7 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         );
     }
 
-    let (api_key, api_base) = resolve_api()?;
+    let client = api_client()?;
 
     // Discover profiles
     let choices = discover_all_profiles(args.browser.as_deref())?;
@@ -260,18 +264,6 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
             })?
     } else {
         // Interactive selection
-        let running: std::collections::BTreeSet<_> = choices
-            .iter()
-            .map(|c| c.browser)
-            .filter(|b| profile_porter::is_browser_running(*b))
-            .collect();
-        for b in &running {
-            status!(
-                "Warning: {} is currently running. Some data may be locked.",
-                b.display_name()
-            );
-        }
-
         let items: Vec<String> = choices
             .iter()
             .map(|c| {
@@ -295,6 +287,7 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
 
     let browser_id = selected.browser;
     let selected = selected.profile;
+    warn_if_running(browser_id);
 
     // Package
     status!(
@@ -307,22 +300,20 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
         profile_porter::package_profile(browser_id, &selected.dir_name, args.full, &|msg| {
             status!("  {msg}");
         })?;
+    print_warnings(&result.warnings);
 
-    let size_mb = result.zip_buffer.len() as f64 / 1024.0 / 1024.0;
+    let size_bytes = result.zip_buffer.len();
+    let size_mb = size_bytes as f64 / 1024.0 / 1024.0;
 
     // Upload
     status!("  Uploading...");
     let profile_id = if let Some(ref existing) = existing {
-        profile_porter::update_profile_on_steel(
-            &existing.profile_id,
-            result.zip_buffer,
-            &api_key,
-            &api_base,
-        )
-        .await?;
+        client
+            .update_profile(&existing.profile_id, result.zip_buffer)
+            .await?;
         existing.profile_id.clone()
     } else {
-        profile_porter::upload_profile_to_steel(result.zip_buffer, &api_key, &api_base).await?
+        client.create_profile(result.zip_buffer).await?
     };
 
     // Save metadata
@@ -353,7 +344,35 @@ async fn run_import(args: ImportArgs) -> anyhow::Result<()> {
     status!();
     status!("  steel browser start --profile {}", name);
 
+    if output::is_json() {
+        output::success_data(json!({
+            "name": name,
+            "profileId": profile_id,
+            "browser": browser_id.as_str(),
+            "from": selected.dir_name,
+            "cookiesReencrypted": result.cookies_reencrypted,
+            "cookiesSkipped": result.cookies_skipped,
+            "sizeBytes": size_bytes,
+            "warnings": result.warnings,
+        }));
+    }
+
     Ok(())
+}
+
+fn warn_if_running(browser: profile_porter::BrowserId) {
+    if profile_porter::is_browser_running(browser) {
+        eprintln!(
+            "warning: {} is running. Recent changes may be missing; quit it for a complete copy.",
+            browser.display_name()
+        );
+    }
+}
+
+fn print_warnings(warnings: &[String]) {
+    for warning in warnings {
+        eprintln!("warning: {warning}");
+    }
 }
 
 async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
@@ -363,7 +382,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         anyhow::bail!("{err}");
     }
 
-    let (api_key, api_base) = resolve_api()?;
+    let client = api_client()?;
 
     // Read existing profile
     let stored = profile_store::read_profile(&name)?.ok_or_else(|| {
@@ -404,12 +423,7 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
         );
     }
 
-    if profile_porter::is_browser_running(browser_id) {
-        status!(
-            "Warning: {} is currently running. Some data may be locked.",
-            browser_id.display_name()
-        );
-    }
+    warn_if_running(browser_id);
 
     // Package
     status!(
@@ -421,18 +435,16 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
     let result = profile_porter::package_profile(browser_id, &profile_source, args.full, &|msg| {
         status!("  {msg}");
     })?;
+    print_warnings(&result.warnings);
 
-    let size_mb = result.zip_buffer.len() as f64 / 1024.0 / 1024.0;
+    let size_bytes = result.zip_buffer.len();
+    let size_mb = size_bytes as f64 / 1024.0 / 1024.0;
 
     // Update on Steel
     status!("  Uploading...");
-    profile_porter::update_profile_on_steel(
-        &stored.profile_id,
-        result.zip_buffer,
-        &api_key,
-        &api_base,
-    )
-    .await?;
+    client
+        .update_profile(&stored.profile_id, result.zip_buffer)
+        .await?;
 
     // Update stored metadata if source changed
     let source_changed =
@@ -463,6 +475,19 @@ async fn run_sync(args: SyncArgs) -> anyhow::Result<()> {
             result.cookies_reencrypted,
             size_mb
         );
+    }
+
+    if output::is_json() {
+        output::success_data(json!({
+            "name": name,
+            "profileId": stored.profile_id,
+            "browser": browser_id.as_str(),
+            "from": profile_source,
+            "cookiesReencrypted": result.cookies_reencrypted,
+            "cookiesSkipped": result.cookies_skipped,
+            "sizeBytes": size_bytes,
+            "warnings": result.warnings,
+        }));
     }
 
     Ok(())

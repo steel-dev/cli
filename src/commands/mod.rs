@@ -260,18 +260,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::OnceLock;
-
-    use tokio::sync::Mutex;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
+    use crate::telemetry::test_lock as env_lock;
 
     async fn capture_events(server: &MockServer) -> Vec<serde_json::Value> {
         let mut out = Vec::new();
@@ -287,7 +280,7 @@ mod tests {
     #[test]
     fn long_help_examples_parse() {
         for example in EXAMPLES {
-            let args = browser::batch::split_command_str(example);
+            let args = browser::batch::split_command_str(example).unwrap();
             if let Err(err) = Cli::try_parse_from(&args) {
                 panic!("{example}: {err}");
             }

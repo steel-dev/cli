@@ -10,7 +10,7 @@ use crate::api::commands::{Reply, Session};
 use crate::api::session::Session as RemoteSession;
 use crate::browser::state::{self, BrowserSession, SnapshotInfo};
 use crate::config::settings::ApiMode;
-use crate::util::output::{self, SilentExit};
+use crate::util::output::{self, fail};
 
 use super::{DEFAULT_SESSION, Target, start};
 
@@ -1014,19 +1014,6 @@ fn session_flag(name: &str) -> String {
     }
 }
 
-pub fn fail(code: &str, message: &str, data: Option<&Value>) -> anyhow::Error {
-    if output::is_json() {
-        let mut obj = json!({"success": false, "error": message, "error_code": code});
-        if let Some(data) = data {
-            obj["data"] = data.clone();
-        }
-        println!("{obj}");
-    } else {
-        eprintln!("Error: {message}");
-    }
-    SilentExit(output::exit_code::GENERAL).into()
-}
-
 fn hint(code: &str, message: &str) -> &'static str {
     match code {
         "tab_not_found" | "browser_restarted" if message.contains("tab list") => "",
@@ -1205,6 +1192,7 @@ async fn attach(client: &SteelClient, id: &str) -> Result<BrowserSession> {
         client.base_url().to_string(),
     );
     attached.live_url = remote.viewer_url(client.mode());
+    attached.attached = true;
     state::save(&attached)?;
     Ok(attached)
 }

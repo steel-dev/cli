@@ -85,17 +85,16 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
     let success = raw["success"].as_bool().unwrap_or(false);
     let message = raw["message"].as_str();
 
-    if output::is_json() {
-        let mut data = json!({
-            "sessionId": session_id,
-            "mode": mode.to_string(),
-            "success": success,
-        });
-        if let Some(msg) = message {
-            data["message"] = json!(msg);
-        }
-        output::success_data(data);
-    } else {
+    let mut data = json!({
+        "sessionId": session_id,
+        "mode": mode.to_string(),
+        "success": success,
+    });
+    if let Some(msg) = message {
+        data["message"] = json!(msg);
+    }
+
+    if !output::is_json() {
         println!("session_id: {session_id}");
         println!("mode: {mode}");
         println!("success: {success}");
@@ -105,9 +104,17 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
     }
 
     if !success {
-        anyhow::bail!("CAPTCHA solve failed");
+        let reason = message.map_or_else(String::new, |msg| format!(": {msg}"));
+        return Err(output::fail(
+            "captcha_not_solved",
+            &format!("CAPTCHA solve failed{reason}"),
+            Some(&data),
+        ));
     }
 
+    if output::is_json() {
+        output::success_data(data);
+    }
     Ok(())
 }
 
@@ -134,15 +141,14 @@ async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<(
         tokio::time::sleep(std::time::Duration::from_millis(interval)).await;
     };
 
-    if output::is_json() {
-        let mut data = json!({
-            "status": status,
-        });
-        if !types.is_empty() {
-            data["types"] = json!(types);
-        }
-        output::success_data(data);
-    } else {
+    let mut data = json!({
+        "status": status,
+    });
+    if !types.is_empty() {
+        data["types"] = json!(types);
+    }
+
+    if !output::is_json() {
         let type_suffix = if types.is_empty() {
             String::new()
         } else {
@@ -152,9 +158,16 @@ async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<(
     }
 
     if status != "solved" && status != "none" {
-        anyhow::bail!("CAPTCHA status: {}", status);
+        return Err(output::fail(
+            &format!("captcha_{status}"),
+            &format!("CAPTCHA status: {status}"),
+            Some(&data),
+        ));
     }
 
+    if output::is_json() {
+        output::success_data(data);
+    }
     Ok(())
 }
 

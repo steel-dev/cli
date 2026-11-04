@@ -1,6 +1,10 @@
+use std::time::Duration;
+
 use clap::Parser;
 
 use crate::status;
+use crate::util::output;
+use crate::util::version::is_newer;
 
 #[derive(Parser)]
 pub struct Args {
@@ -16,7 +20,9 @@ pub struct Args {
 pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("Checking for updates...");
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?;
     let current_version = env!("CARGO_PKG_VERSION");
 
     // Check GitHub releases for latest version
@@ -41,10 +47,10 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         return Ok(());
     };
 
-    let is_newer = is_version_newer(&latest, current_version);
+    let newer = is_newer(&latest, current_version);
 
     if args.check {
-        if is_newer {
+        if newer {
             status!("Update available: v{current_version} -> v{latest}");
             status!("Run `steel update` to install.");
         } else {
@@ -53,7 +59,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if !is_newer && !args.force {
+    if !newer && !args.force {
         status!("v{current_version} (latest)");
         return Ok(());
     }
@@ -61,12 +67,17 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("Updating v{current_version} -> v{latest}...");
 
     // Use cargo-dist installer
+    let stdout = if output::is_json() {
+        std::process::Stdio::from(std::io::stderr())
+    } else {
+        std::process::Stdio::inherit()
+    };
     let status = std::process::Command::new("sh")
         .args([
             "-c",
             "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steel-dev/cli/releases/latest/download/steel-cli-installer.sh | sh",
         ])
-        .stdout(std::process::Stdio::inherit())
+        .stdout(stdout)
         .stderr(std::process::Stdio::inherit())
         .status();
 
@@ -82,62 +93,4 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-/// Compare semver strings. Returns true if `latest` is strictly newer than `current`.
-fn is_version_newer(latest: &str, current: &str) -> bool {
-    let parse = |s: &str| -> Vec<u64> {
-        s.split('.')
-            .map(|p| p.parse::<u64>().unwrap_or(0))
-            .collect()
-    };
-    let l = parse(latest);
-    let c = parse(current);
-    for i in 0..l.len().max(c.len()) {
-        let lv = l.get(i).copied().unwrap_or(0);
-        let cv = c.get(i).copied().unwrap_or(0);
-        if lv > cv {
-            return true;
-        }
-        if lv < cv {
-            return false;
-        }
-    }
-    false
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn newer_patch() {
-        assert!(is_version_newer("0.3.1", "0.3.0"));
-    }
-
-    #[test]
-    fn newer_minor() {
-        assert!(is_version_newer("0.4.0", "0.3.9"));
-    }
-
-    #[test]
-    fn newer_major() {
-        assert!(is_version_newer("1.0.0", "0.99.99"));
-    }
-
-    #[test]
-    fn same_version() {
-        assert!(!is_version_newer("0.3.0", "0.3.0"));
-    }
-
-    #[test]
-    fn older_version() {
-        assert!(!is_version_newer("0.2.0", "0.3.0"));
-    }
-
-    #[test]
-    fn multi_digit_segments() {
-        // This was the bug: string comparison gives wrong result
-        assert!(is_version_newer("0.10.0", "0.9.1"));
-    }
 }
