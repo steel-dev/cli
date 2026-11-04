@@ -300,6 +300,7 @@ fn browser_start_flags() {
             flag("update-profile"),
             flag_val("namespace"),
             flag("credentials"),
+            flag_val("metadata"),
         ],
         "browser start",
     );

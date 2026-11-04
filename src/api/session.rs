@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::Context;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -22,6 +24,7 @@ pub struct CreateSessionOptions {
     pub persist_profile: bool,
     pub namespace: Option<String>,
     pub credentials: bool,
+    pub metadata: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,6 +158,10 @@ fn build_create_body(options: &CreateSessionOptions) -> Value {
 
     if options.credentials {
         obj.insert("credentials".into(), json!({}));
+    }
+
+    if !options.metadata.is_empty() {
+        obj.insert("metadata".into(), json!(options.metadata));
     }
 
     payload
@@ -384,6 +391,23 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(body["inactivityTimeout"], 120000);
+    }
+
+    #[test]
+    fn create_body_sends_metadata_as_strings_only_when_set() {
+        let body = build_create_body(&CreateSessionOptions {
+            metadata: BTreeMap::from([
+                ("env".to_string(), "prod".to_string()),
+                ("attempt".to_string(), "3".to_string()),
+            ]),
+            ..Default::default()
+        });
+        assert_eq!(body["metadata"], json!({"env": "prod", "attempt": "3"}));
+        assert!(
+            build_create_body(&CreateSessionOptions::default())
+                .get("metadata")
+                .is_none()
+        );
     }
 
     #[test]

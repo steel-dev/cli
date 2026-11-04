@@ -43,6 +43,7 @@ Main flags:
 - `--credentials`
 - `--profile <name>`
 - `--update-profile`
+- `--metadata <key=value>` (repeatable)
 
 Flag semantics:
 
@@ -66,6 +67,10 @@ Flag semantics:
   and creates the profile if it does not exist yet. Requires `--profile`.
 - `--inactivity-timeout <ms>` releases the session after this long without
   commands, CDP messages, or live-view input. Commands count as activity.
+- `--metadata <key=value>` attaches customer metadata to the new session. Values
+  are sent as strings. Find sessions later with
+  `steel sessions list --metadata key=value`, and change it with
+  `steel sessions metadata`. Steel Cloud only.
 
 Output fields:
 

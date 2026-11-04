@@ -70,6 +70,7 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel sessions](#steel-sessions)
 - [steel sessions list](#steel-sessions-list)
 - [steel sessions get](#steel-sessions-get)
+- [steel sessions metadata](#steel-sessions-metadata)
 - [steel sessions release](#steel-sessions-release)
 - [steel sessions logs](#steel-sessions-logs)
 - [steel sessions agent-logs](#steel-sessions-agent-logs)
@@ -246,6 +247,7 @@ steel browser start
 - `--update-profile` (boolean, optional): Save session state back to the profile when the session ends; creates the profile if it does not exist
 - `--namespace` (string, optional): Credential namespace
 - `--credentials` (boolean, optional): Inject credentials
+- `--metadata` (string[], optional): Attach metadata as KEY=VALUE, repeatable (Steel Cloud only)
 
 ## steel browser stop
 
@@ -1101,6 +1103,7 @@ steel sessions
 
 - `list`: List cloud sessions
 - `get`: Get one cloud session
+- `metadata`: Show or change a session's metadata
 - `release`: Release a cloud session
 - `logs`: Read browser event logs for a session
 - `agent-logs`: Read raw CDP-derived agent events for a session
@@ -1121,6 +1124,11 @@ steel sessions list
 - `--limit` (string, optional): Number of sessions to return
 - `--cursor-id` (string, optional): Cursor ID for pagination
 - `--status` (string, optional): Filter by status: live, released, or failed
+- `--metadata` (string[], optional): Filter by metadata KEY=VALUE, repeatable; all must match
+- `--signal` (string[], optional): Filter by signal, repeatable or comma-separated; all must match. Signals arrive after the session ends: captcha_encountered, proxy_connection_failed, session_timeout_exceeded, bot_detection_triggered, context_restored
+- `--release-reason` (string, optional): Filter by release reason: user_requested, timeout, inactivity_timeout, creation_timeout, startup_failed, browser_closed, or browser_crashed
+- `--created-after` (string, optional): Only sessions created at or after this ISO 8601 timestamp
+- `--created-before` (string, optional): Only sessions created before this ISO 8601 timestamp
 
 ### API Operations
 
@@ -1146,6 +1154,32 @@ steel sessions get
 
 - `get_session` (implemented): `GET /v1/sessions/{id}`
   Example: `steel sessions get <session-id>`
+
+## steel sessions metadata
+
+Show or change a session's metadata
+
+### Usage
+
+```bash
+steel sessions metadata
+```
+
+### Parameters
+
+- `session_id` (string, optional): Cloud session ID
+- `--session` (string, optional): Resolve session ID from a local browser session name
+- `--set` (string[], optional): Set a key as KEY=VALUE, repeatable; other keys are kept
+- `--unset` (string[], optional): Remove a key, repeatable
+- `--replace` (boolean, optional): Replace all metadata with exactly the --set keys
+- `--clear` (boolean, optional): Remove all metadata
+
+### API Operations
+
+- `updateSessionMetadata` (implemented): `PATCH /v1/sessions/{id}/metadata`
+  Example: `steel sessions metadata <session-id> --set outcome=failed --unset retry`
+- `replaceSessionMetadata` (implemented): `PUT /v1/sessions/{id}/metadata`
+  Example: `steel sessions metadata <session-id> --replace --set env=prod`
 
 ## steel sessions release
 

@@ -5,6 +5,8 @@
 //! Keep command UX in `commands/`; this module only owns request shape,
 //! endpoint paths, and operation metadata.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -73,6 +75,26 @@ pub const CLI_OPERATION_METADATA: &[OperationMetadata] = &[
         }),
     },
     OperationMetadata {
+        id: "updateSessionMetadata",
+        command: "sessions metadata",
+        status: "implemented",
+        method: "PATCH",
+        path: "/v1/sessions/{id}/metadata",
+        summary: "Update session metadata",
+        example: "steel sessions metadata <session-id> --set outcome=failed --unset retry",
+        streaming: None,
+    },
+    OperationMetadata {
+        id: "replaceSessionMetadata",
+        command: "sessions metadata --replace",
+        status: "implemented",
+        method: "PUT",
+        path: "/v1/sessions/{id}/metadata",
+        summary: "Replace session metadata",
+        example: "steel sessions metadata <session-id> --replace --set env=prod",
+        streaming: None,
+    },
+    OperationMetadata {
         id: "release_session",
         command: "sessions release",
         status: "implemented",
@@ -124,7 +146,12 @@ pub struct GetSessionsQuery {
     pub cursor_id: Option<String>,
     pub limit: Option<u16>,
     pub status: Option<String>,
+    pub release_reason: Option<String>,
     pub project_id: Option<String>,
+    pub created_after: Option<String>,
+    pub created_before: Option<String>,
+    pub signal: Vec<String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -151,6 +178,8 @@ pub struct GetSessionAgentTracesQuery {
     pub start_time: Option<String>,
     pub end_time: Option<String>,
     pub event_types: Vec<String>,
+    pub limit: Option<u16>,
+    pub offset: Option<u32>,
 }
 
 fn push_query(path: &mut String, key: &str, value: &str) {
@@ -231,11 +260,42 @@ fn build_get_sessions_path(query: &GetSessionsQuery) -> String {
         push_query(&mut path, "status", value.trim());
     }
     if let Some(value) = query
+        .release_reason
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        push_query(&mut path, "releaseReason", value.trim());
+    }
+    if let Some(value) = query
         .project_id
         .as_deref()
         .filter(|value| !value.trim().is_empty())
     {
         push_query(&mut path, "projectId", value.trim());
+    }
+    if let Some(value) = query
+        .created_after
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        push_query(&mut path, "createdAfter", value.trim());
+    }
+    if let Some(value) = query
+        .created_before
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        push_query(&mut path, "createdBefore", value.trim());
+    }
+    for value in query.signal.iter().filter(|value| !value.trim().is_empty()) {
+        push_query(&mut path, "signal", value.trim());
+    }
+    for (name, value) in &query.metadata {
+        push_query(
+            &mut path,
+            &format!("metadata[{}]", urlencoding::encode(name)),
+            value,
+        );
     }
     path
 }
@@ -277,6 +337,14 @@ fn build_get_session_logs_path(session_id: &str, query: &GetSessionLogsQuery) ->
         push_query_number(&mut path, "offset", value);
     }
     path
+}
+
+fn build_update_session_metadata_path(session_id: &str) -> String {
+    format!("/sessions/{session_id}/metadata")
+}
+
+fn build_replace_session_metadata_path(session_id: &str) -> String {
+    format!("/sessions/{session_id}/metadata")
 }
 
 fn build_release_session_path(session_id: &str) -> String {
@@ -328,6 +396,12 @@ fn build_get_session_agent_traces_path(
     {
         push_query(&mut path, "eventTypes", value.trim());
     }
+    if let Some(value) = query.limit {
+        push_query_number(&mut path, "limit", value);
+    }
+    if let Some(value) = query.offset {
+        push_query_number(&mut path, "offset", value);
+    }
     path
 }
 
@@ -368,6 +442,32 @@ impl SteelClient {
             reqwest::Method::GET,
             &build_get_session_logs_path(session_id, query),
             None,
+        )
+        .await
+    }
+
+    pub async fn cli_update_session_metadata(
+        &self,
+        session_id: &str,
+        body: Value,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            reqwest::Method::PATCH,
+            &build_update_session_metadata_path(session_id),
+            Some(body),
+        )
+        .await
+    }
+
+    pub async fn cli_replace_session_metadata(
+        &self,
+        session_id: &str,
+        body: Value,
+    ) -> Result<Value, ApiError> {
+        self.request(
+            reqwest::Method::PUT,
+            &build_replace_session_metadata_path(session_id),
+            Some(body),
         )
         .await
     }
@@ -437,6 +537,25 @@ mod tests {
         assert_eq!(
             path,
             "/sessions/sess/logs?namespace=prod&eventTypes=console&eventTypes=error&limit=10&offset=5"
+        );
+    }
+
+    #[test]
+    fn session_list_query_repeats_signals_and_encodes_metadata_keys() {
+        let path = build_get_sessions_path(&GetSessionsQuery {
+            signal: vec![
+                "captcha_encountered".into(),
+                "bot_detection_triggered".into(),
+            ],
+            metadata: BTreeMap::from([
+                ("env".into(), "prod west".into()),
+                ("a&b".into(), "1=2".into()),
+            ]),
+            ..Default::default()
+        });
+        assert_eq!(
+            path,
+            "/sessions?signal=captcha_encountered&signal=bot_detection_triggered&metadata[a%26b]=1%3D2&metadata[env]=prod%20west"
         );
     }
 }
