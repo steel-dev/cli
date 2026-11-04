@@ -31,14 +31,14 @@ urlencoding = "2"
 url = "2"
 rusqlite = { version = "0.39", features = ["bundled"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
-aes = "0.8"
-cbc = "0.1"
-pbkdf2 = "0.12"
-sha1 = "0.10"
-sha2 = "0.10"
-hmac = "0.12"
+aes = "0.9"
+cbc = "0.2"
+pbkdf2 = "0.13"
+sha1 = "0.11"
+sha2 = "0.11"
+hmac = "0.13"
 
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 getrandom = "0.4"
 
 tempfile = "3"
