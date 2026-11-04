@@ -5,7 +5,7 @@ use crate::api::client::SteelClient;
 use crate::api::session::CreateSessionOptions;
 use crate::browser::profile_store;
 use crate::browser::state::{self, BrowserSession};
-use crate::util::output;
+use crate::util::{metadata, output};
 
 pub const DEFAULT_INACTIVITY_TIMEOUT_MS: u64 = 600_000;
 
@@ -54,6 +54,10 @@ pub struct Args {
     /// Inject credentials
     #[arg(long)]
     pub credentials: bool,
+
+    /// Attach metadata as KEY=VALUE, repeatable (Steel Cloud only)
+    #[arg(long, value_name = "KEY=VALUE", value_parser = metadata::parse_pair)]
+    pub metadata: Vec<(String, String)>,
 }
 
 pub fn default_options() -> CreateSessionOptions {
@@ -101,6 +105,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
             "Session names cannot look like session IDs. Use `--session {session_name}` on other commands to drive that session, or pick a name."
         );
     }
+    let session_metadata = metadata::collect(args.metadata)?;
 
     let mut resolved_profile_id = None;
     let mut stored_browser_profile = None;
@@ -123,6 +128,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let persist_profile = args.profile.is_some() && args.update_profile;
     let proxy_enabled = args.proxy.is_some();
     let namespace_set = args.namespace.is_some();
+    let metadata_set = !session_metadata.is_empty();
     let inactivity_timeout_ms = resolve_inactivity_timeout(args.inactivity_timeout);
     if let (Some(timeout), Some(inactivity)) = (args.timeout, inactivity_timeout_ms)
         && inactivity >= timeout
@@ -165,6 +171,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         persist_profile,
         namespace: args.namespace,
         credentials: args.credentials,
+        metadata: session_metadata,
     };
 
     let (created, connect_url) = create(&client, &session_name, &options).await?;
@@ -187,6 +194,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     properties.insert("persist_profile".into(), json!(persist_profile));
     properties.insert("credentials".into(), json!(args.credentials));
     properties.insert("namespace_set".into(), json!(namespace_set));
+    properties.insert("metadata_set".into(), json!(metadata_set));
     properties.insert("session_timeout_set".into(), json!(args.timeout.is_some()));
     properties.insert("inactivity_timeout_ms".into(), json!(inactivity_timeout_ms));
     crate::telemetry::track_event("browser_session_started", properties);

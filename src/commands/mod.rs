@@ -54,6 +54,7 @@ const EXAMPLES: &[&str] = &[
     "steel browser eval \"document.title\"",
     "steel browser tab new https://example.com",
     "steel browser stop --session my-session",
+    "steel sessions list --metadata env=prod --signal captcha_encountered",
 ];
 
 fn long_help(root: &clap::Command) -> String {

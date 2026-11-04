@@ -87,6 +87,7 @@ function collectOperations(spec) {
           : null,
         queryParams: (operation.parameters || []).filter((parameter) => parameter.in === "query"),
         pathParams: (operation.parameters || []).filter((parameter) => parameter.in === "path"),
+        requestBody: Boolean(operation.requestBody),
       });
     }
   }
@@ -113,8 +114,16 @@ function idPlaceholder(path) {
   return `<${resource.replace(/s$/, "")}-id>`;
 }
 
+function isDeepObject(parameter) {
+  return parameter.style === "deepObject" && parameter.schema?.type === "object";
+}
+
 function rustQueryType(parameter) {
   const schema = parameter.schema || {};
+  if (isDeepObject(parameter)) return "BTreeMap<String, String>";
+  if (schema.type === "object") {
+    throw new Error(`Query parameter ${parameter.name} is an object but not a deepObject.`);
+  }
   if (schema.type === "array") return "Vec<String>";
   if (schema.type === "boolean") return "Option<bool>";
   if (schema.type === "integer") {
@@ -188,6 +197,11 @@ function renderPathBuilder(operation) {
       const field = snakeCase(parameter.name);
       const key = parameter.name;
       const type = rustQueryType(parameter);
+      if (type === "BTreeMap<String, String>") {
+        return `    for (name, value) in &query.${field} {
+        push_query(&mut path, &format!(${rustString(`${key}[{}]`)}, urlencoding::encode(name)), value);
+    }`;
+      }
       if (type === "Vec<String>") {
         return `    for value in query.${field}.iter().filter(|value| !value.trim().is_empty()) {
         push_query(&mut path, ${rustString(key)}, value.trim());
@@ -225,6 +239,9 @@ function methodArgs(operation) {
   if (operation.queryParams.length) {
     args.push(`query: &${queryStructName(operation)}`);
   }
+  if (operation.requestBody) {
+    args.push("body: Value");
+  }
   return args.join(",\n        ");
 }
 
@@ -243,7 +260,7 @@ function renderClientMethod(operation) {
   return `    pub async fn cli_${snakeCase(operation.id)}(
         ${methodArgs(operation)},
     ) -> Result<Value, ApiError> {
-        self.request(reqwest::Method::${operation.method}, ${requestPath}, None)
+        self.request(reqwest::Method::${operation.method}, ${requestPath}, ${operation.requestBody ? "Some(body)" : "None"})
             .await
     }`;
 }
@@ -252,6 +269,28 @@ function renderTests(operations) {
   const getSessions = operations.find((operation) => operation.id === "get_sessions");
   const logs = operations.find((operation) => operation.id === "get_session_logs");
   if (!getSessions || !logs) return "";
+  const filtersBySignalAndMetadata =
+    getSessions.queryParams.some((parameter) => parameter.name === "signal") &&
+    getSessions.queryParams.some((parameter) => parameter.name === "metadata" && isDeepObject(parameter));
+  const filterTest = filtersBySignalAndMetadata
+    ? `
+
+    #[test]
+    fn session_list_query_repeats_signals_and_encodes_metadata_keys() {
+        let path = build_get_sessions_path(&GetSessionsQuery {
+            signal: vec!["captcha_encountered".into(), "bot_detection_triggered".into()],
+            metadata: BTreeMap::from([
+                ("env".into(), "prod west".into()),
+                ("a&b".into(), "1=2".into()),
+            ]),
+            ..Default::default()
+        });
+        assert_eq!(
+            path,
+            "/sessions?signal=captcha_encountered&signal=bot_detection_triggered&metadata[a%26b]=1%3D2&metadata[env]=prod%20west"
+        );
+    }`
+    : "";
   return `
 #[cfg(test)]
 mod tests {
@@ -284,7 +323,7 @@ mod tests {
             path,
             "/sessions/sess/logs?namespace=prod&eventTypes=console&eventTypes=error&limit=10&offset=5"
         );
-    }
+    }${filterTest}
 }
 `;
 }
@@ -293,6 +332,9 @@ function renderRust(operations) {
   const queryStructs = operations.map(renderQueryStruct).filter(Boolean).join("\n");
   const pathBuilders = operations.map(renderPathBuilder).filter(Boolean).join("\n\n");
   const methods = operations.map(renderClientMethod).join("\n\n");
+  const collections = operations.some((operation) => operation.queryParams.some(isDeepObject))
+    ? "use std::collections::BTreeMap;\n\n"
+    : "";
 
   return `//! Generated bindings for CLI-tagged Steel API operations.
 //!
@@ -301,7 +343,7 @@ function renderRust(operations) {
 //! Keep command UX in \`commands/\`; this module only owns request shape,
 //! endpoint paths, and operation metadata.
 
-use serde::{Deserialize, Serialize};
+${collections}use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::client::{ApiError, SteelClient};

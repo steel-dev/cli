@@ -228,12 +228,128 @@ fn sessions_help_lists_subcommands() {
         "steel sessions --help should exit 0"
     );
     let out = stdout(&output);
-    for sub in &["list", "get", "release", "logs", "agent-logs", "traces"] {
+    for sub in &[
+        "list",
+        "get",
+        "metadata",
+        "release",
+        "logs",
+        "agent-logs",
+        "traces",
+    ] {
         assert!(
             out.contains(sub),
             "sessions help should list '{sub}', got: {out}"
         );
     }
+}
+
+#[test]
+fn sessions_list_help_shows_filters() {
+    let output = run(&["sessions", "list", "--help"]);
+    assert!(
+        output.status.success(),
+        "steel sessions list --help should exit 0"
+    );
+    let out = stdout(&output);
+    for flag in &[
+        "--metadata <KEY=VALUE>",
+        "--signal",
+        "--release-reason",
+        "--created-after",
+        "--created-before",
+        "--cursor-id",
+    ] {
+        assert!(
+            out.contains(flag),
+            "sessions list help should mention '{flag}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn sessions_metadata_help_shows_expected_flags() {
+    let output = run(&["sessions", "metadata", "--help"]);
+    assert!(
+        output.status.success(),
+        "steel sessions metadata --help should exit 0"
+    );
+    let out = stdout(&output);
+    for flag in &[
+        "--session",
+        "--set <KEY=VALUE>",
+        "--unset <KEY>",
+        "--replace",
+        "--clear",
+    ] {
+        assert!(
+            out.contains(flag),
+            "sessions metadata help should mention '{flag}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn sessions_metadata_replace_without_set_fails_instead_of_clearing() {
+    let output = run(&["sessions", "metadata", "s1", "--replace"]);
+    assert!(
+        !output.status.success(),
+        "--replace without --set should fail"
+    );
+    assert!(
+        stderr(&output).contains("--set <KEY=VALUE>"),
+        "stderr should ask for --set, got: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn sessions_metadata_rejects_a_pair_without_an_equals_sign() {
+    let output = run(&["sessions", "metadata", "s1", "--set", "env"]);
+    assert!(
+        !output.status.success(),
+        "--set without KEY=VALUE should fail"
+    );
+    assert!(
+        stderr(&output).contains("expected KEY=VALUE"),
+        "stderr should explain the format, got: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn sessions_list_rejects_a_repeated_metadata_key_before_calling_the_api() {
+    let output = run(&[
+        "sessions",
+        "list",
+        "--metadata",
+        "env=prod",
+        "--metadata",
+        "env=staging",
+    ]);
+    assert!(
+        !output.status.success(),
+        "a repeated metadata key should fail"
+    );
+    let err = stderr(&output);
+    assert!(
+        err.contains("Metadata key \"env\" is given more than once."),
+        "stderr should name the repeated key, got: {err}"
+    );
+}
+
+#[test]
+fn sessions_list_rejects_an_empty_metadata_filter_before_calling_the_api() {
+    let output = run(&["sessions", "list", "--metadata", "env="]);
+    assert!(
+        !output.status.success(),
+        "an empty metadata filter should fail"
+    );
+    let err = stderr(&output);
+    assert!(
+        err.contains("Metadata filter \"env\" needs a value."),
+        "stderr should name the empty filter, got: {err}"
+    );
 }
 
 #[test]
@@ -609,7 +725,13 @@ fn browser_start_help_shows_expected_flags() {
         "steel browser start --help should exit 0"
     );
     let out = stdout(&output);
-    for flag in &["--session", "--local", "--stealth", "--proxy"] {
+    for flag in &[
+        "--session",
+        "--local",
+        "--stealth",
+        "--proxy",
+        "--metadata <KEY=VALUE>",
+    ] {
         assert!(
             out.contains(flag),
             "browser start help should mention '{flag}', got: {out}"
