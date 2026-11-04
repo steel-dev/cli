@@ -611,13 +611,14 @@ fn decrypt_cookie(
     match algorithm {
         CryptoAlgorithm::Aes128Cbc => {
             use aes::Aes128;
-            use cbc::cipher::{BlockDecryptMut, KeyIvInit, block_padding::Pkcs7};
+            use cbc::cipher::{BlockModeDecrypt, KeyIvInit, block_padding::Pkcs7};
 
             type Aes128CbcDec = cbc::Decryptor<Aes128>;
 
             let mut buf = payload.to_vec();
-            let plaintext = Aes128CbcDec::new(key[..16].into(), &IV.into())
-                .decrypt_padded_mut::<Pkcs7>(&mut buf)
+            let plaintext = Aes128CbcDec::new_from_slices(&key[..16], &IV)
+                .ok()?
+                .decrypt_padded::<Pkcs7>(&mut buf)
                 .ok()?;
 
             strip_domain_hash(plaintext, host_key, meta_version)
@@ -635,9 +636,9 @@ fn decrypt_cookie(
             let nonce_bytes = &payload[..NONCE_LEN];
             let ciphertext_and_tag = &payload[NONCE_LEN..];
 
-            let cipher = Aes256Gcm::new(key[..32].into());
-            let nonce = Nonce::from_slice(nonce_bytes);
-            let plaintext = cipher.decrypt(nonce, ciphertext_and_tag).ok()?;
+            let cipher = Aes256Gcm::new_from_slice(&key[..32]).ok()?;
+            let nonce = Nonce::try_from(nonce_bytes).ok()?;
+            let plaintext = cipher.decrypt(&nonce, ciphertext_and_tag).ok()?;
 
             strip_domain_hash(&plaintext, host_key, meta_version)
         }
@@ -658,7 +659,7 @@ fn strip_domain_hash(plaintext: &[u8], host_key: &str, meta_version: i64) -> Opt
 
 fn encrypt_cookie(value: &[u8], key: &[u8; 16], host_key: &str, meta_version: i64) -> Vec<u8> {
     use aes::Aes128;
-    use cbc::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
+    use cbc::cipher::{BlockModeEncrypt, KeyIvInit, block_padding::Pkcs7};
 
     let mut plaintext = Vec::new();
 
@@ -677,7 +678,7 @@ fn encrypt_cookie(value: &[u8], key: &[u8; 16], host_key: &str, meta_version: i6
     buf[..plaintext.len()].copy_from_slice(&plaintext);
 
     let encrypted = Aes128CbcEnc::new(key.into(), &IV.into())
-        .encrypt_padded_mut::<Pkcs7>(&mut buf, plaintext.len())
+        .encrypt_padded::<Pkcs7>(&mut buf, plaintext.len())
         .expect("buffer is large enough for PKCS7 padding");
 
     let mut result = Vec::with_capacity(3 + encrypted.len());
