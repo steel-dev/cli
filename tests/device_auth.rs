@@ -64,10 +64,6 @@ async fn production_defaults_are_saved_and_independent_overrides_are_not_inferre
         saved["settings"]["api_base_url"],
         "https://api.steel.dev/v1"
     );
-    assert_eq!(
-        steel_cli::config::DEFAULT_AUTH_ISSUER,
-        "https://auth.steel.dev"
-    );
     let request = &auth.received_requests().await.unwrap()[0];
     assert!(
         String::from_utf8_lossy(&request.body).contains("resource=https%3A%2F%2Fapi.steel.dev")

@@ -160,7 +160,12 @@ async fn ensure_cookbook_at(cache: &Path, repo: &str, git_ref: &str) -> anyhow::
     status!("Fetching templates from {repo}@{short}...");
 
     let url = format!("https://codeload.github.com/{repo}/zip/{git_ref}");
-    let bytes = reqwest::get(&url)
+    let bytes = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(300))
+        .build()?
+        .get(&url)
+        .send()
         .await?
         .error_for_status()?
         .bytes()
@@ -247,7 +252,7 @@ fn looks_like_cookbook_pin(name: &OsStr) -> bool {
 
 fn load_recipes(cookbook: &Path) -> anyhow::Result<Vec<Recipe>> {
     let yaml = std::fs::read_to_string(cookbook.join("registry.yaml"))?;
-    let recipes: Vec<Recipe> = serde_yaml::from_str(&yaml)?;
+    let recipes: Vec<Recipe> = serde_norway::from_str(&yaml)?;
     Ok(recipes)
 }
 
@@ -344,6 +349,15 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     match recipe.language.to_lowercase().as_str() {
         "python" => status!("  pip install -r requirements.txt"),
         _ => status!("  npm install"),
+    }
+
+    if output::is_json() {
+        output::success_data(json!({
+            "name": project_name,
+            "path": target_dir,
+            "template": slug,
+            "language": recipe.language,
+        }));
     }
 
     Ok(())

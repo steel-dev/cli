@@ -53,7 +53,6 @@ impl BrowserId {
     pub const fn descriptor(self) -> BrowserDescriptor {
         match self {
             Self::Chrome => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Google/Chrome"),
                     win32: Some("Google/Chrome/User Data"),
@@ -71,7 +70,6 @@ impl BrowserId {
                 },
             },
             Self::Edge => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Microsoft Edge"),
                     win32: Some("Microsoft/Edge/User Data"),
@@ -89,7 +87,6 @@ impl BrowserId {
                 },
             },
             Self::Brave => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("BraveSoftware/Brave-Browser"),
                     win32: Some("BraveSoftware/Brave-Browser/User Data"),
@@ -107,7 +104,6 @@ impl BrowserId {
                 },
             },
             Self::Arc => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Arc/User Data"),
                     win32: None,
@@ -125,7 +121,6 @@ impl BrowserId {
                 },
             },
             Self::Opera => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("com.operasoftware.Opera"),
                     win32: Some("Opera Software/Opera Stable"),
@@ -144,7 +139,6 @@ impl BrowserId {
                 },
             },
             Self::Vivaldi => BrowserDescriptor {
-                id: self,
                 profile_base_dirs: PlatformStr {
                     darwin: Some("Vivaldi"),
                     win32: Some("Vivaldi/User Data"),
@@ -195,7 +189,6 @@ pub struct PlatformStrs {
 }
 
 pub struct BrowserDescriptor {
-    pub id: BrowserId,
     pub profile_base_dirs: PlatformStr,
     pub process_names: PlatformStrs,
     pub keychain_service: PlatformStr,
@@ -270,7 +263,7 @@ const SKIP_NAMES: &[&str] = &[
     "Preferences",
     "Secure Preferences",
 ];
-const SKIP_EXTS: &[&str] = &[".log", ".pma"];
+const SKIP_EXTS: &[&str] = &[".pma"];
 
 // ─── Profile discovery ──────────────────────────────────────────────────────
 
@@ -279,7 +272,6 @@ pub struct BrowserProfile {
     pub dir_name: String,
     pub display_name: String,
     pub email: Option<String>,
-    pub browser: BrowserId,
 }
 
 pub fn find_browser_profiles(browser: BrowserId) -> Vec<BrowserProfile> {
@@ -310,7 +302,6 @@ pub fn find_browser_profiles(browser: BrowserId) -> Vec<BrowserProfile> {
             dir_name,
             display_name,
             email,
-            browser,
         });
     }
     profiles.sort_by(|a, b| a.dir_name.cmp(&b.dir_name));
@@ -392,6 +383,8 @@ struct KeyProvider {
     source_key: [u8; 32], // up to 32 bytes (16 for CBC, 32 for GCM)
     source_key_len: usize,
     source_algorithm: CryptoAlgorithm,
+    v10_key: Option<[u8; 16]>,
+    keyring_missing: bool,
 }
 
 fn get_key_provider(browser: BrowserId) -> Result<KeyProvider> {
@@ -440,6 +433,8 @@ fn get_macos_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         source_key,
         source_key_len: 16,
         source_algorithm: CryptoAlgorithm::Aes128Cbc,
+        v10_key: None,
+        keyring_missing: false,
     })
 }
 
@@ -481,8 +476,7 @@ fn get_linux_key_provider(browser: BrowserId) -> Result<KeyProvider> {
     let desc = browser.descriptor();
     let app_name = desc.keychain_service_for_current_os();
 
-    // Try GNOME/freedesktop secret service first, then KWallet, then "peanuts" fallback.
-    let passphrase = if let Some(app) = app_name {
+    let keyring = app_name.and_then(|app| {
         std::process::Command::new("secret-tool")
             .args(["lookup", "application", app])
             .output()
@@ -491,12 +485,8 @@ fn get_linux_key_provider(browser: BrowserId) -> Result<KeyProvider> {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .filter(|s| !s.is_empty())
             .or_else(|| try_kwallet_password(browser))
-            .unwrap_or_else(|| "peanuts".to_string())
-    } else {
-        "peanuts".to_string()
-    };
-
-    let key_16 = derive_key(&passphrase, 1);
+    });
+    let key_16 = derive_key(keyring.as_deref().unwrap_or(""), 1);
     let mut source_key = [0u8; 32];
     source_key[..16].copy_from_slice(&key_16);
 
@@ -504,6 +494,8 @@ fn get_linux_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         source_key,
         source_key_len: 16,
         source_algorithm: CryptoAlgorithm::Aes128Cbc,
+        v10_key: Some(derive_target_key()),
+        keyring_missing: keyring.is_none(),
     })
 }
 
@@ -578,6 +570,8 @@ fn get_windows_key_provider(browser: BrowserId) -> Result<KeyProvider> {
         source_key,
         source_key_len: 32,
         source_algorithm: CryptoAlgorithm::Aes256Gcm,
+        v10_key: None,
+        keyring_missing: false,
     })
 }
 
@@ -617,13 +611,14 @@ fn decrypt_cookie(
     match algorithm {
         CryptoAlgorithm::Aes128Cbc => {
             use aes::Aes128;
-            use cbc::cipher::{BlockDecryptMut, KeyIvInit, block_padding::Pkcs7};
+            use cbc::cipher::{BlockModeDecrypt, KeyIvInit, block_padding::Pkcs7};
 
             type Aes128CbcDec = cbc::Decryptor<Aes128>;
 
             let mut buf = payload.to_vec();
-            let plaintext = Aes128CbcDec::new(key[..16].into(), &IV.into())
-                .decrypt_padded_mut::<Pkcs7>(&mut buf)
+            let plaintext = Aes128CbcDec::new_from_slices(&key[..16], &IV)
+                .ok()?
+                .decrypt_padded::<Pkcs7>(&mut buf)
                 .ok()?;
 
             strip_domain_hash(plaintext, host_key, meta_version)
@@ -641,9 +636,9 @@ fn decrypt_cookie(
             let nonce_bytes = &payload[..NONCE_LEN];
             let ciphertext_and_tag = &payload[NONCE_LEN..];
 
-            let cipher = Aes256Gcm::new(key[..32].into());
-            let nonce = Nonce::from_slice(nonce_bytes);
-            let plaintext = cipher.decrypt(nonce, ciphertext_and_tag).ok()?;
+            let cipher = Aes256Gcm::new_from_slice(&key[..32]).ok()?;
+            let nonce = Nonce::try_from(nonce_bytes).ok()?;
+            let plaintext = cipher.decrypt(&nonce, ciphertext_and_tag).ok()?;
 
             strip_domain_hash(&plaintext, host_key, meta_version)
         }
@@ -664,7 +659,7 @@ fn strip_domain_hash(plaintext: &[u8], host_key: &str, meta_version: i64) -> Opt
 
 fn encrypt_cookie(value: &[u8], key: &[u8; 16], host_key: &str, meta_version: i64) -> Vec<u8> {
     use aes::Aes128;
-    use cbc::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
+    use cbc::cipher::{BlockModeEncrypt, KeyIvInit, block_padding::Pkcs7};
 
     let mut plaintext = Vec::new();
 
@@ -683,7 +678,7 @@ fn encrypt_cookie(value: &[u8], key: &[u8; 16], host_key: &str, meta_version: i6
     buf[..plaintext.len()].copy_from_slice(&plaintext);
 
     let encrypted = Aes128CbcEnc::new(key.into(), &IV.into())
-        .encrypt_padded_mut::<Pkcs7>(&mut buf, plaintext.len())
+        .encrypt_padded::<Pkcs7>(&mut buf, plaintext.len())
         .expect("buffer is large enough for PKCS7 padding");
 
     let mut result = Vec::with_capacity(3 + encrypted.len());
@@ -698,14 +693,31 @@ struct ReencryptResult {
     buffer: Vec<u8>,
     converted: u64,
     skipped: u64,
+    skipped_v11: u64,
+}
+
+fn copy_sqlite_db(original_path: &Path, dir: &Path) -> Result<PathBuf> {
+    let name = original_path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("Invalid database path: {}", original_path.display()))?;
+    let copy = dir.join(name);
+    std::fs::copy(original_path, &copy)?;
+    for suffix in ["-wal", "-journal"] {
+        let mut sidecar_name = name.to_os_string();
+        sidecar_name.push(suffix);
+        let sidecar = original_path.with_file_name(&sidecar_name);
+        if sidecar.is_file() {
+            std::fs::copy(&sidecar, dir.join(&sidecar_name))?;
+        }
+    }
+    Ok(copy)
 }
 
 fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<ReencryptResult> {
     let peanuts_key = derive_target_key();
 
-    let tmp = tempfile::NamedTempFile::new().context("Failed to create temp file for cookies")?;
-    let tmp_path = tmp.path().to_path_buf();
-    std::fs::copy(original_path, &tmp_path)?;
+    let tmp = tempfile::tempdir().context("Failed to create temp dir for cookies")?;
+    let tmp_path = copy_sqlite_db(original_path, tmp.path())?;
 
     let conn = rusqlite::Connection::open(&tmp_path)?;
 
@@ -738,9 +750,11 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
 
     let mut converted: u64 = 0;
     let mut skipped: u64 = 0;
+    let mut skipped_v11: u64 = 0;
     let tx = conn.unchecked_transaction()?;
     {
         let mut update = tx.prepare("UPDATE cookies SET encrypted_value = ? WHERE rowid = ?")?;
+        let mut delete = tx.prepare("DELETE FROM cookies WHERE rowid = ?")?;
 
         // On Linux, Chromium may have encrypted some cookies with an empty password
         // due to a bug. Try the empty-password key as a fallback.
@@ -761,9 +775,13 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
                 && matches!(&encrypted_value[..3], b"v10" | b"v11" | b"v20");
 
             let plaintext = if is_known_prefix {
+                let key: &[u8] = match (&encrypted_value[..3], provider.v10_key.as_ref()) {
+                    (b"v10", Some(v10_key)) => v10_key,
+                    _ => &provider.source_key[..provider.source_key_len],
+                };
                 decrypt_cookie(
                     encrypted_value,
-                    &provider.source_key[..provider.source_key_len],
+                    key,
                     host_key,
                     meta_version,
                     provider.source_algorithm,
@@ -783,7 +801,11 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
             };
 
             let Some(plaintext) = plaintext else {
+                delete.execute(rusqlite::params![rowid])?;
                 skipped += 1;
+                if encrypted_value.starts_with(b"v11") {
+                    skipped_v11 += 1;
+                }
                 continue;
             };
 
@@ -799,24 +821,46 @@ fn reencrypt_cookies_db(original_path: &Path, provider: &KeyProvider) -> Result<
     conn.close().map_err(|(_, e)| e)?;
 
     let buffer = std::fs::read(&tmp_path)?;
-    // tmp (NamedTempFile) is dropped here, auto-deleting the file
     Ok(ReencryptResult {
         buffer,
         converted,
         skipped,
+        skipped_v11,
+    })
+}
+
+fn keyring_warning(browser: BrowserId, provider: &KeyProvider, skipped_v11: u64) -> Option<String> {
+    (provider.keyring_missing && skipped_v11 > 0).then(|| {
+        format!(
+            "Could not read the {} password from the keyring, so {skipped_v11} cookie(s) it encrypted (v11) were left out. Unlock the keyring and try again.",
+            browser.display_name()
+        )
     })
 }
 
 // ─── File collection ─────────────────────────────────────────────────────────
 
-fn collect_files(dir_path: &Path, base_dir: &Path) -> HashMap<String, Vec<u8>> {
-    let mut files = HashMap::new();
-    collect_files_recursive(dir_path, base_dir, &mut files);
-    files
+#[derive(Default)]
+struct Collected {
+    files: HashMap<String, Vec<u8>>,
+    unreadable: Vec<String>,
 }
 
-fn collect_files_recursive(dir_path: &Path, base_dir: &Path, files: &mut HashMap<String, Vec<u8>>) {
+fn collect_files(dir_path: &Path, base_dir: &Path) -> Collected {
+    let mut collected = Collected::default();
+    collect_files_recursive(dir_path, base_dir, &mut collected);
+    collected
+}
+
+fn collect_files_recursive(dir_path: &Path, base_dir: &Path, collected: &mut Collected) {
     let Ok(entries) = std::fs::read_dir(dir_path) else {
+        collected.unreadable.push(
+            dir_path
+                .strip_prefix(base_dir)
+                .unwrap_or(dir_path)
+                .display()
+                .to_string(),
+        );
         return;
     };
 
@@ -835,13 +879,21 @@ fn collect_files_recursive(dir_path: &Path, base_dir: &Path, files: &mut HashMap
             }
         }
 
-        if path.is_dir() {
-            collect_files_recursive(&path, base_dir, files);
-        } else if path.is_file()
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            collect_files_recursive(&path, base_dir, collected);
+        } else if file_type.is_file()
             && let Ok(rel) = path.strip_prefix(base_dir)
-            && let Ok(data) = std::fs::read(&path)
         {
-            files.insert(rel.to_string_lossy().to_string(), data);
+            let rel = rel.to_string_lossy().to_string();
+            match std::fs::read(&path) {
+                Ok(data) => {
+                    collected.files.insert(rel, data);
+                }
+                Err(_) => collected.unreadable.push(rel),
+            }
         }
     }
 }
@@ -865,6 +917,7 @@ pub struct PackageResult {
     pub zip_buffer: Vec<u8>,
     pub cookies_reencrypted: u64,
     pub cookies_skipped: u64,
+    pub warnings: Vec<String>,
 }
 
 /// Package a browser profile for upload to Steel.
@@ -895,6 +948,7 @@ pub fn package_profile(
 
     on_progress("Reading encryption key...");
     let provider = get_key_provider(browser)?;
+    let mut warnings = Vec::new();
 
     let mut zip_files: Vec<(String, Vec<u8>)> = Vec::new();
     let mut cookies_reencrypted: u64 = 0;
@@ -914,6 +968,7 @@ pub fn package_profile(
             if *entry_name == "Cookies" {
                 on_progress("Re-encrypting Cookies...");
                 let result = reencrypt_cookies_db(&full_path, &provider)?;
+                warnings.extend(keyring_warning(browser, &provider, result.skipped_v11));
                 zip_files.push((format!("Default/{entry_name}"), result.buffer));
                 cookies_reencrypted = result.converted;
                 cookies_skipped = result.skipped;
@@ -923,8 +978,15 @@ pub fn package_profile(
             }
         } else if meta.is_dir() {
             on_progress(&format!("Collecting {entry_name}/..."));
-            let dir_files = collect_files(&full_path, &full_path);
-            for (rel_path, data) in dir_files {
+            let collected = collect_files(&full_path, &full_path);
+            if !collected.unreadable.is_empty() {
+                warnings.push(format!(
+                    "Left out {} unreadable file(s) in {entry_name}: {}",
+                    collected.unreadable.len(),
+                    collected.unreadable.join(", ")
+                ));
+            }
+            for (rel_path, data) in collected.files {
                 zip_files.push((format!("Default/{entry_name}/{rel_path}"), data));
             }
         }
@@ -959,80 +1021,8 @@ pub fn package_profile(
         zip_buffer: cursor.into_inner(),
         cookies_reencrypted,
         cookies_skipped,
+        warnings,
     })
-}
-
-// ─── Steel API ───────────────────────────────────────────────────────────────
-
-pub async fn upload_profile_to_steel(
-    zip_buffer: Vec<u8>,
-    auth: &crate::config::auth::Auth,
-    api_base: &str,
-) -> Result<String> {
-    let part = reqwest::multipart::Part::bytes(zip_buffer)
-        .file_name("userDataDir.zip")
-        .mime_str("application/zip")?;
-    let form = reqwest::multipart::Form::new().part("userDataDir", part);
-
-    let client = reqwest::Client::new();
-    let request = client.post(format!("{api_base}/profiles")).multipart(form);
-    let res = crate::api::client::SteelClient::new()?
-        .authorize(request, api_base, auth)
-        .await?
-        .send()
-        .await?;
-
-    let status = res.status();
-    let body: serde_json::Value = res.json().await?;
-
-    if !status.is_success() {
-        let msg = body
-            .get("message")
-            .and_then(|m| m.as_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| body.to_string());
-        anyhow::bail!("Profile upload failed ({status}): {msg}");
-    }
-
-    body.get("id")
-        .and_then(|id| id.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| anyhow::anyhow!("Profile upload response missing id"))
-}
-
-pub async fn update_profile_on_steel(
-    profile_id: &str,
-    zip_buffer: Vec<u8>,
-    auth: &crate::config::auth::Auth,
-    api_base: &str,
-) -> Result<()> {
-    let part = reqwest::multipart::Part::bytes(zip_buffer)
-        .file_name("userDataDir.zip")
-        .mime_str("application/zip")?;
-    let form = reqwest::multipart::Form::new().part("userDataDir", part);
-
-    let client = reqwest::Client::new();
-    let request = client
-        .patch(format!("{api_base}/profiles/{profile_id}"))
-        .multipart(form);
-    let res = crate::api::client::SteelClient::new()?
-        .authorize(request, api_base, auth)
-        .await?
-        .send()
-        .await?;
-
-    if !res.status().is_success() {
-        let status = res.status();
-        let body: serde_json::Value = res.json().await?;
-        let msg = body
-            .get("message")
-            .and_then(|m| m.as_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| body.to_string());
-        anyhow::bail!("Profile update failed ({status}): {msg}");
-    }
-
-    Ok(())
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -1171,19 +1161,38 @@ mod tests {
     }
 
     #[test]
-    fn collect_files_skips_lock_and_log() {
+    fn collect_files_skips_locks_but_keeps_leveldb_logs() {
         let tmp = tempfile::TempDir::new().unwrap();
         let dir = tmp.path();
 
         std::fs::write(dir.join("good.txt"), "data").unwrap();
         std::fs::write(dir.join("LOCK"), "lock").unwrap();
         std::fs::write(dir.join("SingletonLock"), "lock").unwrap();
-        std::fs::write(dir.join("something.log"), "log").unwrap();
+        std::fs::write(dir.join("000003.log"), "recent writes").unwrap();
         std::fs::write(dir.join("data.pma"), "pma").unwrap();
 
-        let files = collect_files(dir, dir);
-        assert_eq!(files.len(), 1);
+        let files = collect_files(dir, dir).files;
+        assert_eq!(files.len(), 2);
         assert!(files.contains_key("good.txt"));
+        assert!(files.contains_key("000003.log"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn collect_files_does_not_follow_symlinks() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        std::fs::write(outside.path().join("secret.txt"), "secret").unwrap();
+        let dir = tmp.path();
+        std::fs::write(dir.join("a.txt"), "a").unwrap();
+        std::os::unix::fs::symlink(outside.path(), dir.join("linked")).unwrap();
+        std::os::unix::fs::symlink(outside.path().join("secret.txt"), dir.join("link.txt"))
+            .unwrap();
+
+        let collected = collect_files(dir, dir);
+        assert_eq!(collected.files.len(), 1);
+        assert!(collected.files.contains_key("a.txt"));
+        assert!(collected.unreadable.is_empty());
     }
 
     #[test]
@@ -1196,7 +1205,7 @@ mod tests {
         std::fs::write(dir.join("a.txt"), "a").unwrap();
         std::fs::write(sub.join("b.txt"), "b").unwrap();
 
-        let files = collect_files(dir, dir);
+        let files = collect_files(dir, dir).files;
         assert_eq!(files.len(), 2);
         assert!(files.contains_key("a.txt"));
         assert!(files.contains_key("sub/b.txt"));
@@ -1212,14 +1221,6 @@ mod tests {
     #[test]
     fn browser_id_from_str_unknown() {
         assert!("firefox".parse::<BrowserId>().is_err());
-    }
-
-    #[test]
-    fn all_browsers_have_descriptors() {
-        for id in BrowserId::all() {
-            let desc = id.descriptor();
-            assert_eq!(desc.id, *id);
-        }
     }
 
     #[test]
@@ -1245,7 +1246,7 @@ mod tests {
         std::fs::write(dir.join("Preferences"), "{}").unwrap();
         std::fs::write(dir.join("Secure Preferences"), "{}").unwrap();
 
-        let files = collect_files(dir, dir);
+        let files = collect_files(dir, dir).files;
         assert_eq!(files.len(), 1);
         assert!(files.contains_key("good.txt"));
     }
@@ -1261,7 +1262,7 @@ mod tests {
         std::fs::write(dir.join("Last Session"), "s").unwrap();
         std::fs::write(dir.join("Last Tabs"), "t").unwrap();
 
-        let files = collect_files(dir, dir);
+        let files = collect_files(dir, dir).files;
         assert_eq!(files.len(), 1);
         assert!(files.contains_key("good.txt"));
     }
@@ -1685,6 +1686,8 @@ mod tests {
             source_key: sk,
             source_key_len: 16,
             source_algorithm: CryptoAlgorithm::Aes128Cbc,
+            v10_key: None,
+            keyring_missing: false,
         };
 
         let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
@@ -1743,6 +1746,8 @@ mod tests {
             source_key: sk,
             source_key_len: 16,
             source_algorithm: CryptoAlgorithm::Aes128Cbc,
+            v10_key: None,
+            keyring_missing: false,
         };
 
         let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
@@ -1785,11 +1790,154 @@ mod tests {
             source_key: sk,
             source_key_len: 16,
             source_algorithm: CryptoAlgorithm::Aes128Cbc,
+            v10_key: None,
+            keyring_missing: false,
         };
 
         let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
         assert_eq!(result.converted, 1);
         assert_eq!(result.skipped, 2);
+        verify_reencrypted_db(
+            &result.buffer,
+            &[(".example.com", "good", "good_value")],
+            meta_version,
+        );
+    }
+
+    fn with_prefix(mut encrypted: Vec<u8>, prefix: &[u8; 3]) -> Vec<u8> {
+        encrypted[..3].copy_from_slice(prefix);
+        encrypted
+    }
+
+    #[test]
+    fn linux_v10_uses_peanuts_and_v11_uses_the_keyring_key() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cookies_path = tmp.path().join("Cookies");
+        let meta_version = 20;
+
+        let keyring_key = derive_key("keyring-secret", 1);
+        let v10 = encrypt_cookie(b"old", &derive_target_key(), ".a.com", meta_version);
+        let v11 = with_prefix(
+            encrypt_cookie(b"new", &keyring_key, ".b.com", meta_version),
+            b"v11",
+        );
+        create_test_cookies_db(
+            &cookies_path,
+            meta_version,
+            &[
+                (".a.com", "v10", v10.as_slice()),
+                (".b.com", "v11", v11.as_slice()),
+            ],
+        );
+
+        let mut sk = [0u8; 32];
+        sk[..16].copy_from_slice(&keyring_key);
+        let provider = KeyProvider {
+            source_key: sk,
+            source_key_len: 16,
+            source_algorithm: CryptoAlgorithm::Aes128Cbc,
+            v10_key: Some(derive_target_key()),
+            keyring_missing: false,
+        };
+
+        let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
+        assert_eq!(result.converted, 2);
+        assert_eq!(result.skipped, 0);
+        verify_reencrypted_db(
+            &result.buffer,
+            &[(".a.com", "v10", "old"), (".b.com", "v11", "new")],
+            meta_version,
+        );
+    }
+
+    #[test]
+    fn keyring_warning_only_when_v11_cookies_are_left_out() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cookies_path = tmp.path().join("Cookies");
+        let meta_version = 20;
+
+        let v10 = encrypt_cookie(b"old", &derive_target_key(), ".a.com", meta_version);
+        let v11 = with_prefix(
+            encrypt_cookie(
+                b"new",
+                &derive_key("keyring-secret", 1),
+                ".b.com",
+                meta_version,
+            ),
+            b"v11",
+        );
+        create_test_cookies_db(
+            &cookies_path,
+            meta_version,
+            &[
+                (".a.com", "v10", v10.as_slice()),
+                (".b.com", "v11", v11.as_slice()),
+            ],
+        );
+
+        let mut sk = [0u8; 32];
+        sk[..16].copy_from_slice(&derive_key("", 1));
+        let provider = KeyProvider {
+            source_key: sk,
+            source_key_len: 16,
+            source_algorithm: CryptoAlgorithm::Aes128Cbc,
+            v10_key: Some(derive_target_key()),
+            keyring_missing: true,
+        };
+
+        let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
+        assert_eq!(result.converted, 1);
+        assert_eq!(result.skipped, 1);
+        assert_eq!(result.skipped_v11, 1);
+        let warning = keyring_warning(BrowserId::Chrome, &provider, result.skipped_v11).unwrap();
+        assert!(warning.contains("1 cookie(s)"), "{warning}");
+        assert!(keyring_warning(BrowserId::Chrome, &provider, 0).is_none());
+        let unlocked = KeyProvider {
+            keyring_missing: false,
+            ..provider
+        };
+        assert!(keyring_warning(BrowserId::Chrome, &unlocked, 1).is_none());
+    }
+
+    #[test]
+    fn reencrypt_reads_rows_still_in_the_wal() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cookies_path = tmp.path().join("Cookies");
+        let meta_version = 20;
+        let source_key = derive_key("testpass", 1);
+        create_test_cookies_db(&cookies_path, meta_version, &[]);
+
+        let writer = rusqlite::Connection::open(&cookies_path).unwrap();
+        writer
+            .execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;")
+            .unwrap();
+        let fresh = encrypt_cookie(b"fresh", &source_key, ".wal.com", meta_version);
+        writer
+            .execute(
+                "INSERT INTO cookies (creation_utc, host_key, name, encrypted_value) VALUES (1, '.wal.com', 'fresh', ?1)",
+                rusqlite::params![fresh],
+            )
+            .unwrap();
+        assert!(tmp.path().join("Cookies-wal").exists());
+
+        let mut sk = [0u8; 32];
+        sk[..16].copy_from_slice(&source_key);
+        let provider = KeyProvider {
+            source_key: sk,
+            source_key_len: 16,
+            source_algorithm: CryptoAlgorithm::Aes128Cbc,
+            v10_key: None,
+            keyring_missing: false,
+        };
+
+        let result = reencrypt_cookies_db(&cookies_path, &provider).unwrap();
+        drop(writer);
+        assert_eq!(result.converted, 1);
+        verify_reencrypted_db(
+            &result.buffer,
+            &[(".wal.com", "fresh", "fresh")],
+            meta_version,
+        );
     }
 
     // ─── Browser integration tests (#[ignore]) ──────────────────────────────
@@ -1878,9 +2026,8 @@ mod tests {
         }
 
         for i in 0..archive.len() {
-            let name = archive.by_index(i).unwrap().name().to_string();
+            let name = archive.by_index(i).unwrap().name().unwrap().to_string();
             assert!(!name.contains("LOCK"), "zip contains LOCK: {name}");
-            assert!(!name.ends_with(".log"), "zip contains .log: {name}");
             assert!(!name.ends_with(".pma"), "zip contains .pma: {name}");
         }
 
@@ -1947,8 +2094,10 @@ mod tests {
         let encrypted: Vec<(&str, &str, Vec<u8>)> = test_cookies
             .iter()
             .map(|c| {
-                let enc =
-                    encrypt_cookie(c.value.as_bytes(), &source_key_16, c.host_key, meta_version);
+                let enc = with_prefix(
+                    encrypt_cookie(c.value.as_bytes(), &source_key_16, c.host_key, meta_version),
+                    b"v11",
+                );
                 (c.host_key, c.name, enc)
             })
             .collect();

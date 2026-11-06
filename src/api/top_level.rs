@@ -1,11 +1,11 @@
 //! Top-level API: scrape, screenshot, pdf.
 //! Ported from: cli/source/utils/topLevelTools.ts
 
+use std::time::Duration;
+
 use serde_json::{Value, json};
 
-use crate::api::client::{ApiError, SteelClient};
-use crate::config::auth::Auth;
-use crate::config::settings::ApiMode;
+use crate::api::client::{ApiError, REQUEST_TIMEOUT, SteelClient};
 
 /// Supported scrape output formats.
 pub const SCRAPE_FORMATS: &[&str] = &["html", "readability", "cleaned_html", "markdown"];
@@ -78,121 +78,82 @@ pub fn get_hosted_url(data: &Value) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
+pub struct Target<'a> {
+    pub url: &'a str,
+    pub delay: Option<u64>,
+    pub use_proxy: bool,
+    pub region: Option<&'a str>,
+}
+
+impl Target<'_> {
+    fn body(&self) -> Value {
+        let mut body = json!({"url": self.url});
+        if let Some(delay) = self.delay {
+            body["delay"] = json!(delay);
+        }
+        if self.use_proxy {
+            body["useProxy"] = json!(true);
+        }
+        if let Some(region) = self.region {
+            body["region"] = json!(region);
+        }
+        body
+    }
+
+    fn timeout(&self) -> Duration {
+        REQUEST_TIMEOUT + Duration::from_millis(self.delay.unwrap_or(0))
+    }
+}
+
 impl SteelClient {
     pub async fn scrape(
         &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
-        url: &str,
+        target: &Target<'_>,
         formats: &[String],
-        delay: Option<u64>,
         pdf: bool,
         screenshot: bool,
-        use_proxy: bool,
-        region: Option<&str>,
     ) -> Result<Value, ApiError> {
-        let mut body = json!({
-            "url": url,
-            "format": formats,
-        });
-        let obj = body.as_object_mut().unwrap();
-
-        if let Some(d) = delay {
-            obj.insert("delay".into(), json!(d));
-        }
+        let mut body = target.body();
+        body["format"] = json!(formats);
         if pdf {
-            obj.insert("pdf".into(), json!(true));
+            body["pdf"] = json!(true);
         }
         if screenshot {
-            obj.insert("screenshot".into(), json!(true));
+            body["screenshot"] = json!(true);
         }
-        if use_proxy {
-            obj.insert("useProxy".into(), json!(true));
-        }
-        if let Some(r) = region {
-            obj.insert("region".into(), json!(r));
-        }
-
-        self.request(
-            base_url,
-            mode,
+        self.request_within(
             reqwest::Method::POST,
             "/scrape",
             Some(body),
-            auth,
+            Some(target.timeout()),
         )
         .await
     }
 
     pub async fn screenshot(
         &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
-        url: &str,
-        delay: Option<u64>,
+        target: &Target<'_>,
         full_page: bool,
-        use_proxy: bool,
-        region: Option<&str>,
     ) -> Result<Value, ApiError> {
-        let mut body = json!({"url": url});
-        let obj = body.as_object_mut().unwrap();
-
-        if let Some(d) = delay {
-            obj.insert("delay".into(), json!(d));
-        }
+        let mut body = target.body();
         if full_page {
-            obj.insert("fullPage".into(), json!(true));
+            body["fullPage"] = json!(true);
         }
-        if use_proxy {
-            obj.insert("useProxy".into(), json!(true));
-        }
-        if let Some(r) = region {
-            obj.insert("region".into(), json!(r));
-        }
-
-        self.request(
-            base_url,
-            mode,
+        self.request_within(
             reqwest::Method::POST,
             "/screenshot",
             Some(body),
-            auth,
+            Some(target.timeout()),
         )
         .await
     }
 
-    pub async fn pdf(
-        &self,
-        base_url: &str,
-        mode: ApiMode,
-        auth: &Auth,
-        url: &str,
-        delay: Option<u64>,
-        use_proxy: bool,
-        region: Option<&str>,
-    ) -> Result<Value, ApiError> {
-        let mut body = json!({"url": url});
-        let obj = body.as_object_mut().unwrap();
-
-        if let Some(d) = delay {
-            obj.insert("delay".into(), json!(d));
-        }
-        if use_proxy {
-            obj.insert("useProxy".into(), json!(true));
-        }
-        if let Some(r) = region {
-            obj.insert("region".into(), json!(r));
-        }
-
-        self.request(
-            base_url,
-            mode,
+    pub async fn pdf(&self, target: &Target<'_>) -> Result<Value, ApiError> {
+        self.request_within(
             reqwest::Method::POST,
             "/pdf",
-            Some(body),
-            auth,
+            Some(target.body()),
+            Some(target.timeout()),
         )
         .await
     }
@@ -310,16 +271,55 @@ mod tests {
 
     // --- Integration tests with wiremock ---
 
-    use crate::config::auth::AuthSource;
-    use wiremock::matchers::{method, path};
+    use crate::config::auth::{Auth, AuthSource};
+    use crate::config::settings::ApiMode;
+    use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    fn test_auth() -> Auth {
-        Auth {
+    fn client(server: &MockServer) -> SteelClient {
+        let auth = Auth {
             api_key: Some("test-key".into()),
-            source: AuthSource::Env,
             access_token: None,
+            source: AuthSource::Env,
+        };
+        SteelClient::with(server.uri(), ApiMode::Local, auth).unwrap()
+    }
+
+    const fn target(url: &str) -> Target<'_> {
+        Target {
+            url,
+            delay: None,
+            use_proxy: false,
+            region: None,
         }
+    }
+
+    #[test]
+    fn delay_extends_the_request_timeout() {
+        assert_eq!(target("https://example.com").timeout(), REQUEST_TIMEOUT);
+        let delayed = Target {
+            delay: Some(30_000),
+            ..target("https://example.com")
+        };
+        assert_eq!(delayed.timeout(), REQUEST_TIMEOUT + Duration::from_secs(30));
+    }
+
+    #[test]
+    fn target_body_includes_only_set_options() {
+        assert_eq!(
+            target("https://example.com").body(),
+            json!({"url": "https://example.com"})
+        );
+        let full = Target {
+            url: "https://example.com",
+            delay: Some(500),
+            use_proxy: true,
+            region: Some("lax"),
+        };
+        assert_eq!(
+            full.body(),
+            json!({"url": "https://example.com", "delay": 500, "useProxy": true, "region": "lax"})
+        );
     }
 
     #[tokio::test]
@@ -328,25 +328,21 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/scrape"))
+            .and(body_json(
+                json!({"url": "https://example.com", "format": ["markdown"]}),
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "content": {"markdown": "# Hello"}
             })))
             .mount(&server)
             .await;
 
-        let client = SteelClient::new().unwrap();
-        let data = client
+        let data = client(&server)
             .scrape(
-                &server.uri(),
-                ApiMode::Local,
-                &test_auth(),
-                "https://example.com",
+                &target("https://example.com"),
                 &["markdown".into()],
-                None,
                 false,
                 false,
-                false,
-                None,
             )
             .await
             .unwrap();
@@ -361,6 +357,9 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/screenshot"))
+            .and(body_json(
+                json!({"url": "https://example.com", "fullPage": true}),
+            ))
             .respond_with(
                 ResponseTemplate::new(200)
                     .set_body_json(json!({"url": "https://cdn.steel.dev/shot.png"})),
@@ -368,18 +367,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = SteelClient::new().unwrap();
-        let data = client
-            .screenshot(
-                &server.uri(),
-                ApiMode::Local,
-                &test_auth(),
-                "https://example.com",
-                None,
-                false,
-                false,
-                None,
-            )
+        let data = client(&server)
+            .screenshot(&target("https://example.com"), true)
             .await
             .unwrap();
 
@@ -402,17 +391,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let client = SteelClient::new().unwrap();
-        let data = client
-            .pdf(
-                &server.uri(),
-                ApiMode::Local,
-                &test_auth(),
-                "https://example.com",
-                None,
-                false,
-                None,
-            )
+        let data = client(&server)
+            .pdf(&target("https://example.com"))
             .await
             .unwrap();
 

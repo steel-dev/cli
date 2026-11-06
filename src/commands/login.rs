@@ -17,10 +17,16 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
+    output::success_data(authorize(args).await?);
+    Ok(())
+}
+
+/// Authorize without reporting, so callers such as `init` own their single result.
+/// The returned `status` is `authenticated` or `pending`.
+pub async fn authorize(args: Args) -> anyhow::Result<serde_json::Value> {
     let existing = auth::resolve_auth();
     if existing.api_key.is_some() {
-        output::success_data(serde_json::json!({"status":"authenticated","method":"api_key"}));
-        return Ok(());
+        return Ok(serde_json::json!({"status":"authenticated","method":"api_key"}));
     }
     let interactive = std::io::stdout().is_terminal();
     let complete = device::login(
@@ -36,10 +42,9 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
             crate::telemetry::track_event("login_completed", serde_json::Map::new());
         }
     }
-    output::success_data(serde_json::json!({
+    Ok(serde_json::json!({
         "status":if complete {"authenticated"} else {"pending"},
         "method":"device",
         "next_action":if complete {"Run steel doctor --preflight to verify product API access"} else {"Approve the displayed code, then run steel login --resume or repeat steel init"}
-    }));
-    Ok(())
+    }))
 }

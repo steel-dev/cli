@@ -1,9 +1,7 @@
-pub mod checkpoints;
 pub mod client;
-pub mod computers;
-pub mod environments;
+pub mod commands;
 pub mod generated;
+pub mod profiles;
 pub mod projects;
-pub mod secrets;
 pub mod session;
 pub mod top_level;

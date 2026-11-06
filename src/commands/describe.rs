@@ -86,7 +86,7 @@ pub struct ApiOperationInfo {
 // ── Entry point ─────────────────────────────────────────────────────
 
 pub async fn run(args: Args) -> Result<()> {
-    let root = super::Cli::command();
+    let root = root_command(args.all);
     let (cmd, resolved_path) = resolve_command(&root, &args.path)?;
 
     let output_data = if args.all {
@@ -98,6 +98,14 @@ pub async fn run(args: Args) -> Result<()> {
     let value = serde_json::to_value(output_data)?;
     output::success_data(value);
     Ok(())
+}
+
+fn root_command(all: bool) -> clap::Command {
+    let mut root = super::Cli::command();
+    if !all {
+        root.build();
+    }
+    root
 }
 
 // ── Command resolution ──────────────────────────────────────────────
@@ -394,6 +402,91 @@ fn has_visible_subcommands(cmd: &clap::Command) -> bool {
         .any(|s| !s.is_hide_set() && s.get_name() != "help")
 }
 
+const OVERVIEW_COLUMN: usize = 40;
+
+pub fn overview(root: &clap::Command) -> String {
+    let mut lines = Vec::new();
+    for sub in get_visible_subcommands(root) {
+        overview_lines(&sub, &format!("steel {}", sub.get_name()), &mut lines);
+    }
+    lines.join("\n")
+}
+
+fn overview_lines(cmd: &clap::Command, path: &str, lines: &mut Vec<String>) {
+    let (positionals, flags): (Vec<&clap::Arg>, Vec<&clap::Arg>) = cmd
+        .get_arguments()
+        .filter(|a| is_visible_arg(a))
+        .partition(|a| a.is_positional());
+    let usage = positionals.iter().fold(path.to_string(), |usage, arg| {
+        format!("{usage} {}", placeholder(arg))
+    });
+    let mut about = cmd.get_about().map(|a| a.to_string()).unwrap_or_default();
+    let aliases = get_aliases(cmd);
+    if !aliases.is_empty() {
+        about.push_str(&format!(" (aliases: {})", aliases.join(", ")));
+    }
+    lines.push(overview_row(2, &usage, &about));
+    for arg in flags {
+        lines.push(overview_row(4, &flag_usage(arg), &arg_summary(arg)));
+    }
+    for sub in get_visible_subcommands(cmd) {
+        overview_lines(&sub, &format!("{path} {}", sub.get_name()), lines);
+    }
+}
+
+fn overview_row(indent: usize, left: &str, right: &str) -> String {
+    let left = format!("{:indent$}{left}", "");
+    if right.is_empty() {
+        return left;
+    }
+    let width = OVERVIEW_COLUMN.max(left.len() + 2);
+    format!("{left:<width$}{right}")
+}
+
+fn value_name(arg: &clap::Arg) -> String {
+    arg.get_value_names()
+        .and_then(|names| names.first())
+        .map_or_else(|| arg.get_id().to_string(), |name| name.to_string())
+}
+
+fn takes_many(arg: &clap::Arg) -> bool {
+    arg.get_num_args()
+        .is_some_and(|range| range.max_values() > 1)
+}
+
+fn placeholder(arg: &clap::Arg) -> String {
+    let name = value_name(arg);
+    let many = if takes_many(arg) { "..." } else { "" };
+    if arg.is_required_set() {
+        format!("<{name}>{many}")
+    } else {
+        format!("[{name}]{many}")
+    }
+}
+
+fn flag_usage(arg: &clap::Arg) -> String {
+    let mut usage = match (arg.get_short(), arg.get_long()) {
+        (Some(short), Some(long)) => format!("-{short}, --{long}"),
+        (Some(short), None) => format!("-{short}"),
+        (None, Some(long)) => format!("--{long}"),
+        (None, None) => value_name(arg),
+    };
+    if arg.get_action().takes_values() {
+        usage.push_str(&format!(" <{}>", value_name(arg)));
+    }
+    usage
+}
+
+fn arg_summary(arg: &clap::Arg) -> String {
+    let mut summary = arg.get_help().map(|h| h.to_string()).unwrap_or_default();
+    if arg.get_action().takes_values()
+        && let Some(default) = arg.get_default_values().first()
+    {
+        summary.push_str(&format!(" [default: {}]", default.to_string_lossy()));
+    }
+    summary
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -431,9 +524,6 @@ mod tests {
         assert!(names.contains(&"browser"));
         assert!(names.contains(&"scrape"));
         assert!(names.contains(&"login"));
-
-        // Hidden __daemon should not appear
-        assert!(!names.contains(&"__daemon"));
     }
 
     #[test]
@@ -451,6 +541,27 @@ mod tests {
     }
 
     #[test]
+    fn single_command_lists_inherited_global_flags() {
+        let root = root_command(false);
+        let path = vec!["browser".to_string(), "click".to_string()];
+        let (cmd, resolved) = resolve_command(&root, &path).unwrap();
+        let v = serde_json::to_value(describe_node(&cmd, &resolved)).unwrap();
+        let names = |key: &str| -> Vec<String> {
+            v[key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| p["name"].as_str().unwrap().to_string())
+                .collect()
+        };
+        let globals = names("global_args");
+        for name in ["session", "diff", "json", "local", "api-url"] {
+            assert!(globals.iter().any(|g| g == name), "{name}: {globals:?}");
+        }
+        assert!(!names("parameters").iter().any(|p| p == "session"));
+    }
+
+    #[test]
     fn click_parameters() {
         let v = describe_path(&["browser", "click"]);
         let params = v["parameters"].as_array().unwrap();
@@ -460,14 +571,12 @@ mod tests {
         assert_eq!(selector["required"], true);
         assert_eq!(selector["positional"], true);
 
-        let button = params.iter().find(|p| p["name"] == "button").unwrap();
-        assert_eq!(button["type"], "string");
-        assert_eq!(button["required"], false);
-        assert_eq!(button["positional"], false);
+        let count = params.iter().find(|p| p["name"] == "count").unwrap();
+        assert_eq!(count["required"], false);
+        assert_eq!(count["positional"], false);
 
-        let new_tab = params.iter().find(|p| p["name"] == "new-tab").unwrap();
-        assert_eq!(new_tab["type"], "boolean");
-        assert_eq!(new_tab["required"], false);
+        assert!(params.iter().all(|p| p["name"] != "new-tab"));
+        assert!(params.iter().all(|p| p["name"] != "button"));
     }
 
     #[test]
@@ -580,29 +689,56 @@ mod tests {
     }
 
     #[test]
-    fn computer_exec_lists_its_api_operation() {
-        let v = describe_path(&["computer", "exec"]);
+    fn sessions_get_lists_its_api_operation() {
+        let v = describe_path(&["sessions", "get"]);
         let ops = v["api_operations"].as_array().unwrap();
         assert_eq!(ops.len(), 1);
-        assert_eq!(ops[0]["operation_id"], "exec_computer");
-        assert_eq!(ops[0]["method"], "POST");
-        assert_eq!(ops[0]["path"], "/v1/computers/{id}/exec");
-        assert_eq!(
-            ops[0]["example"],
-            "steel computer exec <computer-id> -- <command>"
-        );
+        assert_eq!(ops[0]["operation_id"], "get_session");
+        assert_eq!(ops[0]["method"], "GET");
+        assert_eq!(ops[0]["path"], "/v1/sessions/{id}");
+        assert_eq!(ops[0]["example"], "steel sessions get <session-id>");
         assert!(ops[0].get("streaming").is_none());
     }
 
     #[test]
-    fn computer_ssh_is_a_websocket_operation() {
-        let v = describe_path(&["computer", "ssh"]);
+    fn sessions_logs_is_a_websocket_operation() {
+        let v = describe_path(&["sessions", "logs"]);
         let ops = v["api_operations"].as_array().unwrap();
         assert_eq!(ops.len(), 1);
-        assert_eq!(ops[0]["operation_id"], "attach_computer_ssh");
+        assert_eq!(ops[0]["operation_id"], "get_session_logs");
         assert_eq!(ops[0]["method"], "GET");
-        assert_eq!(ops[0]["example"], "steel computer ssh <computer-id>");
+        assert_eq!(
+            ops[0]["example"],
+            "steel sessions logs <session-id> --follow"
+        );
         assert_eq!(ops[0]["streaming"]["transport"], "websocket");
-        assert_eq!(ops[0]["streaming"]["path"], "/v1/computers/{id}/ssh");
+        assert_eq!(ops[0]["streaming"]["path"], "/v1/sessions/{id}/logs");
+    }
+
+    #[test]
+    fn generated_operation_ids_are_unique() {
+        let ids: Vec<_> = CLI_OPERATION_METADATA.iter().map(|op| op.id).collect();
+        let unique: std::collections::BTreeSet<_> = ids.iter().collect();
+        assert_eq!(ids.len(), unique.len());
+    }
+
+    #[test]
+    fn generated_command_paths_exist_in_clap_tree() {
+        let root = root_cmd();
+        for op in CLI_OPERATION_METADATA {
+            let mut current = root.clone();
+            for segment in op
+                .command
+                .split_whitespace()
+                .filter(|s| !s.starts_with('-'))
+            {
+                current = current
+                    .find_subcommand(segment)
+                    .unwrap_or_else(|| {
+                        panic!("generated command path does not exist: {}", op.command)
+                    })
+                    .clone();
+            }
+        }
     }
 }

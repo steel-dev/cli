@@ -5,7 +5,6 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use tokio::sync::Notify;
 
 use crate::config;
 use crate::config::settings::ApiMode;
@@ -16,6 +15,8 @@ const BATCH_PATH: &str = "/batch/";
 const FLUSH_INTERVAL: Duration = Duration::from_secs(10);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+const FLUSH_CHILD_ARG: &str = "__telemetry-flush";
+const FLUSH_CHILD_TIMEOUT: Duration = Duration::from_secs(5);
 
 static GLOBAL: OnceLock<Mutex<GlobalTelemetry>> = OnceLock::new();
 
@@ -30,17 +31,18 @@ fn global() -> &'static Mutex<GlobalTelemetry> {
 struct GlobalTelemetry {
     client: Option<Arc<TelemetryClient>>,
     queue: Vec<QueuedEvent>,
+    in_flight: Vec<QueuedEvent>,
     flusher: Option<FlusherHandle>,
     onboarding_source: Option<String>,
 }
 
 struct FlusherHandle {
-    shutdown: Arc<Notify>,
     join: tokio::task::JoinHandle<()>,
 }
 
 #[derive(Clone)]
 struct QueuedEvent {
+    uuid: String,
     event: String,
     properties: Map<String, Value>,
     timestamp_ms: u64,
@@ -174,6 +176,7 @@ pub fn init_from_env() {
             .and_then(|config| config.onboarding_source())
             .map(str::to_string);
         state.queue.clear();
+        state.in_flight.clear();
         state.flusher.take()
     };
 
@@ -184,11 +187,9 @@ pub fn init_from_env() {
     if let Some(bootstrap) = bootstrap.as_ref()
         && let Ok(handle) = tokio::runtime::Handle::try_current()
     {
-        let shutdown = Arc::new(Notify::new());
         let client = Arc::clone(&bootstrap.client);
-        let shutdown_clone = Arc::clone(&shutdown);
-        let join = handle.spawn(run_flusher(client, shutdown_clone));
-        global().lock().flusher = Some(FlusherHandle { shutdown, join });
+        let join = handle.spawn(run_flusher(client));
+        global().lock().flusher = Some(FlusherHandle { join });
     }
 
     let install_created = bootstrap
@@ -268,17 +269,88 @@ fn apply_onboarding_source(properties: &mut Map<String, Value>, source: Option<&
 }
 
 pub async fn flush_best_effort() {
-    let flusher = {
+    let flusher = global().lock().flusher.take();
+    if let Some(flusher) = flusher {
+        flusher.join.abort();
+        let _ = flusher.join.await;
+    }
+
+    let (client, events) = {
         let mut state = global().lock();
-        state.flusher.take()
+        let mut events = std::mem::take(&mut state.in_flight);
+        events.append(&mut state.queue);
+        (state.client.clone(), events)
     };
 
-    let Some(flusher) = flusher else {
+    let Some(client) = client else {
         return;
     };
+    if events.is_empty() {
+        return;
+    }
 
-    flusher.shutdown.notify_one();
-    let _ = tokio::time::timeout(SHUTDOWN_TIMEOUT, flusher.join).await;
+    let payload = build_batch_payload(&client.api_key, &client.distinct_id, &events);
+    if hand_off(&client.batch_url, &payload) {
+        return;
+    }
+    let send = client.http.post(&client.batch_url).json(&payload).send();
+    let _ = tokio::time::timeout(SHUTDOWN_TIMEOUT, send).await;
+}
+
+#[cfg(not(test))]
+fn hand_off(url: &str, payload: &Value) -> bool {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let Ok(mut child) = Command::new(exe)
+        .arg(FLUSH_CHILD_ARG)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    let Some(mut stdin) = child.stdin.take() else {
+        return false;
+    };
+    let request = json!({ "url": url, "payload": payload }).to_string();
+    stdin.write_all(request.as_bytes()).is_ok()
+}
+
+#[cfg(test)]
+const fn hand_off(_url: &str, _payload: &Value) -> bool {
+    false
+}
+
+pub fn is_flush_child() -> bool {
+    std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == FLUSH_CHILD_ARG)
+}
+
+pub async fn run_flush_child() {
+    let mut input = String::new();
+    if std::io::Read::read_to_string(&mut std::io::stdin(), &mut input).is_err() {
+        return;
+    }
+    let Ok(request) = serde_json::from_str::<Value>(&input) else {
+        return;
+    };
+    let (Some(url), Some(payload)) = (request["url"].as_str(), request.get("payload")) else {
+        return;
+    };
+    let Ok(http) = reqwest::Client::builder()
+        .user_agent(format!("steel-cli/{}", env!("CARGO_PKG_VERSION")))
+        .timeout(FLUSH_CHILD_TIMEOUT)
+        .build()
+    else {
+        return;
+    };
+    let _ = http.post(url).json(payload).send().await;
 }
 
 fn track(event: &str, mut properties: Map<String, Value>) {
@@ -288,45 +360,40 @@ fn track(event: &str, mut properties: Map<String, Value>) {
     }
     apply_onboarding_source(&mut properties, state.onboarding_source.as_deref());
     state.queue.push(QueuedEvent {
+        uuid: generate_uuid_like_id(),
         event: event.to_string(),
         properties,
         timestamp_ms: now_unix_ms(),
     });
 }
 
-async fn run_flusher(client: Arc<TelemetryClient>, shutdown: Arc<Notify>) {
+async fn run_flusher(client: Arc<TelemetryClient>) {
     let mut interval = tokio::time::interval(FLUSH_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     interval.tick().await;
 
     loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                flush_once(&client).await;
-            }
-            () = shutdown.notified() => {
-                flush_once(&client).await;
-                break;
-            }
-        }
+        interval.tick().await;
+        flush_once(&client).await;
     }
 }
 
 async fn flush_once(client: &TelemetryClient) {
-    let events = {
+    let payload = {
         let mut state = global().lock();
-        std::mem::take(&mut state.queue)
+        if state.queue.is_empty() {
+            return;
+        }
+        state.in_flight = std::mem::take(&mut state.queue);
+        build_batch_payload(&client.api_key, &client.distinct_id, &state.in_flight)
     };
-    if events.is_empty() {
-        return;
-    }
-    let payload = build_batch_payload(&client.api_key, &client.distinct_id, &events);
     let _ = client
         .http
         .post(&client.batch_url)
         .json(&payload)
         .send()
         .await;
+    global().lock().in_flight.clear();
 }
 
 fn build_batch_payload(api_key: &str, distinct_id: &str, events: &[QueuedEvent]) -> Value {
@@ -338,6 +405,7 @@ fn build_batch_payload(api_key: &str, distinct_id: &str, events: &[QueuedEvent])
             properties.insert("$lib".into(), json!("steel-cli"));
             properties.insert("$lib_version".into(), json!(env!("CARGO_PKG_VERSION")));
             json!({
+                "uuid": e.uuid,
                 "event": e.event,
                 "distinct_id": distinct_id,
                 "properties": properties,
@@ -384,12 +452,16 @@ fn telemetry_mode() -> &'static str {
     }
 }
 
-fn error_class(err: &anyhow::Error) -> &'static str {
+fn error_class(err: &anyhow::Error) -> String {
+    if let Some(silent) = err.downcast_ref::<crate::util::output::SilentExit>() {
+        return silent.error_code.clone();
+    }
     if let Some(api_err) = err.downcast_ref::<crate::api::client::ApiError>() {
-        return match api_err {
+        let class = match api_err {
             crate::api::client::ApiError::MissingAuth => "auth_required",
             crate::api::client::ApiError::DeviceAuth(_) => "device_auth_failed",
             crate::api::client::ApiError::Unreachable { .. } => "network_unreachable",
+            crate::api::client::ApiError::Redirected { .. } => "api_redirect_refused",
             crate::api::client::ApiError::RequestFailed { status, .. } => match *status {
                 401 => "api_unauthorized",
                 403 => "api_forbidden",
@@ -398,16 +470,16 @@ fn error_class(err: &anyhow::Error) -> &'static str {
                 s if s >= 500 => "api_server_error",
                 _ => "api_request_failed",
             },
-            crate::api::client::ApiError::RetryLater { .. } => "api_not_ready",
             crate::api::client::ApiError::Other(_) => "network_error",
         };
+        return class.to_string();
     }
 
     if err.chain().any(|source| source.is::<std::io::Error>()) {
-        return "io_error";
+        return "io_error".to_string();
     }
 
-    "internal_error"
+    "internal_error".to_string()
 }
 
 struct TelemetryIdentity {
@@ -458,7 +530,7 @@ fn write_telemetry_state(path: &Path, state: &TelemetryState) -> anyhow::Result<
 
 fn generate_uuid_like_id() -> String {
     let mut bytes = [0u8; 16];
-    getrandom::fill(&mut bytes).expect("failed to generate telemetry install id");
+    getrandom::fill(&mut bytes).expect("failed to generate a telemetry id");
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     format!(
@@ -490,10 +562,17 @@ fn now_unix_ms() -> u64 {
 }
 
 #[cfg(test)]
+pub fn test_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
+#[cfg(test)]
 pub fn reset_for_test() {
     let flusher = {
         let mut state = global().lock();
         state.queue.clear();
+        state.in_flight.clear();
         state.client = None;
         state.onboarding_source = None;
         state.flusher.take()
@@ -639,11 +718,19 @@ mod tests {
     }
 
     #[test]
+    fn reported_failures_keep_their_error_code() {
+        let reported: anyhow::Error = crate::util::output::SilentExit::new("stale_ref").into();
+        assert_eq!(error_class(&reported), "stale_ref");
+        assert_eq!(error_class(&anyhow::anyhow!("boom")), "internal_error");
+    }
+
+    #[test]
     fn batch_payload_includes_events_with_distinct_id_and_timestamp() {
         let mut properties = Map::new();
         properties.insert("command_path".into(), json!("config"));
 
         let events = vec![QueuedEvent {
+            uuid: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b".into(),
             event: "command_started".into(),
             properties,
             timestamp_ms: 1_700_000_000_000,
@@ -654,10 +741,95 @@ mod tests {
         assert_eq!(payload["api_key"], "phc_test");
         let batch = payload["batch"].as_array().unwrap();
         assert_eq!(batch.len(), 1);
+        assert_eq!(batch[0]["uuid"], "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b");
         assert_eq!(batch[0]["event"], "command_started");
         assert_eq!(batch[0]["distinct_id"], "anon-123");
         assert_eq!(batch[0]["properties"]["command_path"], "config");
         assert_eq!(batch[0]["properties"]["$process_person_profile"], false);
         assert_eq!(batch[0]["timestamp"], "2023-11-14T22:13:20Z");
+    }
+
+    #[test]
+    fn event_ids_are_random_v4_uuids() {
+        let id = generate_uuid_like_id();
+        let groups: Vec<usize> = id.split('-').map(str::len).collect();
+        assert_eq!(groups, [8, 4, 4, 4, 12], "{id}");
+        assert!(
+            id.chars()
+                .all(|c| c == '-' || matches!(c, '0'..='9' | 'a'..='f')),
+            "{id}"
+        );
+        assert_eq!(id.as_bytes()[14], b'4', "{id}");
+        assert!(
+            matches!(id.as_bytes()[19], b'8' | b'9' | b'a' | b'b'),
+            "{id}"
+        );
+        assert_ne!(id, generate_uuid_like_id());
+    }
+
+    #[tokio::test]
+    async fn shutdown_resends_a_batch_that_was_still_in_flight() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let _guard = test_lock().lock().await;
+        reset_for_test();
+        let temp = tempfile::TempDir::new().unwrap();
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/batch/"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(10)))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/batch/"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        set_test_override(temp.path(), &server.uri());
+        init_from_env();
+        track_event("first", Map::new());
+
+        let client = global().lock().client.clone().unwrap();
+        let sending = tokio::spawn(async move { flush_once(&client).await });
+        let replaced = global()
+            .lock()
+            .flusher
+            .replace(FlusherHandle { join: sending });
+        if let Some(replaced) = replaced {
+            replaced.join.abort();
+        }
+        while server.received_requests().await.unwrap().is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        track_event("second", Map::new());
+
+        flush_best_effort().await;
+
+        let requests = server.received_requests().await.unwrap();
+        reset_for_test();
+        assert_eq!(requests.len(), 2);
+        let batch = |index: usize| -> Vec<(String, String)> {
+            let body: Value = serde_json::from_slice(&requests[index].body).unwrap();
+            body["batch"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|event| {
+                    (
+                        event["event"].as_str().unwrap().to_string(),
+                        event["uuid"].as_str().unwrap().to_string(),
+                    )
+                })
+                .collect()
+        };
+        let (sent, resent) = (batch(0), batch(1));
+        let names: Vec<&str> = resent.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["install_created", "first", "second"]);
+        assert_eq!(resent[..2], sent[..]);
+        let ids: std::collections::HashSet<&str> =
+            resent.iter().map(|(_, id)| id.as_str()).collect();
+        assert_eq!(ids.len(), 3);
     }
 }

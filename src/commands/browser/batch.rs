@@ -1,29 +1,18 @@
-//! Batch command: execute multiple browser actions in a single CLI invocation.
-//!
-//! Usage:
-//!   steel browser batch "click @e3" "snapshot -i" --session my-task
-//!   steel browser batch "fill @e1 Seoul" "fill @e2 Tokyo" "click @e5" --session my-task --bail
-
-use anyhow::Result;
+use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
-use serde_json::{Value, json};
 
-use crate::util::output;
-
-use super::action::{self, ActionCommand};
+use super::action::{ActionCommand, Browser, Plan};
 
 #[derive(Parser)]
 pub struct Args {
-    /// Commands to execute (each as a quoted string, e.g. "click @e3")
+    /// Commands to run in order, each as one string (e.g. "click e3" or "fill e3 'New York'"). They stop at the first failure.
     #[arg(required = true)]
     pub commands: Vec<String>,
 
-    /// Stop on first error
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub bail: bool,
 }
 
-/// Wrapper to parse a list of tokens as an ActionCommand via Clap.
 #[derive(Parser)]
 #[command(no_binary_name = true)]
 struct ActionParser {
@@ -31,173 +20,97 @@ struct ActionParser {
     action: ActionCommand,
 }
 
-/// Split a command string into tokens, respecting quoted substrings.
-///
-/// "fill @e5 \"hello world\"" → ["fill", "@e5", "hello world"]
-fn split_command_str(s: &str) -> Vec<String> {
+const MAX_COMMANDS: usize = 50;
+
+pub fn split_command_str(s: &str) -> Result<Vec<String>, String> {
     let mut args = Vec::new();
     let mut current = String::new();
-    let mut in_quote: Option<char> = None;
+    let mut started = false;
+    let mut chars = s.chars().peekable();
 
-    for c in s.chars() {
-        match (c, in_quote) {
-            ('"', None) => in_quote = Some('"'),
-            ('"', Some('"')) => in_quote = None,
-            ('\'', None) => in_quote = Some('\''),
-            ('\'', Some('\'')) => in_quote = None,
-            (' ', None) if !current.is_empty() => {
-                args.push(std::mem::take(&mut current));
+    while let Some(c) = chars.next() {
+        match c {
+            '"' | '\'' if !started || current.ends_with('=') => {
+                started = true;
+                loop {
+                    match chars.next() {
+                        Some(q) if q == c && chars.peek().is_none_or(|n| n.is_whitespace()) => {
+                            break;
+                        }
+                        Some('\\') if c == '"' && matches!(chars.peek(), Some('"' | '\\')) => {
+                            current.extend(chars.next());
+                        }
+                        Some(other) => current.push(other),
+                        None if c == '"' => return Err("unclosed double quote".to_string()),
+                        None => return Err("unclosed single quote".to_string()),
+                    }
+                }
             }
-            (' ', None) => {}
-            (c, _) => current.push(c),
+            c if c.is_whitespace() => {
+                if started {
+                    args.push(std::mem::take(&mut current));
+                    started = false;
+                }
+            }
+            c => {
+                started = true;
+                current.push(c);
+            }
         }
     }
-    if !current.is_empty() {
+    if started {
         args.push(current);
     }
-    args
+    Ok(args)
 }
 
-pub async fn run(args: Args, session: Option<&str>) -> Result<()> {
-    let mut client = action::connect_daemon(session).await?;
-
-    let mut results: Vec<Value> = Vec::new();
-    let mut had_error = false;
-
-    for cmd_str in &args.commands {
-        let tokens = split_command_str(cmd_str);
+pub async fn run(args: Args, session: Option<&str>, diff: bool) -> Result<()> {
+    let mut steps = Vec::new();
+    for line in &args.commands {
+        let tokens = split_command_str(line).map_err(|err| anyhow!("{line}: {err}"))?;
         if tokens.is_empty() {
             continue;
         }
-
-        // Parse tokens as an ActionCommand
-        let parsed = match ActionParser::try_parse_from(&tokens) {
-            Ok(p) => p,
-            Err(e) => {
-                let msg = e.render().to_string();
-                if !output::is_json() {
-                    eprintln!("Error ({}): {}", cmd_str, msg);
-                }
-                results.push(json!({
-                    "command": cmd_str,
-                    "success": false,
-                    "error": msg,
-                }));
-                had_error = true;
-                if args.bail {
-                    break;
-                }
-                continue;
-            }
-        };
-
-        // Convert to wire command
-        let daemon_cmd = match parsed.action.into_daemon_command() {
-            Ok(cmd) => cmd,
-            Err(e) => {
-                let msg = e.to_string();
-                if !output::is_json() {
-                    eprintln!("Error ({}): {}", cmd_str, msg);
-                }
-                results.push(json!({
-                    "command": cmd_str,
-                    "success": false,
-                    "error": msg,
-                }));
-                had_error = true;
-                if args.bail {
-                    break;
-                }
-                continue;
-            }
-        };
-
-        // Execute
-        match client.send(daemon_cmd).await {
-            Ok(data) => {
-                if !output::is_json() {
-                    print_text_result(&data);
-                }
-                results.push(json!({
-                    "command": cmd_str,
-                    "success": true,
-                    "data": data,
-                }));
-            }
-            Err(e) => {
-                let msg = e.to_string();
-                if !output::is_json() {
-                    eprintln!("Error ({}): {}", cmd_str, msg);
-                }
-                results.push(json!({
-                    "command": cmd_str,
-                    "success": false,
-                    "error": msg,
-                }));
-                had_error = true;
-                if args.bail {
-                    break;
-                }
-            }
+        let parsed = ActionParser::try_parse_from(&tokens)
+            .map_err(|e| anyhow!("{line}: {}", e.render().to_string().trim()))?;
+        match parsed.action.plan().with_context(|| line.clone())? {
+            Plan::Run(step) if step.batchable() => steps.push(step),
+            _ => bail!("`{line}` cannot run inside batch. Run it on its own."),
         }
     }
-
-    drop(client);
-
-    if output::is_json() {
-        let envelope = json!({
-            "success": !had_error,
-            "data": { "results": results },
-        });
-        println!("{envelope}");
+    if steps.is_empty() {
+        bail!("No commands to run.");
+    }
+    if steps.iter().map(|step| step.commands.len()).sum::<usize>() > MAX_COMMANDS {
+        bail!("A batch can run at most {MAX_COMMANDS} commands.");
     }
 
-    if had_error {
-        if let Some(enriched) =
-            action::session_health_check(session, &anyhow::anyhow!("batch error")).await
-        {
-            return Err(enriched);
-        }
-        anyhow::bail!("One or more batch commands failed");
-    }
-
-    Ok(())
-}
-
-/// Print a single result value in text mode.
-fn print_text_result(data: &Value) {
-    match data {
-        // Snapshots come back as strings — print directly
-        Value::String(s) => println!("{s}"),
-        // Null means no meaningful output (e.g. press key)
-        Value::Null => {}
-        // Objects/arrays — compact JSON on one line
-        other => {
-            if let Ok(s) = serde_json::to_string(other) {
-                println!("{s}");
-            }
-        }
-    }
+    let mut browser = Browser::open(session, true).await?;
+    browser.execute(steps, diff).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn split(s: &str) -> Vec<String> {
+        split_command_str(s).unwrap()
+    }
+
     #[test]
     fn split_simple() {
-        assert_eq!(split_command_str("click @e3"), vec!["click", "@e3"]);
+        assert_eq!(split("click @e3"), vec!["click", "@e3"]);
     }
 
     #[test]
     fn split_with_flag() {
-        assert_eq!(split_command_str("snapshot -i"), vec!["snapshot", "-i"]);
+        assert_eq!(split("snapshot -i"), vec!["snapshot", "-i"]);
     }
 
     #[test]
     fn split_quoted_value() {
         assert_eq!(
-            split_command_str(r#"fill @e5 "hello world""#),
+            split(r#"fill @e5 "hello world""#),
             vec!["fill", "@e5", "hello world"]
         );
     }
@@ -205,43 +118,139 @@ mod tests {
     #[test]
     fn split_single_quoted() {
         assert_eq!(
-            split_command_str("fill @e5 'hello world'"),
+            split("fill @e5 'hello world'"),
             vec!["fill", "@e5", "hello world"]
         );
     }
 
     #[test]
     fn split_multiple_spaces() {
-        assert_eq!(split_command_str("  click   @e3  "), vec!["click", "@e3"]);
+        assert_eq!(split("  click   @e3  "), vec!["click", "@e3"]);
+        assert_eq!(split("fill e3\tSeoul"), vec!["fill", "e3", "Seoul"]);
     }
 
     #[test]
     fn split_empty() {
-        assert!(split_command_str("").is_empty());
-        assert!(split_command_str("   ").is_empty());
+        assert!(split("").is_empty());
+        assert!(split("   ").is_empty());
     }
 
     #[test]
     fn split_no_quotes_multi_word() {
+        assert_eq!(split("fill @e5 Seoul"), vec!["fill", "@e5", "Seoul"]);
+    }
+
+    #[test]
+    fn apostrophes_inside_words_are_kept() {
         assert_eq!(
-            split_command_str("fill @e5 Seoul"),
-            vec!["fill", "@e5", "Seoul"]
+            split("fill e3 it's fine"),
+            vec!["fill", "e3", "it's", "fine"]
+        );
+        assert_eq!(
+            split("fill e3 'it's fine'"),
+            vec!["fill", "e3", "it's fine"]
+        );
+        assert_eq!(
+            split(r#"fill e3 "it's fine""#),
+            vec!["fill", "e3", "it's fine"]
         );
     }
 
     #[test]
-    fn print_text_string() {
-        // Just ensure it doesn't panic — actual stdout testing is integration-level
-        print_text_result(&Value::String("hello".to_string()));
+    fn quotes_inside_words_are_kept() {
+        assert_eq!(
+            split(r#"eval document.querySelector("h1").textContent"#),
+            vec!["eval", r#"document.querySelector("h1").textContent"#]
+        );
+        assert_eq!(
+            split(r#"eval "document.querySelector("h1").textContent""#),
+            vec!["eval", r#"document.querySelector("h1").textContent"#]
+        );
+        assert_eq!(
+            split("eval 'document.querySelector('h1').textContent'"),
+            vec!["eval", "document.querySelector('h1').textContent"]
+        );
     }
 
     #[test]
-    fn print_text_null() {
-        print_text_result(&Value::Null);
+    fn empty_quotes_make_an_empty_argument() {
+        assert_eq!(split(r#"fill e3 """#), vec!["fill", "e3", ""]);
+        assert_eq!(split("fill e3 ''"), vec!["fill", "e3", ""]);
     }
 
     #[test]
-    fn print_text_object() {
-        print_text_result(&json!({"clicked": "@e3"}));
+    fn double_quotes_take_escapes_and_attach_to_flags() {
+        assert_eq!(
+            split(r#"fill e3 "say \"hi\" \\o/""#),
+            vec!["fill", "e3", r#"say "hi" \o/"#]
+        );
+        assert_eq!(
+            split(r#"find button --name="Save draft""#),
+            vec!["find", "button", "--name=Save draft"]
+        );
+        assert_eq!(
+            split("wait --text='Signed in'"),
+            vec!["wait", "--text=Signed in"]
+        );
+        assert_eq!(split(r"fill e3 C:\temp"), vec!["fill", "e3", r"C:\temp"]);
+    }
+
+    #[test]
+    fn unclosed_quotes_are_errors() {
+        assert!(split_command_str(r#"fill e3 "abc"#).is_err());
+        assert!(split_command_str("fill e3 'abc").is_err());
+    }
+
+    #[tokio::test]
+    async fn rejects_commands_that_must_run_alone() {
+        for line in [
+            "tab switch t2",
+            "tab new",
+            "tab close",
+            "dialog accept",
+            "status x-1",
+        ] {
+            let err = run(
+                Args {
+                    commands: vec![line.to_string()],
+                    bail: false,
+                },
+                Some("unused"),
+                false,
+            )
+            .await
+            .unwrap_err();
+            assert!(
+                err.to_string().contains("cannot run inside batch"),
+                "{line}: {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_removed_and_invalid_commands_before_starting_a_session() {
+        let err = run(
+            Args {
+                commands: vec!["cookies".to_string()],
+                bail: false,
+            },
+            Some("unused"),
+            false,
+        )
+        .await
+        .unwrap_err();
+        assert!(format!("{err:#}").contains("was removed in 0.5"));
+
+        let err = run(
+            Args {
+                commands: vec!["fly away".to_string()],
+                bail: false,
+            },
+            Some("unused"),
+            false,
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().starts_with("fly away:"));
     }
 }

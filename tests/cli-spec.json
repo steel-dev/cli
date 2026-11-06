@@ -18,31 +18,6 @@
 			]
 		},
 		{ "name": "cache" },
-		{
-			"name": "checkpoint",
-			"subcommands": [
-				{ "name": "delete" },
-				{ "name": "get" },
-				{ "name": "list" },
-				{ "name": "restore" }
-			]
-		},
-		{
-			"name": "computer",
-			"subcommands": [
-				{ "name": "checkpoint" },
-				{ "name": "create" },
-				{ "name": "delete" },
-				{ "name": "exec" },
-				{ "name": "get" },
-				{ "name": "list" },
-				{ "name": "pause" },
-				{ "name": "quota" },
-				{ "name": "resume" },
-				{ "name": "ssh" },
-				{ "name": "use" }
-			]
-		},
 		{ "name": "config" },
 		{
 			"name": "credentials",
@@ -61,16 +36,6 @@
 				{ "name": "stop" }
 			]
 		},
-		{
-			"name": "environment",
-			"subcommands": [
-				{ "name": "create" },
-				{ "name": "delete" },
-				{ "name": "get" },
-				{ "name": "list" },
-				{ "name": "update" }
-			]
-		},
 		{ "name": "forge" },
 		{ "name": "login" },
 		{ "name": "logout" },
@@ -86,16 +51,6 @@
 		},
 		{ "name": "scrape" },
 		{ "name": "screenshot" },
-		{
-			"name": "secret",
-			"subcommands": [
-				{ "name": "create" },
-				{ "name": "delete" },
-				{ "name": "get" },
-				{ "name": "list" },
-				{ "name": "update" }
-			]
-		},
 		{ "name": "update" }
 	]
 }

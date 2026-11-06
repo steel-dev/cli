@@ -1,11 +1,9 @@
 use clap::{Parser, Subcommand};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::api::client::SteelClient;
-use crate::browser::daemon::client::DaemonClient;
-use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
-use crate::browser::lifecycle;
-use crate::util::{api, output};
+use crate::browser::state::BrowserSession;
+use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -27,10 +25,6 @@ impl Command {
 
 #[derive(Parser)]
 pub struct SolveArgs {
-    /// Explicit session ID (overrides --session name lookup)
-    #[arg(long)]
-    pub session_id: Option<String>,
-
     /// Page ID
     #[arg(long)]
     pub page_id: Option<String>,
@@ -46,10 +40,6 @@ pub struct SolveArgs {
 
 #[derive(Parser)]
 pub struct StatusArgs {
-    /// Explicit session ID (overrides --session name lookup)
-    #[arg(long)]
-    pub session_id: Option<String>,
-
     /// Page ID
     #[arg(long)]
     pub page_id: Option<String>,
@@ -74,114 +64,230 @@ pub async fn run(command: Command, session: Option<&str>) -> anyhow::Result<()> 
     }
 }
 
-/// Resolve session_id: explicit --session-id flag, or query daemon.
-async fn resolve_session_id(
-    explicit_session_id: Option<&str>,
-    session: Option<&str>,
-) -> anyhow::Result<String> {
-    if let Some(id) = explicit_session_id {
-        let trimmed = id.trim();
-        if !trimmed.is_empty() {
-            return Ok(trimmed.to_string());
-        }
-    }
-
-    let session_name = session.unwrap_or("default");
-    let mut client = DaemonClient::connect(session_name).await.map_err(|_| {
-        anyhow::anyhow!(
-            "No running session \"{session_name}\". \
-             Pass `--session-id`, or start a session with `steel browser start`."
-        )
-    })?;
-
-    let data = client.send(DaemonCommand::GetSessionInfo).await?;
-    let info: SessionInfo = serde_json::from_value(data)?;
-    Ok(info.session_id)
+fn client_for(session: Option<&str>) -> anyhow::Result<(SteelClient, BrowserSession)> {
+    let target = super::existing_session(session)?;
+    let client = SteelClient::new()?.at(&target.api_url, target.mode);
+    Ok((client, target))
 }
 
 async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
-    let client = SteelClient::new()?;
+    let (client, target) = client_for(session)?;
+    let (mode, session_id) = (target.mode, target.id);
 
-    let session_id = resolve_session_id(args.session_id.as_deref(), session).await?;
+    let raw = client
+        .solve_captcha(
+            &session_id,
+            args.page_id.as_deref(),
+            args.url.as_deref(),
+            args.task_id.as_deref(),
+        )
+        .await?;
+    let success = raw["success"].as_bool().unwrap_or(false);
+    let message = raw["message"].as_str();
 
-    let result = lifecycle::solve_captcha(
-        &client,
-        &base_url,
-        mode,
-        &auth,
-        &session_id,
-        args.page_id.as_deref(),
-        args.url.as_deref(),
-        args.task_id.as_deref(),
-    )
-    .await?;
+    let mut data = json!({
+        "sessionId": session_id,
+        "mode": mode.to_string(),
+        "success": success,
+    });
+    if let Some(msg) = message {
+        data["message"] = json!(msg);
+    }
 
-    if output::is_json() {
-        let mut data = json!({
-            "sessionId": result.session_id,
-            "mode": result.mode.to_string(),
-            "success": result.success,
-        });
-        if let Some(ref msg) = result.message {
-            data["message"] = json!(msg);
-        }
-        output::success_data(data);
-    } else {
-        println!("session_id: {}", result.session_id);
-        println!("mode: {}", result.mode);
-        println!("success: {}", result.success);
-        if let Some(ref msg) = result.message {
+    if !output::is_json() {
+        println!("session_id: {session_id}");
+        println!("mode: {mode}");
+        println!("success: {success}");
+        if let Some(msg) = message {
             println!("message: {msg}");
         }
     }
 
-    if !result.success {
-        anyhow::bail!("CAPTCHA solve failed");
+    if !success {
+        let reason = message.map_or_else(String::new, |msg| format!(": {msg}"));
+        return Err(output::fail(
+            "captcha_not_solved",
+            &format!("CAPTCHA solve failed{reason}"),
+            Some(&data),
+        ));
     }
 
+    if output::is_json() {
+        output::success_data(data);
+    }
     Ok(())
 }
 
 async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
-    let client = SteelClient::new()?;
+    let (client, target) = client_for(session)?;
+    let session_id = target.id;
 
-    let session_id = resolve_session_id(args.session_id.as_deref(), session).await?;
-
-    let result = lifecycle::captcha_status(
-        &client,
-        &base_url,
-        mode,
-        &auth,
-        &session_id,
-        args.page_id.as_deref(),
-        args.wait,
-        args.timeout,
-        args.interval,
-    )
-    .await?;
-
-    if output::is_json() {
-        let mut data = json!({
-            "status": result.status,
-        });
-        if !result.types.is_empty() {
-            data["types"] = json!(result.types);
+    let timeout = args.timeout.unwrap_or(60_000);
+    let interval = args.interval.unwrap_or(1_000);
+    let started = std::time::Instant::now();
+    let (status, types) = loop {
+        let pages = client
+            .captcha_status(&session_id, args.page_id.as_deref())
+            .await?;
+        let (status, types) = normalize_captcha_status(&pages);
+        if !args.wait || is_terminal_captcha_status(&status) {
+            break (status, types);
         }
-        output::success_data(data);
-    } else {
-        let type_suffix = if result.types.is_empty() {
+        if started.elapsed().as_millis() >= u128::from(timeout) {
+            anyhow::bail!(
+                "CAPTCHA status polling timed out after {timeout}ms. Last status: {status}"
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(interval)).await;
+    };
+
+    let mut data = json!({
+        "status": status,
+    });
+    if !types.is_empty() {
+        data["types"] = json!(types);
+    }
+
+    if !output::is_json() {
+        let type_suffix = if types.is_empty() {
             String::new()
         } else {
-            format!(" {}", result.types.join(","))
+            format!(" {}", types.join(","))
         };
-        println!("{}{type_suffix}", result.status);
+        println!("{status}{type_suffix}");
     }
 
-    if result.status != "solved" && result.status != "none" {
-        anyhow::bail!("CAPTCHA status: {}", result.status);
+    if status != "solved" && status != "none" {
+        return Err(output::fail(
+            &format!("captcha_{status}"),
+            &format!("CAPTCHA status: {status}"),
+            Some(&data),
+        ));
     }
 
+    if output::is_json() {
+        output::success_data(data);
+    }
     Ok(())
+}
+
+const KNOWN_CAPTCHA_TYPES: &[&str] = &["recaptchaV2", "recaptchaV3", "turnstile", "image_to_text"];
+
+fn normalize_captcha_status(pages: &[Value]) -> (String, Vec<String>) {
+    if pages.is_empty() {
+        return ("none".to_string(), vec![]);
+    }
+
+    let mut all_tasks: Vec<&Value> = Vec::new();
+    let mut any_solving = false;
+
+    for page in pages {
+        if page.get("isSolvingCaptcha").and_then(|v| v.as_bool()) == Some(true) {
+            any_solving = true;
+        }
+
+        if let Some(tasks) = page.get("tasks").and_then(|v| v.as_array()) {
+            for task in tasks {
+                if task.is_object() {
+                    all_tasks.push(task);
+                }
+            }
+        }
+    }
+
+    if all_tasks.is_empty() {
+        let status = if any_solving { "solving" } else { "none" };
+        return (status.to_string(), vec![]);
+    }
+
+    let mut solving_types: Vec<String> = Vec::new();
+    let mut failed_types: Vec<String> = Vec::new();
+    let mut has_solving = false;
+    let mut has_failed = false;
+    let mut has_solved = false;
+
+    for task in &all_tasks {
+        let task_status = task.get("status").and_then(|v| v.as_str()).unwrap_or("");
+        let task_type = task.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        let is_known = KNOWN_CAPTCHA_TYPES.contains(&task_type);
+
+        match task_status {
+            "solving" | "detected" | "validating" => {
+                has_solving = true;
+                if is_known && !solving_types.contains(&task_type.to_string()) {
+                    solving_types.push(task_type.to_string());
+                }
+            }
+            "failed_to_solve" | "failed_to_detect" | "validation_failed" => {
+                has_failed = true;
+                if is_known && !failed_types.contains(&task_type.to_string()) {
+                    failed_types.push(task_type.to_string());
+                }
+            }
+            "solved" => {
+                has_solved = true;
+            }
+            _ => {}
+        }
+    }
+
+    if has_solving || any_solving {
+        return ("solving".to_string(), solving_types);
+    }
+
+    if has_failed {
+        return ("failed".to_string(), failed_types);
+    }
+
+    if has_solved {
+        return ("solved".to_string(), vec![]);
+    }
+
+    ("none".to_string(), vec![])
+}
+
+fn is_terminal_captcha_status(status: &str) -> bool {
+    matches!(status, "solved" | "failed" | "none")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_captcha_none() {
+        let (status, types) = normalize_captcha_status(&[]);
+        assert_eq!(status, "none");
+        assert!(types.is_empty());
+    }
+
+    #[test]
+    fn normalize_captcha_solving() {
+        let pages = vec![json!({
+            "isSolvingCaptcha": true,
+            "tasks": [{"status": "solving", "type": "turnstile"}]
+        })];
+        let (status, types) = normalize_captcha_status(&pages);
+        assert_eq!(status, "solving");
+        assert_eq!(types, vec!["turnstile"]);
+    }
+
+    #[test]
+    fn normalize_captcha_solved() {
+        let pages = vec![json!({
+            "tasks": [{"status": "solved", "type": "recaptchaV2"}]
+        })];
+        let (status, _types) = normalize_captcha_status(&pages);
+        assert_eq!(status, "solved");
+    }
+
+    #[test]
+    fn normalize_captcha_failed() {
+        let pages = vec![json!({
+            "tasks": [{"status": "failed_to_solve", "type": "turnstile"}]
+        })];
+        let (status, types) = normalize_captcha_status(&pages);
+        assert_eq!(status, "failed");
+        assert_eq!(types, vec!["turnstile"]);
+    }
 }

@@ -239,11 +239,32 @@ fn http() -> Result<reqwest::Client> {
         .build()?)
 }
 
+/// OAuth endpoints take `application/x-www-form-urlencoded` bodies.
+fn form(request: reqwest::RequestBuilder, fields: &[(&str, &str)]) -> reqwest::RequestBuilder {
+    let body = url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(fields)
+        .finish();
+    request
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        )
+        .body(body)
+}
+
 async fn exchange(
     settings: &Settings,
     fields: &[(&str, &str)],
 ) -> Result<std::result::Result<TokenResponse, String>> {
-    let response = http()?.post(format!("{}/api/auth/oauth2/token", settings.issuer)).form(fields).send().await.context("Could not reach auth service; resume pending login or reauthorize an interrupted refresh")?;
+    let response = form(
+        http()?.post(format!("{}/api/auth/oauth2/token", settings.issuer)),
+        fields,
+    )
+    .send()
+    .await
+    .context(
+        "Could not reach auth service; resume pending login or reauthorize an interrupted refresh",
+    )?;
     let success = response.status().is_success();
     let body: serde_json::Value = response
         .json()
@@ -336,19 +357,22 @@ pub async fn login(no_wait: bool, no_browser: bool, resume: bool) -> Result<bool
         if resume {
             bail!("No pending login; run steel login");
         }
-        let response = http()?
+        let request = http()?
             .post(format!("{}/api/auth/device/code", state.settings.issuer))
             .header("x-steel-device-installation", &state.installation_id)
             .header("x-steel-device-version", env!("CARGO_PKG_VERSION"))
-            .header("x-steel-device-platform", std::env::consts::OS)
-            .form(&[
+            .header("x-steel-device-platform", std::env::consts::OS);
+        let response = form(
+            request,
+            &[
                 ("client_id", CLIENT_ID),
                 ("scope", "openid offline_access steel"),
                 ("resource", state.settings.audience.as_str()),
-            ])
-            .send()
-            .await
-            .context("Could not reach device authorization endpoint")?;
+            ],
+        )
+        .send()
+        .await
+        .context("Could not reach device authorization endpoint")?;
         if !response.status().is_success() {
             bail!(
                 "Device authorization rejected (HTTP {}); check issuer, audience and client registration",
@@ -512,16 +536,17 @@ pub async fn logout(local_only: bool) -> Result<bool> {
     };
     state.settings.validate()?;
     if let Some(refresh) = state.tokens.and_then(|t| t.refresh_token) {
-        let response = http()?
-            .post(format!("{}/api/auth/oauth2/revoke", state.settings.issuer))
-            .form(&[
+        let response = form(
+            http()?.post(format!("{}/api/auth/oauth2/revoke", state.settings.issuer)),
+            &[
                 ("token", refresh.as_str()),
                 ("client_id", CLIENT_ID),
                 ("token_type_hint", "refresh_token"),
-            ])
-            .send()
-            .await
-            .context("Revocation unreachable; local state retained for retry")?;
+            ],
+        )
+        .send()
+        .await
+        .context("Revocation unreachable; local state retained for retry")?;
         if !response.status().is_success() {
             bail!(
                 "Revocation failed (HTTP {}); local state retained",

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -12,12 +12,10 @@ use crate::api::generated::{
     GetSessionAgentLogsQuery, GetSessionAgentTracesQuery, GetSessionLogsQuery, GetSessionsQuery,
     ReleaseAllSessionsQuery,
 };
-use crate::browser::daemon::client::DaemonClient;
-use crate::browser::daemon::protocol::{DaemonCommand, SessionInfo};
 use crate::config::auth::Auth;
 use crate::config::settings::ApiMode;
 use crate::status;
-use crate::util::{api, output};
+use crate::util::{metadata, output};
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -27,6 +25,9 @@ pub enum Command {
     /// Get one cloud session
     Get(GetArgs),
 
+    /// Show or change a session's metadata
+    Metadata(MetadataArgs),
+
     /// Release a cloud session
     Release(ReleaseArgs),
 
@@ -34,7 +35,7 @@ pub enum Command {
     Logs(LogsArgs),
 
     /// Read raw CDP-derived agent events for a session
-    AgentLogs(LogsArgs),
+    AgentLogs(AgentLogsArgs),
 
     /// Read semantic agent trace timeline for a session
     Traces(TracesArgs),
@@ -45,6 +46,7 @@ impl Command {
         match self {
             Self::List(_) => "list",
             Self::Get(_) => "get",
+            Self::Metadata(_) => "metadata",
             Self::Release(_) => "release",
             Self::Logs(_) => "logs",
             Self::AgentLogs(_) => "agent-logs",
@@ -66,6 +68,52 @@ pub struct ListArgs {
     /// Filter by status: live, released, or failed
     #[arg(long)]
     pub status: Option<String>,
+
+    /// Filter by metadata KEY=VALUE, repeatable; all must match
+    #[arg(long, value_name = "KEY=VALUE", value_parser = metadata::parse_pair)]
+    pub metadata: Vec<(String, String)>,
+
+    /// Filter by signal, repeatable or comma-separated; all must match. Signals arrive after the session ends: captcha_encountered, proxy_connection_failed, session_timeout_exceeded, bot_detection_triggered, context_restored
+    #[arg(long, value_delimiter = ',')]
+    pub signal: Vec<String>,
+
+    /// Filter by release reason: user_requested, timeout, inactivity_timeout, creation_timeout, startup_failed, browser_closed, or browser_crashed
+    #[arg(long)]
+    pub release_reason: Option<String>,
+
+    /// Only sessions created at or after this ISO 8601 timestamp
+    #[arg(long)]
+    pub created_after: Option<String>,
+
+    /// Only sessions created before this ISO 8601 timestamp
+    #[arg(long)]
+    pub created_before: Option<String>,
+}
+
+#[derive(Parser)]
+pub struct MetadataArgs {
+    /// Cloud session ID
+    pub session_id: Option<String>,
+
+    /// Resolve session ID from a local browser session name
+    #[arg(long)]
+    pub session: Option<String>,
+
+    /// Set a key as KEY=VALUE, repeatable; other keys are kept
+    #[arg(long, value_name = "KEY=VALUE", value_parser = metadata::parse_pair)]
+    pub set: Vec<(String, String)>,
+
+    /// Remove a key, repeatable
+    #[arg(long, value_name = "KEY")]
+    pub unset: Vec<String>,
+
+    /// Replace all metadata with exactly the --set keys
+    #[arg(long, requires = "set", conflicts_with = "unset")]
+    pub replace: bool,
+
+    /// Remove all metadata
+    #[arg(long, conflicts_with_all = ["set", "unset", "replace"])]
+    pub clear: bool,
 }
 
 #[derive(Parser)]
@@ -73,7 +121,7 @@ pub struct GetArgs {
     /// Cloud session ID
     pub session_id: Option<String>,
 
-    /// Resolve session ID from a local daemon session name
+    /// Resolve session ID from a local browser session name
     #[arg(long)]
     pub session: Option<String>,
 }
@@ -84,10 +132,10 @@ pub struct ReleaseArgs {
     pub session_id: Option<String>,
 
     /// Release all active cloud sessions
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with_all = ["session_id", "session"])]
     pub all: bool,
 
-    /// Resolve session ID from a local daemon session name
+    /// Resolve session ID from a local browser session name
     #[arg(long)]
     pub session: Option<String>,
 }
@@ -97,7 +145,7 @@ pub struct LogsArgs {
     /// Cloud session ID
     pub session_id: Option<String>,
 
-    /// Resolve session ID from a local daemon session name
+    /// Resolve session ID from a local browser session name
     #[arg(long)]
     pub session: Option<String>,
 
@@ -135,11 +183,49 @@ pub struct LogsArgs {
 }
 
 #[derive(Parser)]
+pub struct AgentLogsArgs {
+    /// Cloud session ID
+    pub session_id: Option<String>,
+
+    /// Resolve session ID from a local browser session name
+    #[arg(long)]
+    pub session: Option<String>,
+
+    /// Filter by namespace
+    #[arg(long)]
+    pub namespace: Option<String>,
+
+    /// ISO timestamp lower bound
+    #[arg(long)]
+    pub start_time: Option<String>,
+
+    /// Alias for --start-time
+    #[arg(long)]
+    pub since: Option<String>,
+
+    /// ISO timestamp upper bound
+    #[arg(long)]
+    pub end_time: Option<String>,
+
+    /// Event type filter, repeatable or comma-separated
+    #[arg(long, value_delimiter = ',')]
+    pub event_type: Vec<String>,
+
+    /// Number of events to return
+    #[arg(long)]
+    pub limit: Option<u16>,
+
+    /// Pagination offset
+    #[arg(long)]
+    pub offset: Option<u32>,
+}
+
+#[derive(Parser)]
 pub struct TracesArgs {
     /// Cloud session ID
     pub session_id: Option<String>,
 
-    /// Resolve session ID from a local daemon session name
+    /// Resolve session ID from a local browser session name
     #[arg(long)]
     pub session: Option<String>,
 
@@ -178,6 +264,7 @@ pub async fn run(command: Command) -> Result<()> {
     match command {
         Command::List(args) => run_list(args).await,
         Command::Get(args) => run_get(args).await,
+        Command::Metadata(args) => run_metadata(args).await,
         Command::Release(args) => run_release(args).await,
         Command::Logs(args) => run_logs(args, StreamKind::Logs, "logs").await,
         Command::AgentLogs(args) => run_agent_logs(args).await,
@@ -186,20 +273,20 @@ pub async fn run(command: Command) -> Result<()> {
 }
 
 async fn run_list(args: ListArgs) -> Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
+    let metadata = metadata::collect_filters(args.metadata)?;
     let client = SteelClient::new()?;
     let data = client
-        .cli_get_sessions(
-            &base_url,
-            mode,
-            &auth,
-            &GetSessionsQuery {
-                cursor_id: args.cursor_id,
-                limit: args.limit,
-                status: args.status,
-                project_id: None,
-            },
-        )
+        .cli_get_sessions(&GetSessionsQuery {
+            cursor_id: args.cursor_id,
+            limit: args.limit,
+            status: args.status,
+            release_reason: args.release_reason,
+            project_id: None,
+            created_after: args.created_after,
+            created_before: args.created_before,
+            signal: args.signal,
+            metadata,
+        })
         .await?;
 
     if output::is_json() {
@@ -211,25 +298,109 @@ async fn run_list(args: ListArgs) -> Result<()> {
 }
 
 async fn run_get(args: GetArgs) -> Result<()> {
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
-    let (mode, base_url, auth) = api::resolve_with_auth();
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let client = SteelClient::new()?;
-    let data = client
-        .cli_get_session(&base_url, mode, &auth, &session_id)
-        .await?;
+    let data = client.cli_get_session(&session_id).await?;
 
     output::success_data(data);
     Ok(())
 }
 
+enum MetadataChange {
+    Show,
+    Update(serde_json::Map<String, Value>),
+    Replace(BTreeMap<String, String>),
+}
+
+fn metadata_change(args: MetadataArgs) -> Result<MetadataChange> {
+    if args.clear {
+        return Ok(MetadataChange::Replace(BTreeMap::new()));
+    }
+    let set = metadata::collect(args.set)?;
+    if args.replace {
+        return Ok(MetadataChange::Replace(set));
+    }
+    if set.is_empty() && args.unset.is_empty() {
+        return Ok(MetadataChange::Show);
+    }
+    let mut patch: serde_json::Map<String, Value> = set
+        .into_iter()
+        .map(|(key, value)| (key, Value::String(value)))
+        .collect();
+    for key in args.unset {
+        if patch.contains_key(&key) {
+            anyhow::bail!("Metadata key \"{key}\" is given more than once.");
+        }
+        patch.insert(key, Value::Null);
+    }
+    Ok(MetadataChange::Update(patch))
+}
+
+async fn apply_metadata_change(
+    client: &SteelClient,
+    session_id: &str,
+    change: MetadataChange,
+) -> Result<Value> {
+    let data = match change {
+        MetadataChange::Show => client.cli_get_session(session_id).await?,
+        MetadataChange::Update(patch) => {
+            client
+                .cli_update_session_metadata(session_id, json!({ "metadata": patch }))
+                .await?
+        }
+        MetadataChange::Replace(metadata) => {
+            client
+                .cli_replace_session_metadata(session_id, json!({ "metadata": metadata }))
+                .await?
+        }
+    };
+    Ok(data
+        .get("metadata")
+        .filter(|metadata| metadata.is_object())
+        .cloned()
+        .unwrap_or_else(|| json!({})))
+}
+
+async fn run_metadata(args: MetadataArgs) -> Result<()> {
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
+    let change = metadata_change(args)?;
+    let client = SteelClient::new()?;
+    let metadata = apply_metadata_change(&client, &session_id, change).await?;
+
+    if output::is_json() {
+        output::success_data(json!({ "metadata": metadata }));
+        return Ok(());
+    }
+    let lines = metadata_lines(&metadata);
+    if lines.is_empty() {
+        println!("No metadata.");
+    } else {
+        println!("{}", lines.join("\n"));
+    }
+    Ok(())
+}
+
+fn metadata_lines(metadata: &Value) -> Vec<String> {
+    metadata
+        .as_object()
+        .map(|entries| {
+            entries
+                .iter()
+                .map(|(key, value)| match value.as_str() {
+                    Some(text) => format!("{key}={text}"),
+                    None => format!("{key}={value}"),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 async fn run_release(args: ReleaseArgs) -> Result<()> {
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     if args.all {
         let data = client
-            .cli_release_all_sessions(&base_url, mode, &auth, &ReleaseAllSessionsQuery::default())
+            .cli_release_all_sessions(&ReleaseAllSessionsQuery::default())
             .await?;
         if output::is_json() {
             output::success_data(data);
@@ -239,11 +410,8 @@ async fn run_release(args: ReleaseArgs) -> Result<()> {
         return Ok(());
     }
 
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
-    let data = client
-        .cli_release_session(&base_url, mode, &auth, &session_id)
-        .await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
+    let data = client.cli_release_session(&session_id).await?;
 
     if output::is_json() {
         output::success_data(data);
@@ -254,8 +422,7 @@ async fn run_release(args: ReleaseArgs) -> Result<()> {
 }
 
 async fn run_logs(args: LogsArgs, stream_kind: StreamKind, label: &str) -> Result<()> {
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let query = GetSessionLogsQuery {
         namespace: args.namespace,
         start_time: args.start_time.or(args.since),
@@ -264,31 +431,18 @@ async fn run_logs(args: LogsArgs, stream_kind: StreamKind, label: &str) -> Resul
         limit: args.limit,
         offset: args.offset,
     };
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
-    let data = client
-        .cli_get_session_logs(&base_url, mode, &auth, &session_id, &query)
-        .await?;
+    let data = client.cli_get_session_logs(&session_id, &query).await?;
 
     print_event_response(&data, label);
     if args.follow {
-        follow_if_live(
-            &client,
-            &base_url,
-            mode,
-            &auth,
-            &session_id,
-            stream_kind,
-            &data,
-        )
-        .await?;
+        follow_if_live(&client, &session_id, stream_kind, &data).await?;
     }
     Ok(())
 }
 
-async fn run_agent_logs(args: LogsArgs) -> Result<()> {
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
+async fn run_agent_logs(args: AgentLogsArgs) -> Result<()> {
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let query = GetSessionAgentLogsQuery {
         namespace: args.namespace,
         start_time: args.start_time.or(args.since),
@@ -297,10 +451,9 @@ async fn run_agent_logs(args: LogsArgs) -> Result<()> {
         limit: args.limit,
         offset: args.offset,
     };
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
     let data = client
-        .cli_get_session_agent_logs(&base_url, mode, &auth, &session_id, &query)
+        .cli_get_session_agent_logs(&session_id, &query)
         .await?;
 
     print_event_response(&data, "agent logs");
@@ -308,67 +461,58 @@ async fn run_agent_logs(args: LogsArgs) -> Result<()> {
 }
 
 async fn run_traces(args: TracesArgs) -> Result<()> {
-    let session_id =
-        resolve_session_id(args.session_id.as_deref(), args.session.as_deref()).await?;
+    let session_id = resolve_session_id(args.session_id.as_deref(), args.session.as_deref())?;
     let query = GetSessionAgentTracesQuery {
         namespace: args.namespace,
         start_time: args.start_time.or(args.since),
         end_time: args.end_time,
         event_types: args.event_type,
+        limit: None,
+        offset: None,
     };
-    let (mode, base_url, auth) = api::resolve_with_auth();
     let client = SteelClient::new()?;
     let data = client
-        .cli_get_session_agent_traces(&base_url, mode, &auth, &session_id, &query)
+        .cli_get_session_agent_traces(&session_id, &query)
         .await?;
 
     print_event_response(&data, "traces");
     if args.follow {
-        follow_if_live(
-            &client,
-            &base_url,
-            mode,
-            &auth,
-            &session_id,
-            StreamKind::Traces,
-            &data,
-        )
-        .await?;
+        follow_if_live(&client, &session_id, StreamKind::Traces, &data).await?;
     }
     Ok(())
 }
 
-async fn resolve_session_id(
-    session_id: Option<&str>,
-    session_name: Option<&str>,
-) -> Result<String> {
-    if let Some(id) = session_id.map(str::trim).filter(|id| !id.is_empty()) {
-        return Ok(id.to_string());
+fn resolve_session_id(session_id: Option<&str>, session: Option<&str>) -> Result<String> {
+    match (
+        session_id.map(str::trim).filter(|id| !id.is_empty()),
+        session,
+    ) {
+        (Some(id), _) => {
+            if !is_valid_session_id(id) {
+                anyhow::bail!("Invalid session ID: {id}");
+            }
+            Ok(id.to_string())
+        }
+        (None, Some(session)) => Ok(super::browser::existing_session(Some(session))?.id),
+        (None, None) => anyhow::bail!("Missing session ID. Pass <session-id> or --session <name>."),
     }
+}
 
-    let Some(name) = session_name.map(str::trim).filter(|name| !name.is_empty()) else {
-        anyhow::bail!("Missing session ID. Pass <session-id> or --session <name>.");
-    };
-
-    let mut client = DaemonClient::connect(name)
-        .await
-        .with_context(|| format!("No running local browser session named \"{name}\"."))?;
-    let data = client.send(DaemonCommand::GetSessionInfo).await?;
-    let info: SessionInfo = serde_json::from_value(data)?;
-    Ok(info.session_id)
+fn is_valid_session_id(id: &str) -> bool {
+    !matches!(id, "." | "..")
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 async fn follow_if_live(
     client: &SteelClient,
-    base_url: &str,
-    mode: ApiMode,
-    auth: &Auth,
     session_id: &str,
     stream_kind: StreamKind,
     historical: &Value,
 ) -> Result<()> {
     let session = client
-        .cli_get_session(base_url, mode, auth, session_id)
+        .cli_get_session(session_id)
         .await
         .unwrap_or_else(|_| json!({}));
 
@@ -380,14 +524,20 @@ async fn follow_if_live(
     }
 
     let mut seen = event_ids(historical);
-    let url = build_ws_url(base_url, mode, auth, stream_kind, session_id)?;
+    let url = build_ws_url(
+        client.base_url(),
+        client.mode(),
+        client.auth(),
+        stream_kind,
+        session_id,
+    )?;
     status!("Following live session {session_id}. Press Ctrl-C to stop.");
 
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     let mut request = url.as_str().into_client_request()?;
-    if auth.access_token.is_some() {
-        crate::config::device::validate_websocket_transport(base_url, &url)?;
-        let token = crate::config::device::access_token_for(base_url).await?;
+    if client.auth().access_token.is_some() {
+        crate::config::device::validate_websocket_transport(client.base_url(), &url)?;
+        let token = crate::config::device::access_token_for(client.base_url()).await?;
         request
             .headers_mut()
             .insert("Authorization", format!("Bearer {token}").parse()?);
@@ -498,27 +648,53 @@ fn print_sessions(data: &Value) {
     let sessions = session_values(data);
     if sessions.is_empty() {
         println!("No cloud sessions found.");
-        return;
+    } else {
+        output::print_table(
+            &["ID", "STATUS", "CREATED", "SIGNALS"],
+            &session_rows(&sessions),
+        );
     }
+    if let Some(cursor) = next_cursor(data) {
+        status!("More sessions. Next page: --cursor-id {cursor}");
+    }
+}
 
-    let max_id = sessions
+fn session_rows(sessions: &[Value]) -> Vec<Vec<String>> {
+    sessions
         .iter()
-        .filter_map(|s| s.get("id").and_then(Value::as_str))
-        .map(str::len)
-        .max()
-        .unwrap_or(2)
-        .max(2);
-    println!("{:<max_id$}  {:<10}  CREATED", "ID", "STATUS");
-    for session in sessions {
-        let id = session.get("id").and_then(Value::as_str).unwrap_or("-");
-        let status = session.get("status").and_then(Value::as_str).unwrap_or("-");
-        let created = session
-            .get("createdAt")
-            .or_else(|| session.get("created_at"))
-            .and_then(Value::as_str)
-            .unwrap_or("-");
-        println!("{id:<max_id$}  {status:<10}  {created}");
-    }
+        .map(|session| {
+            let text =
+                |value: Option<&Value>| value.and_then(Value::as_str).unwrap_or("-").to_string();
+            let signals = session
+                .get("signals")
+                .and_then(Value::as_array)
+                .map(|signals| {
+                    signals
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .filter(|signals| !signals.is_empty())
+                .unwrap_or_else(|| "-".to_string());
+            vec![
+                text(session.get("id")),
+                text(session.get("status")),
+                text(
+                    session
+                        .get("createdAt")
+                        .or_else(|| session.get("created_at")),
+                ),
+                signals,
+            ]
+        })
+        .collect()
+}
+
+fn next_cursor(data: &Value) -> Option<&str> {
+    data.get("nextCursor")
+        .and_then(Value::as_str)
+        .filter(|cursor| !cursor.is_empty())
 }
 
 fn session_values(data: &Value) -> Vec<Value> {
@@ -623,8 +799,8 @@ mod tests {
             ApiMode::Cloud,
             &Auth {
                 api_key: Some("sk_test".into()),
-                source: crate::config::auth::AuthSource::Env,
                 access_token: None,
+                source: crate::config::auth::AuthSource::Env,
             },
             StreamKind::Traces,
             "sess",
@@ -643,8 +819,8 @@ mod tests {
             ApiMode::Local,
             &Auth {
                 api_key: Some("sk_test".into()),
-                source: crate::config::auth::AuthSource::Env,
                 access_token: None,
+                source: crate::config::auth::AuthSource::Env,
             },
             StreamKind::Logs,
             "sess",
@@ -657,8 +833,297 @@ mod tests {
     }
 
     #[test]
+    fn session_ids_cannot_change_the_request_path() {
+        assert!(is_valid_session_id("4f7c2b1e-9a3d-4e5f-8b6a-1c2d3e4f5a6b"));
+        assert!(is_valid_session_id("sess_1.v2"));
+        for id in ["x/..", "..", ".", "a?b", "a#b", "a%2fb", "a b"] {
+            assert!(!is_valid_session_id(id), "{id}");
+        }
+        assert!(resolve_session_id(Some("x/.."), None).is_err());
+        assert!(resolve_session_id(Some("  "), None).is_err());
+    }
+
+    #[test]
+    fn release_all_conflicts_with_a_session() {
+        assert!(ReleaseArgs::try_parse_from(["release", "--all"]).is_ok());
+        assert!(ReleaseArgs::try_parse_from(["release", "abc", "--all"]).is_err());
+        assert!(ReleaseArgs::try_parse_from(["release", "--session", "work", "--all"]).is_err());
+    }
+
+    #[test]
     fn event_values_extracts_events_array() {
         let values = event_values(&json!({"events": [{"id": "1"}, {"id": "2"}]}));
         assert_eq!(values.len(), 2);
+    }
+
+    #[test]
+    fn session_rows_show_signals_and_dashes_for_none() {
+        let rows = session_rows(&[
+            json!({"id": "s1", "status": "released", "createdAt": "2026-11-01T00:00:00Z", "signals": ["captcha_encountered", "bot_detection_triggered"]}),
+            json!({"id": "s2", "status": "live", "signals": []}),
+        ]);
+        assert_eq!(
+            rows,
+            vec![
+                vec![
+                    "s1".to_string(),
+                    "released".to_string(),
+                    "2026-11-01T00:00:00Z".to_string(),
+                    "captcha_encountered,bot_detection_triggered".to_string(),
+                ],
+                vec![
+                    "s2".to_string(),
+                    "live".to_string(),
+                    "-".to_string(),
+                    "-".to_string(),
+                ],
+            ]
+        );
+    }
+
+    #[test]
+    fn next_cursor_ignores_missing_and_empty_cursors() {
+        assert_eq!(next_cursor(&json!({"nextCursor": "c2"})), Some("c2"));
+        assert_eq!(next_cursor(&json!({"nextCursor": null})), None);
+        assert_eq!(next_cursor(&json!({"nextCursor": ""})), None);
+        assert_eq!(next_cursor(&json!({})), None);
+    }
+
+    fn pair(key: &str, value: &str) -> (String, String) {
+        (key.to_string(), value.to_string())
+    }
+
+    fn parse_change(args: &[&str]) -> Result<MetadataChange> {
+        let args =
+            MetadataArgs::try_parse_from(std::iter::once("metadata").chain(args.iter().copied()))?;
+        metadata_change(args)
+    }
+
+    #[test]
+    fn metadata_without_changes_only_reads() {
+        assert!(matches!(
+            parse_change(&["s1"]).unwrap(),
+            MetadataChange::Show
+        ));
+    }
+
+    #[test]
+    fn metadata_set_and_unset_become_one_patch() {
+        let MetadataChange::Update(patch) =
+            parse_change(&["s1", "--set", "outcome=failed", "--unset", "retry"]).unwrap()
+        else {
+            panic!("expected an update");
+        };
+        assert_eq!(
+            Value::Object(patch),
+            json!({"outcome": "failed", "retry": null})
+        );
+    }
+
+    #[test]
+    fn metadata_keys_cannot_repeat_across_set_and_unset() {
+        assert!(parse_change(&["s1", "--set", "env=a", "--set", "env=b"]).is_err());
+        assert!(parse_change(&["s1", "--set", "env=a", "--unset", "env"]).is_err());
+        assert!(parse_change(&["s1", "--unset", "env", "--unset", "env"]).is_err());
+    }
+
+    #[test]
+    fn metadata_replace_needs_set_and_only_clear_removes_everything() {
+        let MetadataChange::Replace(metadata) =
+            parse_change(&["s1", "--replace", "--set", "env=prod"]).unwrap()
+        else {
+            panic!("expected a replace");
+        };
+        assert_eq!(
+            metadata,
+            BTreeMap::from([("env".to_string(), "prod".to_string())])
+        );
+
+        let MetadataChange::Replace(metadata) = parse_change(&["s1", "--clear"]).unwrap() else {
+            panic!("expected a clear");
+        };
+        assert!(metadata.is_empty());
+
+        assert!(parse_change(&["s1", "--replace"]).is_err());
+        assert!(parse_change(&["s1", "--replace", "--set", "env=prod", "--unset", "run"]).is_err());
+        assert!(parse_change(&["s1", "--clear", "--set", "env=prod"]).is_err());
+        assert!(parse_change(&["s1", "--clear", "--unset", "env"]).is_err());
+        assert!(parse_change(&["s1", "--clear", "--replace", "--set", "env=prod"]).is_err());
+    }
+
+    #[test]
+    fn metadata_flags_parse() {
+        let args = MetadataArgs::try_parse_from([
+            "metadata",
+            "--session",
+            "work",
+            "--set",
+            "query=a=b",
+            "--unset",
+            "retry",
+        ])
+        .unwrap();
+        assert_eq!(args.session.as_deref(), Some("work"));
+        assert_eq!(args.session_id, None);
+        assert_eq!(args.set, vec![pair("query", "a=b")]);
+        assert_eq!(args.unset, vec!["retry".to_string()]);
+        assert!(MetadataArgs::try_parse_from(["metadata", "s1", "--set", "env"]).is_err());
+    }
+
+    #[test]
+    fn list_filters_parse() {
+        let args = ListArgs::try_parse_from([
+            "list",
+            "--metadata",
+            "env=prod",
+            "--metadata",
+            "team=web",
+            "--signal",
+            "captcha_encountered,bot_detection_triggered",
+            "--signal",
+            "context_restored",
+        ])
+        .unwrap();
+        assert_eq!(
+            args.metadata,
+            vec![pair("env", "prod"), pair("team", "web")]
+        );
+        assert_eq!(
+            args.signal,
+            vec![
+                "captcha_encountered".to_string(),
+                "bot_detection_triggered".to_string(),
+                "context_restored".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn metadata_lines_print_key_value_pairs() {
+        assert_eq!(
+            metadata_lines(&json!({"run": "42", "env": "prod"})),
+            vec!["env=prod".to_string(), "run=42".to_string()]
+        );
+        assert!(metadata_lines(&json!({})).is_empty());
+    }
+
+    mod requests {
+        use wiremock::matchers::{body_json, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        use super::*;
+        use crate::config::auth::AuthSource;
+
+        fn client(server: &MockServer) -> SteelClient {
+            let auth = Auth {
+                api_key: Some("test-key".into()),
+                access_token: None,
+                source: AuthSource::Env,
+            };
+            SteelClient::with(server.uri(), ApiMode::Local, auth).unwrap()
+        }
+
+        #[tokio::test]
+        async fn update_sends_one_patch_with_nulls_for_removed_keys() {
+            let server = MockServer::start().await;
+            Mock::given(method("PATCH"))
+                .and(path("/sessions/s1/metadata"))
+                .and(body_json(
+                    json!({"metadata": {"outcome": "failed", "retry": null}}),
+                ))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_json(json!({"metadata": {"outcome": "failed"}})),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let change =
+                parse_change(&["s1", "--set", "outcome=failed", "--unset", "retry"]).unwrap();
+            let metadata = apply_metadata_change(&client(&server), "s1", change)
+                .await
+                .unwrap();
+            assert_eq!(metadata, json!({"outcome": "failed"}));
+        }
+
+        #[tokio::test]
+        async fn replace_sends_a_put_with_exactly_the_set_keys() {
+            let server = MockServer::start().await;
+            Mock::given(method("PUT"))
+                .and(path("/sessions/s1/metadata"))
+                .and(body_json(json!({"metadata": {"env": "prod"}})))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"metadata": {"env": "prod"}})),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let change = parse_change(&["s1", "--replace", "--set", "env=prod"]).unwrap();
+            let metadata = apply_metadata_change(&client(&server), "s1", change)
+                .await
+                .unwrap();
+            assert_eq!(metadata, json!({"env": "prod"}));
+        }
+
+        #[tokio::test]
+        async fn clear_sends_an_empty_put() {
+            let server = MockServer::start().await;
+            Mock::given(method("PUT"))
+                .and(path("/sessions/s1/metadata"))
+                .and(body_json(json!({"metadata": {}})))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"metadata": {}})))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let change = parse_change(&["s1", "--clear"]).unwrap();
+            let metadata = apply_metadata_change(&client(&server), "s1", change)
+                .await
+                .unwrap();
+            assert_eq!(metadata, json!({}));
+        }
+
+        #[tokio::test]
+        async fn show_reads_metadata_from_the_session() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/sessions/s1"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_json(json!({"id": "s1", "metadata": {"env": "prod"}})),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let metadata = apply_metadata_change(&client(&server), "s1", MetadataChange::Show)
+                .await
+                .unwrap();
+            assert_eq!(metadata, json!({"env": "prod"}));
+        }
+
+        #[tokio::test]
+        async fn api_rejections_surface_the_api_message() {
+            let server = MockServer::start().await;
+            Mock::given(method("PATCH"))
+                .and(path("/sessions/s1/metadata"))
+                .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+                    "error": "Invalid session metadata",
+                    "message": "metadata key 'steel_x' is invalid."
+                })))
+                .mount(&server)
+                .await;
+
+            let change = parse_change(&["s1", "--set", "steel_x=1"]).unwrap();
+            let err = apply_metadata_change(&client(&server), "s1", change)
+                .await
+                .unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("metadata key 'steel_x' is invalid.")
+            );
+        }
     }
 }

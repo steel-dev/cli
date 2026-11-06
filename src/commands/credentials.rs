@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use serde_json::json;
 
 use crate::api::client::SteelClient;
-use crate::util::{api, output};
+use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -116,7 +116,6 @@ pub async fn run(command: Command) -> anyhow::Result<()> {
 }
 
 async fn run_list(args: ListArgs) -> anyhow::Result<()> {
-    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut query_params = Vec::new();
@@ -133,17 +132,7 @@ async fn run_list(args: ListArgs) -> anyhow::Result<()> {
         format!("/credentials?{}", query_params.join("&"))
     };
 
-    let data = client
-        .request(
-            &base_url,
-            mode,
-            reqwest::Method::GET,
-            &path,
-            None,
-            &auth_info,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let data = client.request(reqwest::Method::GET, &path, None).await?;
 
     // Normalize response — could be array or { credentials: [...] }
     let credentials = if let Some(arr) = data.as_array() {
@@ -175,11 +164,9 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
     let password = args
         .password
         .as_deref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.trim().is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --password"))?;
 
-    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut value = json!({
@@ -211,16 +198,8 @@ async fn run_create(args: CreateArgs) -> anyhow::Result<()> {
     }
 
     let result = client
-        .request(
-            &base_url,
-            mode,
-            reqwest::Method::POST,
-            "/credentials",
-            Some(body),
-            &auth_info,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .request(reqwest::Method::POST, "/credentials", Some(body))
+        .await?;
 
     if output::is_json() {
         output::success_data(result);
@@ -256,7 +235,6 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --origin"))?;
 
-    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut body = json!({"origin": origin});
@@ -272,11 +250,10 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
                 value["username"] = json!(trimmed);
             }
         }
-        if let Some(ref p) = args.password {
-            let trimmed = p.trim();
-            if !trimmed.is_empty() {
-                value["password"] = json!(trimmed);
-            }
+        if let Some(ref p) = args.password
+            && !p.trim().is_empty()
+        {
+            value["password"] = json!(p);
         }
         if let Some(ref t) = args.totp_secret {
             let trimmed = t.trim();
@@ -300,16 +277,8 @@ async fn run_update(args: UpdateArgs) -> anyhow::Result<()> {
     }
 
     let result = client
-        .request(
-            &base_url,
-            mode,
-            reqwest::Method::PUT,
-            "/credentials",
-            Some(body),
-            &auth_info,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .request(reqwest::Method::PUT, "/credentials", Some(body))
+        .await?;
 
     if output::is_json() {
         output::success_data(result);
@@ -338,7 +307,6 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow::anyhow!("Missing required flag: --origin"))?;
 
-    let (mode, base_url, auth_info) = api::resolve_with_auth();
     let client = SteelClient::new()?;
 
     let mut body = json!({"origin": origin});
@@ -350,16 +318,8 @@ async fn run_delete(args: DeleteArgs) -> anyhow::Result<()> {
     }
 
     client
-        .request(
-            &base_url,
-            mode,
-            reqwest::Method::DELETE,
-            "/credentials",
-            Some(body),
-            &auth_info,
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .request(reqwest::Method::DELETE, "/credentials", Some(body))
+        .await?;
 
     if output::is_json() {
         let mut data = json!({"origin": origin});

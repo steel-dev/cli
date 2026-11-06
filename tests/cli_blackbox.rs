@@ -5,7 +5,11 @@
 //! They do NOT import any library code — they treat the CLI as an opaque
 //! executable, ensuring the user-facing contract is preserved.
 
+use std::path::Path;
 use std::process::{Command, Output};
+
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Build a `Command` targeting the `steel` binary with a sanitized environment.
 ///
@@ -17,6 +21,7 @@ fn steel_cmd() -> (Command, tempfile::TempDir) {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_steel"));
     cmd.env("STEEL_CONFIG_DIR", tmp.path());
+    cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     cmd.env_remove("STEEL_API_KEY");
     // Suppress update checks so they don't interfere with output
     cmd.arg("--no-update-check");
@@ -223,12 +228,128 @@ fn sessions_help_lists_subcommands() {
         "steel sessions --help should exit 0"
     );
     let out = stdout(&output);
-    for sub in &["list", "get", "release", "logs", "agent-logs", "traces"] {
+    for sub in &[
+        "list",
+        "get",
+        "metadata",
+        "release",
+        "logs",
+        "agent-logs",
+        "traces",
+    ] {
         assert!(
             out.contains(sub),
             "sessions help should list '{sub}', got: {out}"
         );
     }
+}
+
+#[test]
+fn sessions_list_help_shows_filters() {
+    let output = run(&["sessions", "list", "--help"]);
+    assert!(
+        output.status.success(),
+        "steel sessions list --help should exit 0"
+    );
+    let out = stdout(&output);
+    for flag in &[
+        "--metadata <KEY=VALUE>",
+        "--signal",
+        "--release-reason",
+        "--created-after",
+        "--created-before",
+        "--cursor-id",
+    ] {
+        assert!(
+            out.contains(flag),
+            "sessions list help should mention '{flag}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn sessions_metadata_help_shows_expected_flags() {
+    let output = run(&["sessions", "metadata", "--help"]);
+    assert!(
+        output.status.success(),
+        "steel sessions metadata --help should exit 0"
+    );
+    let out = stdout(&output);
+    for flag in &[
+        "--session",
+        "--set <KEY=VALUE>",
+        "--unset <KEY>",
+        "--replace",
+        "--clear",
+    ] {
+        assert!(
+            out.contains(flag),
+            "sessions metadata help should mention '{flag}', got: {out}"
+        );
+    }
+}
+
+#[test]
+fn sessions_metadata_replace_without_set_fails_instead_of_clearing() {
+    let output = run(&["sessions", "metadata", "s1", "--replace"]);
+    assert!(
+        !output.status.success(),
+        "--replace without --set should fail"
+    );
+    assert!(
+        stderr(&output).contains("--set <KEY=VALUE>"),
+        "stderr should ask for --set, got: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn sessions_metadata_rejects_a_pair_without_an_equals_sign() {
+    let output = run(&["sessions", "metadata", "s1", "--set", "env"]);
+    assert!(
+        !output.status.success(),
+        "--set without KEY=VALUE should fail"
+    );
+    assert!(
+        stderr(&output).contains("expected KEY=VALUE"),
+        "stderr should explain the format, got: {}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn sessions_list_rejects_a_repeated_metadata_key_before_calling_the_api() {
+    let output = run(&[
+        "sessions",
+        "list",
+        "--metadata",
+        "env=prod",
+        "--metadata",
+        "env=staging",
+    ]);
+    assert!(
+        !output.status.success(),
+        "a repeated metadata key should fail"
+    );
+    let err = stderr(&output);
+    assert!(
+        err.contains("Metadata key \"env\" is given more than once."),
+        "stderr should name the repeated key, got: {err}"
+    );
+}
+
+#[test]
+fn sessions_list_rejects_an_empty_metadata_filter_before_calling_the_api() {
+    let output = run(&["sessions", "list", "--metadata", "env="]);
+    assert!(
+        !output.status.success(),
+        "an empty metadata filter should fail"
+    );
+    let err = stderr(&output);
+    assert!(
+        err.contains("Metadata filter \"env\" needs a value."),
+        "stderr should name the empty filter, got: {err}"
+    );
 }
 
 #[test]
@@ -354,7 +475,7 @@ fn nonexistent_command_fails() {
 #[test]
 fn browser_start_without_auth_or_local_fails() {
     // With no API key and no --local flag, `browser start` should fail
-    // with the actual daemon error (missing API key), not a generic timeout.
+    // with the missing API key error, not a generic timeout.
     let start = std::time::Instant::now();
     let output = run(&["browser", "start"]);
     let elapsed = start.elapsed();
@@ -369,24 +490,33 @@ fn browser_start_without_auth_or_local_fails() {
     let combined = format!("{err}{out}");
     let lower = combined.to_lowercase();
 
-    // The error should surface the actual daemon failure reason (missing API key),
-    // not a generic "failed to start within 30s" timeout message.
+    // The error should surface the actual failure reason (missing API key).
     assert!(
         lower.contains("api key") || lower.contains("api_key") || lower.contains("login"),
         "output should mention the actual auth error (API key / login), got: {combined}"
     );
 
-    // The daemon exits almost immediately on missing auth. With early exit detection,
-    // this should complete in well under 10 seconds (not the 30s timeout).
     assert!(
         elapsed.as_secs() < 15,
-        "should detect daemon failure quickly, but took {elapsed:?}"
+        "should fail quickly, but took {elapsed:?}"
     );
 }
 
 #[test]
+fn piped_output_is_text_unless_json_is_passed() {
+    let text = run(&["scrape", "https://example.com"]);
+    assert!(!text.status.success());
+    assert!(stdout(&text).is_empty(), "got: {}", stdout(&text));
+    assert!(stderr(&text).contains("Error: Missing Steel API key"));
+
+    let json = run(&["--json", "scrape", "https://example.com"]);
+    let parsed: serde_json::Value = serde_json::from_str(stdout(&json).trim()).unwrap();
+    assert_eq!(parsed["error_code"], "auth_required");
+}
+
+#[test]
 fn browser_start_without_auth_json_mode_surfaces_error() {
-    // In --json mode, the actual daemon error should also appear in the output.
+    // In --json mode, the actual error should also appear in the output.
     let output = run(&["--json", "browser", "start"]);
     assert!(!output.status.success());
 
@@ -426,8 +556,11 @@ fn browser_action_with_missing_named_session_fails_without_starting_one() {
         "error should say how to start the session, got: {error_msg}"
     );
     assert!(
-        !tmp.path().join("daemon-missing.log").exists(),
-        "no daemon should be spawned for a missing named session"
+        !tmp.path()
+            .join("browser-sessions")
+            .join("missing.json")
+            .exists(),
+        "no session should be created for a missing named session"
     );
 }
 
@@ -443,6 +576,108 @@ fn browser_action_without_session_warns_before_starting_default() {
     );
 }
 
+fn single_json_result(output: &Output) -> serde_json::Value {
+    let out = stdout(output);
+    let lines: Vec<&str> = out.lines().filter(|line| !line.trim().is_empty()).collect();
+    assert_eq!(
+        lines.len(),
+        1,
+        "expected one JSON result, got stdout={out} stderr={}",
+        stderr(output)
+    );
+    serde_json::from_str(lines[0]).unwrap()
+}
+
+async fn init_against(server: &MockServer) -> Output {
+    let (mut cmd, _tmp) = steel_cmd();
+    cmd.env("STEEL_API_URL", format!("{}/v1", server.uri()))
+        .env("STEEL_API_KEY", "sk-test")
+        .args(["--json", "init", "--no-skills"]);
+    tokio::process::Command::from(cmd).output().await.unwrap()
+}
+
+#[tokio::test]
+async fn init_json_prints_one_result() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/sessions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"sessions": []})))
+        .mount(&server)
+        .await;
+
+    let output = init_against(&server).await;
+
+    assert!(output.status.success(), "{output:?}");
+    let result = single_json_result(&output);
+    assert_eq!(result["success"], true);
+    assert_eq!(result["data"]["doctor"]["overall"], "pass");
+    assert_eq!(result["data"]["skills"], "skipped");
+}
+
+#[tokio::test]
+async fn init_json_prints_one_result_when_preflight_fails() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/sessions"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let output = init_against(&server).await;
+
+    assert_eq!(output.status.code(), Some(1));
+    let result = single_json_result(&output);
+    assert_eq!(result["success"], false);
+    assert_eq!(result["error_code"], "doctor_failed");
+    assert_eq!(result["data"]["overall"], "fail");
+}
+
+fn pinned_cookbook_ref() -> String {
+    let source = include_str!("../src/commands/forge.rs");
+    let line = source
+        .lines()
+        .find(|line| line.starts_with("const COOKBOOK_REF"))
+        .unwrap();
+    line.split('"').nth(1).unwrap()[..12].to_string()
+}
+
+#[test]
+fn forge_json_prints_the_created_project() {
+    let home = tempfile::tempdir().unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let steel = |args: &[&str]| {
+        let (mut cmd, _tmp) = steel_cmd();
+        cmd.env("HOME", home.path())
+            .env_remove("XDG_CACHE_HOME")
+            .current_dir(work.path())
+            .args(args);
+        cmd.output().unwrap()
+    };
+
+    let cache = single_json_result(&steel(&["--json", "cache"]));
+    let cookbook = Path::new(cache["data"]["cacheDir"].as_str().unwrap())
+        .join("cookbook")
+        .join(pinned_cookbook_ref());
+    let template = cookbook.join("examples/demo-ts");
+    std::fs::create_dir_all(&template).unwrap();
+    std::fs::write(template.join("index.ts"), "console.log('hi')").unwrap();
+    std::fs::write(
+        cookbook.join("registry.yaml"),
+        "- title: Demo\n  path: examples/demo-ts\n  language: typescript\n",
+    )
+    .unwrap();
+
+    let output = steel(&["--json", "forge", "demo-ts", "--name", "proj"]);
+
+    assert!(output.status.success(), "{output:?}");
+    let result = single_json_result(&output);
+    assert_eq!(result["data"]["name"], "proj");
+    assert_eq!(result["data"]["template"], "demo-ts");
+    assert_eq!(result["data"]["language"], "typescript");
+    assert!(Path::new(result["data"]["path"].as_str().unwrap()).ends_with("proj"));
+    assert!(work.path().join("proj/index.ts").exists());
+}
+
 // ─── Environment variable contracts ─────────────────────────────────
 
 #[test]
@@ -452,6 +687,7 @@ fn steel_config_dir_is_respected() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_steel"));
     cmd.env("STEEL_CONFIG_DIR", &config_dir);
+    cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     cmd.env_remove("STEEL_API_KEY");
     cmd.args(["--no-update-check", "config"]);
 
@@ -489,7 +725,13 @@ fn browser_start_help_shows_expected_flags() {
         "steel browser start --help should exit 0"
     );
     let out = stdout(&output);
-    for flag in &["--session", "--local", "--stealth", "--proxy"] {
+    for flag in &[
+        "--session",
+        "--local",
+        "--stealth",
+        "--proxy",
+        "--metadata <KEY=VALUE>",
+    ] {
         assert!(
             out.contains(flag),
             "browser start help should mention '{flag}', got: {out}"
@@ -754,67 +996,4 @@ fn help_flag_exits_with_code_0() {
     let output = run(&["--help"]);
     let code = output.status.code().expect("should have exit code");
     assert_eq!(code, 0, "--help should exit with code 0, got: {code}");
-}
-
-// ─── Computers ──────────────────────────────────────────────────────
-
-fn run_without_computer_context(args: &[&str]) -> Output {
-    let (mut cmd, _tmp) = steel_cmd();
-    cmd.env_remove("STEEL_COMPUTER_ID");
-    cmd.args(args);
-    cmd.output().expect("failed to execute steel binary")
-}
-
-#[test]
-fn computer_help_lists_subcommands() {
-    let output = run(&["computer", "--help"]);
-    assert!(
-        output.status.success(),
-        "steel computer --help should exit 0"
-    );
-    let out = stdout(&output);
-    for sub in &[
-        "create", "list", "get", "delete", "pause", "resume", "use", "exec", "ssh",
-    ] {
-        assert!(
-            out.contains(sub),
-            "computer help should list '{sub}', got: {out}"
-        );
-    }
-}
-
-#[test]
-fn computer_exec_help_shows_expected_flags() {
-    let output = run(&["computer", "exec", "--help"]);
-    assert!(
-        output.status.success(),
-        "steel computer exec --help should exit 0"
-    );
-    let out = stdout(&output);
-    for flag in &["--command", "--cwd", "--env", "--timeout", "ARGV"] {
-        assert!(
-            out.contains(flag),
-            "computer exec help should mention '{flag}', got: {out}"
-        );
-    }
-}
-
-#[test]
-fn computer_exec_without_a_computer_explains_how_to_pick_one() {
-    let output = run_without_computer_context(&["computer", "exec", "--", "ls"]);
-    assert!(
-        !output.status.success(),
-        "exec without a computer should fail"
-    );
-    let text = format!("{}{}", stdout(&output), stderr(&output));
-    assert!(
-        text.contains("steel computer use"),
-        "the error should point at `steel computer use`, got: {text}"
-    );
-}
-
-#[test]
-fn computer_use_without_an_id_fails() {
-    let output = run_without_computer_context(&["computer", "use"]);
-    assert!(!output.status.success(), "use without an id should fail");
 }

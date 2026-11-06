@@ -8,7 +8,7 @@ use std::path::Path;
 
 use clap::{ArgAction, Command, CommandFactory};
 
-use steel_cli::commands;
+use steel_cli::Cli;
 
 /// Describes a single CLI flag.
 #[derive(Debug)]
@@ -130,7 +130,7 @@ fn get_subcommand(root: &Command, path: &[&str]) -> Command {
 }
 
 fn root_cmd() -> Command {
-    commands::Cli::command()
+    Cli::command()
 }
 
 /// Verify the complete subcommand tree matches the spec.
@@ -280,9 +280,9 @@ fn pdf_flags() {
 
 #[test]
 fn browser_session_flag() {
-    // --session is a global flag on the browser command, propagated to all subcommands
+    // --session and --diff are global flags on the browser command, propagated to all subcommands
     let cmd = get_subcommand(&root_cmd(), &["browser"]);
-    assert_flags(&cmd, &[flag_val("session")], "browser");
+    assert_flags(&cmd, &[flag_val("session"), flag("diff")], "browser");
 }
 
 #[test]
@@ -293,13 +293,14 @@ fn browser_start_flags() {
         &[
             flag("stealth"),
             flag_val_short("proxy", 'p'),
-            flag_val("session-timeout"),
+            flag_val("timeout"),
             flag_val("inactivity-timeout"),
-            flag("session-solve-captcha"),
+            flag("solve-captcha"),
             flag_val("profile"),
             flag("update-profile"),
             flag_val("namespace"),
             flag("credentials"),
+            flag_val("metadata"),
         ],
         "browser start",
     );
@@ -328,12 +329,7 @@ fn browser_captcha_solve_flags() {
     let cmd = get_subcommand(&root_cmd(), &["browser", "captcha", "solve"]);
     assert_flags(
         &cmd,
-        &[
-            flag_val("session-id"),
-            flag_val("page-id"),
-            flag_val("url"),
-            flag_val("task-id"),
-        ],
+        &[flag_val("page-id"), flag_val("url"), flag_val("task-id")],
         "browser captcha solve",
     );
 }
@@ -344,7 +340,6 @@ fn browser_captcha_status_flags() {
     assert_flags(
         &cmd,
         &[
-            flag_val("session-id"),
             flag_val("page-id"),
             flag_short("wait", 'w'),
             flag_val("timeout"),

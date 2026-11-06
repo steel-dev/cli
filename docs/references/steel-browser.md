@@ -1,56 +1,33 @@
 # Steel Browser Reference (Commands + Modes)
 
-This reference defines the `steel browser` command surface, including Steel-owned lifecycle commands and inherited `agent-browser` commands.
+This reference defines how `steel browser` runs and the contracts of its session commands.
 
-## Command Ownership
+## How Commands Run
 
-### Steel-Owned Commands
+Each `steel browser` action is one HTTP request to the session's commands API:
 
-- `steel browser start`
-- `steel browser stop`
-- `steel browser sessions`
-- `steel browser live`
-- `steel browser captcha solve`
+- `POST /v1/sessions/{sessionId}/commands` with the API key, a random `Idempotency-Key`, and `after` (the last operation id the CLI received).
+- The browser engine runs inside the session next to Chrome. It holds refs, tabs, dialogs, and the execution records.
+- The CLI keeps no process running. It stores per-session state in `~/.config/steel/browser-sessions/<name>.json`.
 
-### Inherited Commands (Vendored agent-browser Runtime)
-
-All other `steel browser <command>` invocations are delegated to vendored upstream runtime behavior.
-
-Upstream command catalog (pinned reference):
-
-- Local transformed command catalog for Steel context:
-  - `./steel-browser-commands.md`
-- https://github.com/vercel-labs/agent-browser/blob/b59dc4c82c0583b60849d110f27982fac85f1a07/cli/README.md
-- https://github.com/vercel-labs/agent-browser/tree/b59dc4c82c0583b60849d110f27982fac85f1a07/skills/agent-browser/references
-- https://github.com/vercel-labs/agent-browser/blob/b59dc4c82c0583b60849d110f27982fac85f1a07/skills/agent-browser/references/commands.md
-
-## Modes
-
-- Cloud mode (default): no mode flag required.
-- Self-hosted mode: use `--local` or `--api-url <url>`.
-
-`--api-url` implies self-hosted mode.
+The full command list is in [./steel-browser-commands.md](./steel-browser-commands.md).
 
 ## Endpoint Resolution
 
-Self-hosted endpoint precedence:
+The API URL is chosen in this order:
 
 1. `--api-url <url>`
-2. `STEEL_BROWSER_API_URL`
-3. `STEEL_LOCAL_API_URL`
-4. `browser.apiUrl` in `~/.config/steel/config.json`
-5. `http://localhost:3000/v1`
+2. `--local`: `browser.apiUrl` in `~/.config/steel/config.json`, or `http://localhost:3000/v1`
+3. `STEEL_API_URL`
+4. `https://api.steel.dev/v1`
 
-Cloud endpoint precedence:
-
-1. `STEEL_API_URL`
-2. `https://api.steel.dev/v1`
+URLs on `steel.dev` are Steel Cloud and need an API key. Any other URL is treated as self-hosted.
 
 ## Steel-Owned Command Contracts
 
 ### `steel browser start`
 
-Purpose: create or attach a session and print stable fields.
+Purpose: create a session and print stable fields. If the name already has a session, the old one is released first.
 
 Main flags:
 
@@ -59,11 +36,14 @@ Main flags:
 - `--session <name>`
 - `--stealth`
 - `--proxy <url>`
-- `--session-solve-captcha`
+- `--timeout <ms>`
+- `--inactivity-timeout <ms>` (default 600000; `0` turns it off)
+- `--solve-captcha`
 - `--namespace <name>`
 - `--credentials`
 - `--profile <name>`
 - `--update-profile`
+- `--metadata <key=value>` (repeatable)
 
 Flag semantics:
 
@@ -71,7 +51,7 @@ Flag semantics:
   - `stealthConfig.humanizeInteractions = true`
   - `stealthConfig.autoCaptchaSolving = true`
   - `solveCaptcha = true`
-- `--session-solve-captcha` enables manual CAPTCHA solving for new sessions:
+- `--solve-captcha` enables manual CAPTCHA solving for new sessions:
   - `solveCaptcha = true`
   - `stealthConfig.autoCaptchaSolving` is not forced on
 - `--proxy <url>` sets `proxyUrl` on session creation. The Sessions API may return
@@ -81,13 +61,16 @@ Flag semantics:
 - `--credentials` enables credential injection for the session. Sends
   `credentials: {}` in the session creation payload.
 - `--profile <name>` loads a previously imported browser profile (cookies, local
-  storage, etc.) into the session.
-- `--update-profile` saves session state back to the profile when the session ends.
-  Requires `--profile`.
-- `--stealth`, `--proxy`, `--namespace`, `--credentials`, `--profile`, and
-  `--update-profile` are create-time flags.
-  If `--session <name>` attaches to an existing live session, these values are not
-  re-applied.
+  storage, etc.) into the session. An unknown name is an error unless
+  `--update-profile` is also set.
+- `--update-profile` saves session state back to the profile when the session ends,
+  and creates the profile if it does not exist yet. Requires `--profile`.
+- `--inactivity-timeout <ms>` releases the session after this long without
+  commands, CDP messages, or live-view input. Commands count as activity.
+- `--metadata <key=value>` attaches customer metadata to the new session. Values
+  are sent as strings. Find sessions later with
+  `steel sessions list --metadata key=value`, and change it with
+  `steel sessions metadata`. Steel Cloud only.
 
 Output fields:
 
@@ -96,6 +79,8 @@ Output fields:
 - `name` (when set)
 - `live_url` (when available)
 - `connect_url` (when available)
+- `replacedSessionId` and `replacedSessionReleased` (JSON only, when the name already
+  had a session; `false` means the old session could not be released and is still running)
 
 Security contract:
 
@@ -109,6 +94,8 @@ Agent parsing contract:
 - Parse `id` as the stable handle for follow-up commands.
 - Treat `connect_url` as display metadata, not a secret-bearing credential.
 - Prefer `--session <name>` for cross-command and cross-process continuity.
+- `--session <session-id>` drives a session created elsewhere (SDK, MCP, dashboard).
+  `steel browser stop --all` forgets these sessions without stopping them.
 
 ### `steel browser stop`
 
@@ -123,19 +110,12 @@ Main flags:
 
 ### `steel browser sessions`
 
-Purpose: list sessions as JSON.
-
-Main flags:
-
-- `--local`
-- `--api-url <url>`
-- `--raw`
+Purpose: list the local sessions that are still live.
 
 Output note:
 
-- `connectUrl` values in JSON are display-safe and redact sensitive query values.
-- Default output is compact and omits each session's full raw payload.
-- Use `--raw` when you need the full underlying API payload.
+- Each row has `id`, `name`, `mode`, `status`, and `viewerUrl` (JSON).
+- Sessions that ended are removed from local state.
 
 ### `steel browser live`
 
@@ -153,14 +133,12 @@ Purpose: manually trigger CAPTCHA solving for a target session.
 
 Main flags:
 
-- `--session-id <id>`
-- `--session <name>`
+- `--session <name|id>`
 - `--page-id <id>`
 - `--url <url>`
 - `--task-id <id>`
 - `--local`
 - `--api-url <url>`
-- `--raw`
 
 API mapping:
 
@@ -190,20 +168,11 @@ steel browser start --session job --profile myapp --update-profile  # load + sav
 
 Profile metadata is stored at `~/.config/steel/profiles/<name>.json`.
 
-## Passthrough Bootstrap Rules
+## Local Runtime
 
-For inherited commands, Steel bootstrap injects a resolved `--cdp` endpoint unless explicit attach flags are present.
-
-- If `--cdp` is present: passthrough unchanged.
-- If `--auto-connect` is present: passthrough unchanged.
-- If both are present: fail fast.
-
-## Local Runtime UX
-
-Localhost self-hosted flows provide actionable errors:
-
-- Runtime missing: instruct `steel dev install`.
-- Runtime installed but unavailable: instruct `steel dev start`.
+Self-hosted steel-browser serves the commands API only when it runs with
+`ENABLE_COMMANDS_API=true`. Without it, browser actions fail with
+`missing_capability`. `steel dev start` does not turn it on yet.
 
 ## Troubleshooting (Agent-Focused)
 
@@ -213,14 +182,20 @@ Localhost self-hosted flows provide actionable errors:
   verify `steel dev start` is running and endpoint resolution matches expected
   host/port.
 - Commands open a fresh browser unexpectedly:
-  ensure all steps share the same `--session <name>` and mode (`cloud` vs
-  `--local`/`--api-url`).
+  ensure all steps share the same `--session <name>`.
+- `stale_ref`: take a new snapshot (`steel browser snapshot -i`) and use the new refs.
+- `tab_required`: several tabs are open. Pick one with `steel browser tab switch <tab>`.
+- `dialog_pending`: answer the dialog with `steel browser dialog accept` or `dismiss`.
+- `This is the stored result of an earlier run`: the same command already ran
+  after the last response the CLI received. Nothing ran again.
+- `delivery_failed`: the API could not reach the browser. Run the same command
+  again; it will not run twice.
 - `No active live session found` from `steel browser live`:
   run `steel browser start` first, then retry `steel browser live`.
 - CAPTCHA solving notes:
   - CAPTCHA solving requires a paid Steel plan.
   - `--stealth` enables auto solving; wait and monitor with screenshots.
-  - `--session-solve-captcha` enables manual solving; use `steel browser captcha solve`.
+  - `--solve-captcha` enables manual solving; use `steel browser captcha solve`.
   - Default sessions do not solve captchas; restart with CAPTCHA solving enabled and navigate back.
   - Proxy + CAPTCHA solving together is a strong anti-bot evasion combination.
 - Need hard reset of stale session mapping:
@@ -228,8 +203,6 @@ Localhost self-hosted flows provide actionable errors:
 
 ## Related Docs
 
-- [../browser-compat.md](../browser-compat.md)
-- [../migration-agent-browser.md](../migration-agent-browser.md)
+- [./steel-browser-commands.md](./steel-browser-commands.md)
 - [./agent-troubleshooting.md](./agent-troubleshooting.md)
-- [../upstream-sync.md](../upstream-sync.md)
 - [../cli-reference.md](../cli-reference.md)

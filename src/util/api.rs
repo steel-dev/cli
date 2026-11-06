@@ -7,15 +7,22 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::config::auth::{self, Auth};
-use crate::config::settings::{ApiMode, EnvVars};
+use crate::config::settings::{ApiMode, Config, resolve_base_url};
 
 static LOCAL: AtomicBool = AtomicBool::new(false);
 static API_URL: OnceLock<Option<String>> = OnceLock::new();
+
+const REMOVED_ENV_VARS: &[&str] = &["STEEL_BROWSER_API_URL", "STEEL_LOCAL_API_URL"];
 
 /// Store the global `--local` and `--api-url` values. Called once at startup.
 pub fn init(local: bool, api_url: Option<String>) {
     LOCAL.store(local, Ordering::Relaxed);
     API_URL.get_or_init(|| api_url);
+    for name in REMOVED_ENV_VARS {
+        if std::env::var_os(name).is_some() {
+            eprintln!("warning: {name} is no longer read. Use STEEL_API_URL or --api-url.");
+        }
+    }
 }
 
 fn is_local() -> bool {
@@ -26,33 +33,31 @@ fn api_url() -> Option<&'static str> {
     API_URL.get().and_then(|o| o.as_deref())
 }
 
-/// Resolve the API mode from global flags.
-pub fn mode() -> ApiMode {
-    ApiMode::resolve(is_local(), api_url())
-}
-
 /// Resolve API mode and base URL from global flags + env + config.
 pub fn resolve() -> (ApiMode, String) {
-    let mode = ApiMode::resolve(is_local(), api_url());
-    let env_vars = EnvVars::from_env();
     let config = crate::config::settings::read_config().ok();
-    let local_config_url = config.as_ref().and_then(|c| c.local_api_url());
-    let base_url = if mode == ApiMode::Cloud
-        && env_vars
-            .steel_api_url
-            .as_deref()
-            .is_none_or(|s| s.trim().is_empty())
+    let env_api_url = std::env::var("STEEL_API_URL").ok();
+    // Device tokens are bound to the API transport they were issued for, so an
+    // unconfigured invocation targets that transport rather than the default.
+    let explicit = api_url().is_some_and(|s| !s.trim().is_empty())
+        || is_local()
+        || env_api_url.as_deref().is_some_and(|s| !s.trim().is_empty());
+    if !explicit
         && auth::resolve_auth().access_token.is_some()
+        && let Ok(Some(settings)) = crate::config::device::saved_settings()
     {
-        crate::config::device::saved_settings()
-            .ok()
-            .flatten()
-            .map(|s| s.api_base_url)
-            .unwrap_or_else(|| mode.resolve_base_url(api_url(), &env_vars, local_config_url))
-    } else {
-        mode.resolve_base_url(api_url(), &env_vars, local_config_url)
-    };
-    (mode, base_url)
+        return (
+            ApiMode::for_url(&settings.api_base_url),
+            settings.api_base_url,
+        );
+    }
+    let base_url = resolve_base_url(
+        api_url(),
+        is_local(),
+        env_api_url.as_deref(),
+        config.as_ref().and_then(Config::local_api_url),
+    );
+    (ApiMode::for_url(&base_url), base_url)
 }
 
 /// Resolve API mode, base URL, and auth credentials.

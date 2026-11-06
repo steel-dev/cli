@@ -1,11 +1,13 @@
 use std::path::Path;
 
 use clap::Parser;
+use serde_json::json;
 
 use crate::commands::{doctor, login, skills};
 use crate::config;
 use crate::config::settings::{OnboardingConfig, read_config_from, write_config_to};
 use crate::status;
+use crate::util::output;
 
 #[derive(Parser)]
 pub struct Args {
@@ -34,24 +36,31 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("");
 
     // Step 1: login (no-ops if already logged in).
-    login::run(login::Args {
+    let login = login::authorize(login::Args {
         no_wait: args.agent,
         no_browser: args.agent,
         ..Default::default()
     })
     .await?;
-    if !config::auth::resolve_auth().has_credentials() {
-        // Login already emitted its resumable handoff; do not report setup ready.
+    if login["status"] != "authenticated" || !config::auth::resolve_auth().has_credentials() {
+        // The resumable handoff is this run's only result; do not report setup ready.
+        output::success_data(login);
         return Ok(());
     }
 
     // Step 2: preflight check.
     status!("");
-    doctor::run(doctor::Args { preflight: true }).await?;
+    let report = doctor::report(true).await;
+    if report.failed() {
+        return report.emit();
+    }
+    if !output::is_json() {
+        report.print_text();
+    }
 
     // Step 3: install Steel skills.
     status!("");
-    install_skills(&args).await?;
+    let skills = install_skills(&args).await;
 
     // Next steps.
     status!("");
@@ -67,24 +76,28 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         status!("  steel --help");
     }
 
+    if output::is_json() {
+        output::success_data(json!({ "doctor": report.to_json(), "skills": skills }));
+    }
+
     Ok(())
 }
 
-async fn install_skills(args: &Args) -> anyhow::Result<()> {
+async fn install_skills(args: &Args) -> &'static str {
     if args.no_skills {
         status!("Skipping Steel skill install (--no-skills).");
-        return Ok(());
+        return "skipped";
     }
 
     let install_result = match &args.skills {
-        Some(selected) if selected.is_empty() => return Ok(()),
+        Some(selected) if selected.is_empty() => return "skipped",
         Some(selected) if is_all_selection(selected) => skills::install_catalog_flow().await,
         Some(selected) => skills::install_names(selected, false).await,
         None => skills::install_catalog_flow().await,
     };
 
     match install_result {
-        Ok(()) => Ok(()),
+        Ok(()) => "installed",
         Err(error) => {
             status!("Could not install Steel skills through npx skills: {error:#}");
             status!("Install manually with:");
@@ -97,7 +110,7 @@ async fn install_skills(args: &Args) -> anyhow::Result<()> {
             } else {
                 status!("  npx skills add steel-dev/skills");
             }
-            Ok(())
+            "failed"
         }
     }
 }
