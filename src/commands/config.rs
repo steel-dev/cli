@@ -5,7 +5,6 @@ use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::api::projects::{Project, environment_label, parse_projects, resolve_current_project};
-use crate::config::auth;
 use crate::config::settings::{ApiMode, read_config};
 use crate::util::output;
 
@@ -13,9 +12,8 @@ use crate::util::output;
 pub struct Args {}
 
 pub async fn run(_args: Args) -> anyhow::Result<()> {
-    let auth = auth::resolve_auth();
+    let (mode, api_url, auth) = crate::util::api::resolve_with_auth();
     let config = read_config().ok();
-    let (mode, api_url) = crate::util::api::resolve();
 
     if !auth.has_credentials() && config.is_none() {
         output::success(

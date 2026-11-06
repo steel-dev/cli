@@ -163,12 +163,16 @@ pub struct SteelClient {
     base_url: String,
     mode: ApiMode,
     auth: Auth,
+    /// The user's credentials before they were matched to `base_url`, so `at`
+    /// can match them again for another target.
+    resolved: Auth,
 }
 
 impl SteelClient {
     pub fn new() -> Result<Self, reqwest::Error> {
-        let (mode, base_url, auth) = crate::util::api::resolve_with_auth();
-        Self::with(base_url, mode, auth)
+        let (mode, base_url) = crate::util::api::resolve();
+        let client = Self::with(base_url, mode, crate::config::auth::resolve_auth())?;
+        Ok(client.at(&client.base_url, mode))
     }
 
     pub fn with(base_url: String, mode: ApiMode, auth: Auth) -> Result<Self, reqwest::Error> {
@@ -182,6 +186,7 @@ impl SteelClient {
             http,
             base_url,
             mode,
+            resolved: auth.clone(),
             auth,
         })
     }
@@ -191,7 +196,8 @@ impl SteelClient {
             http: self.http.clone(),
             base_url: base_url.to_string(),
             mode,
-            auth: self.auth.clone(),
+            auth: crate::util::api::auth_for_target(self.resolved.clone(), base_url),
+            resolved: self.resolved.clone(),
         }
     }
 

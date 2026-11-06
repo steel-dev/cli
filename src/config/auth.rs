@@ -87,12 +87,13 @@ pub fn read_api_key_from_config(path: &Path) -> Option<String> {
         .filter(|k| !k.trim().is_empty())
 }
 
-/// Resolve API key from environment and default config path.
+/// Resolve credentials from environment, device login and default config path.
+///
+/// Priority: `STEEL_API_KEY` → saved device login → saved config API key → none.
+/// A device login deliberately outranks a key saved by an older CLI, so signing in
+/// with `steel login` is what the CLI uses; `steel logout` clears both.
 pub fn resolve_auth() -> Auth {
-    let env_key = std::env::var("STEEL_API_KEY").ok();
-    let config_key = read_api_key_from_config(&super::config_path());
-
-    let explicit = resolve_auth_with(env_key.as_deref(), None);
+    let explicit = resolve_auth_with(std::env::var("STEEL_API_KEY").ok().as_deref(), None);
     if explicit.has_credentials() {
         return explicit;
     }
@@ -103,7 +104,14 @@ pub fn resolve_auth() -> Auth {
             source: AuthSource::Device,
         };
     }
-    resolve_auth_with(None, config_key.as_deref())
+    resolve_api_key_auth()
+}
+
+/// Resolve API-key credentials only (env → config), ignoring any device login.
+pub fn resolve_api_key_auth() -> Auth {
+    let env_key = std::env::var("STEEL_API_KEY").ok();
+    let config_key = read_api_key_from_config(&super::config_path());
+    resolve_auth_with(env_key.as_deref(), config_key.as_deref())
 }
 
 #[cfg(test)]

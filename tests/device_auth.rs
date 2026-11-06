@@ -318,3 +318,110 @@ async fn pending_backoff_and_expiry_survive_separate_commands() {
         "Resume must not silently issue a new code"
     );
 }
+
+fn refreshless_state(home: &std::path::Path, issuer: &str, transport: &str) {
+    state(home, issuer, transport, u64::MAX);
+    let file = home.join("auth.json");
+    let mut saved: Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    saved["tokens"]["refresh_token"] = Value::Null;
+    std::fs::write(&file, serde_json::to_vec(&saved).unwrap()).unwrap();
+}
+
+#[tokio::test]
+async fn logout_of_a_refreshless_login_refuses_until_local_only() {
+    let home = tempfile::tempdir().unwrap();
+    let auth = MockServer::start().await;
+    refreshless_state(home.path(), &auth.uri(), &auth.uri());
+
+    let result = command(home.path()).arg("logout").output().unwrap();
+
+    assert!(!result.status.success(), "{}", text(&result));
+    assert!(text(&result).contains("--local-only"), "{}", text(&result));
+    assert!(!text(&result).contains("old-access-fixture"));
+    assert!(home.path().join("auth.json").exists());
+    assert!(auth.received_requests().await.unwrap().is_empty());
+
+    let local = command(home.path())
+        .args(["logout", "--local-only"])
+        .output()
+        .unwrap();
+    assert!(local.status.success(), "{}", text(&local));
+    assert!(!home.path().join("auth.json").exists());
+}
+
+#[tokio::test]
+async fn failed_revocation_keeps_local_state() {
+    let home = tempfile::tempdir().unwrap();
+    let auth = MockServer::start().await;
+    state(home.path(), &auth.uri(), &auth.uri(), u64::MAX);
+    Mock::given(method("POST"))
+        .and(path("/api/auth/oauth2/revoke"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(1)
+        .mount(&auth)
+        .await;
+
+    let result = command(home.path()).arg("logout").output().unwrap();
+
+    assert!(!result.status.success(), "{}", text(&result));
+    assert!(
+        text(&result).contains("local state retained"),
+        "{}",
+        text(&result)
+    );
+    assert!(home.path().join("auth.json").exists());
+}
+
+/// `origin` answers everything with a redirect to `target`, which must never be contacted.
+async fn redirecting_issuer(status: u16) -> (MockServer, MockServer) {
+    let origin = MockServer::start().await;
+    let target = MockServer::start().await;
+    Mock::given(wiremock::matchers::any())
+        .respond_with(ResponseTemplate::new(status).insert_header(
+            "location",
+            format!("{}/api/auth/captured", target.uri()).as_str(),
+        ))
+        .mount(&origin)
+        .await;
+    (origin, target)
+}
+
+#[tokio::test]
+async fn device_code_token_and_revoke_endpoints_never_follow_redirects() {
+    for status in [302, 307, 308] {
+        // Device authorization request.
+        let home = tempfile::tempdir().unwrap();
+        let (origin, target) = redirecting_issuer(status).await;
+        let login = command(home.path())
+            .env("STEEL_AUTH_ISSUER", origin.uri())
+            .args(["login", "--no-wait", "--no-browser"])
+            .output()
+            .unwrap();
+        assert!(!login.status.success(), "{}", text(&login));
+        assert_eq!(origin.received_requests().await.unwrap().len(), 1);
+        assert!(target.received_requests().await.unwrap().is_empty());
+
+        // Token refresh: the refresh token must not reach the target.
+        let home = tempfile::tempdir().unwrap();
+        let (origin, target) = redirecting_issuer(status).await;
+        let api = MockServer::start().await;
+        state(home.path(), &origin.uri(), &api.uri(), 0);
+        let refresh = command(home.path())
+            .args(["sessions", "list"])
+            .output()
+            .unwrap();
+        assert!(!refresh.status.success(), "{}", text(&refresh));
+        assert!(target.received_requests().await.unwrap().is_empty());
+        assert!(api.received_requests().await.unwrap().is_empty());
+
+        // Revocation: state survives a redirected revoke.
+        let home = tempfile::tempdir().unwrap();
+        let (origin, target) = redirecting_issuer(status).await;
+        state(home.path(), &origin.uri(), &origin.uri(), u64::MAX);
+        let logout = command(home.path()).arg("logout").output().unwrap();
+        assert!(!logout.status.success(), "{}", text(&logout));
+        assert_eq!(origin.received_requests().await.unwrap().len(), 1);
+        assert!(target.received_requests().await.unwrap().is_empty());
+        assert!(home.path().join("auth.json").exists());
+    }
+}

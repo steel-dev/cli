@@ -63,6 +63,38 @@ pub fn resolve() -> (ApiMode, String) {
 /// Resolve API mode, base URL, and auth credentials.
 pub fn resolve_with_auth() -> (ApiMode, String, Auth) {
     let (mode, base_url) = resolve();
-    let auth = auth::resolve_auth();
+    let auth = auth_for_target(auth::resolve_auth(), &base_url);
     (mode, base_url, auth)
+}
+
+/// The local runtime `--local` targets: `browser.apiUrl` from config, or the default.
+fn local_runtime_url() -> String {
+    let config = crate::config::settings::read_config().ok();
+    resolve_base_url(
+        None,
+        true,
+        None,
+        config.as_ref().and_then(Config::local_api_url),
+    )
+}
+
+/// Credentials to present to `base_url`.
+///
+/// A device login is bound to the API transport it was issued for and is refused
+/// anywhere else. The configured local runtime is the one deliberate exception: it
+/// is a separate target that never received the device login, so it gets the
+/// API-key credentials it had before device login instead of a refusal. A device
+/// login issued for that same local URL keeps its Bearer token.
+pub fn auth_for_target(auth: Auth, base_url: &str) -> Auth {
+    if auth.access_token.is_none() || !same_url(base_url, &local_runtime_url()) {
+        return auth;
+    }
+    match crate::config::device::saved_settings() {
+        Ok(Some(settings)) if same_url(&settings.api_base_url, base_url) => auth,
+        _ => auth::resolve_api_key_auth(),
+    }
+}
+
+fn same_url(a: &str, b: &str) -> bool {
+    a.trim_end_matches('/') == b.trim_end_matches('/')
 }

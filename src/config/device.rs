@@ -535,6 +535,18 @@ pub async fn logout(local_only: bool) -> Result<bool> {
         return Ok(false);
     };
     state.settings.validate()?;
+    // The issuer revokes a device grant through its refresh token; issued access
+    // tokens are JWTs that stay valid until they expire. Without a refresh token
+    // there is nothing the CLI can revoke, so it does not claim to have logged out.
+    if state
+        .tokens
+        .as_ref()
+        .is_some_and(|t| t.refresh_token.is_none())
+    {
+        bail!(
+            "This login has no refresh token, so the CLI cannot revoke it and its access token stays valid until it expires. Revoke this device in your Steel account, then run `steel logout --local-only`; local state retained"
+        );
+    }
     if let Some(refresh) = state.tokens.and_then(|t| t.refresh_token) {
         let response = form(
             http()?.post(format!("{}/api/auth/oauth2/revoke", state.settings.issuer)),

@@ -21,6 +21,14 @@ fn write_device_state(home: &Path, api_base_url: &str) {
 }
 
 async fn steel(home: &Path, api_url: Option<&str>, args: &[&str]) -> Output {
+    let env: Vec<(&str, &str)> = api_url
+        .map(|url| ("STEEL_API_URL", url))
+        .into_iter()
+        .collect();
+    steel_with(home, &env, args).await
+}
+
+async fn steel_with(home: &Path, env: &[(&str, &str)], args: &[&str]) -> Output {
     let mut cmd = tokio::process::Command::new(env!("CARGO_BIN_EXE_steel"));
     cmd.current_dir(home)
         .env("HOME", home)
@@ -29,15 +37,43 @@ async fn steel(home: &Path, api_url: Option<&str>, args: &[&str]) -> Output {
         .env_remove("STEEL_API_KEY")
         .env_remove("STEEL_API_URL")
         .env_remove("STEEL_AUTH_ISSUER")
-        .env_remove("STEEL_AUTH_AUDIENCE");
-    if let Some(url) = api_url {
-        cmd.env("STEEL_API_URL", url);
-    }
+        .env_remove("STEEL_AUTH_AUDIENCE")
+        .envs(env.iter().copied());
     cmd.args(["--no-update-check", "--json"])
         .args(args)
         .output()
         .await
         .unwrap()
+}
+
+fn write_config(home: &Path, config: &serde_json::Value) {
+    std::fs::write(home.join("config.json"), config.to_string()).unwrap();
+}
+
+/// A runtime that accepts session creation and release with any credentials.
+async fn runtime() -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/sessions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id":ID,"status":"live"})))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!("/v1/sessions/{ID}/release")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"success": true})))
+        .mount(&server)
+        .await;
+    server
+}
+
+fn credentials(request: &wiremock::Request) -> (Option<String>, Option<String>) {
+    let get = |name: &str| {
+        request
+            .headers
+            .get(name)
+            .map(|v| v.to_str().unwrap().to_string())
+    };
+    (get("authorization"), get("steel-api-key"))
 }
 
 fn shown(output: &Output) -> String {
@@ -172,4 +208,205 @@ async fn config_reports_device_login_without_the_token() {
     assert_eq!(out["data"]["source"], "device (Bearer)");
     assert!(!shown(&output).contains("synthetic-access-token"));
     assert!(!shown(&output).contains("synthetic-refresh-token"));
+}
+
+#[tokio::test]
+async fn explicit_local_runtime_does_not_receive_a_cloud_device_login() {
+    let cloud = MockServer::start().await;
+    let local = runtime().await;
+    let home = tempfile::tempdir().unwrap();
+    write_device_state(home.path(), &format!("{}/v1", cloud.uri()));
+    write_config(
+        home.path(),
+        &json!({"browser": {"apiUrl": format!("{}/v1", local.uri())}}),
+    );
+
+    let start = steel(
+        home.path(),
+        None,
+        &["--local", "browser", "start", "--session", "l"],
+    )
+    .await;
+    assert!(start.status.success(), "{}", shown(&start));
+    // The saved session keeps targeting the local runtime without --local.
+    let stop = steel(home.path(), None, &["browser", "stop", "--session", "l"]).await;
+    assert!(stop.status.success(), "{}", shown(&stop));
+
+    let sent = local.received_requests().await.unwrap();
+    assert_eq!(sent.len(), 2);
+    assert!(sent.iter().all(|r| credentials(r) == (None, None)));
+    assert!(cloud.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn explicit_local_runtime_gets_the_saved_api_key_as_before_device_login() {
+    let cloud = MockServer::start().await;
+    let local = runtime().await;
+    let home = tempfile::tempdir().unwrap();
+    write_device_state(home.path(), &format!("{}/v1", cloud.uri()));
+    write_config(
+        home.path(),
+        &json!({"apiKey": "sk-config", "browser": {"apiUrl": format!("{}/v1", local.uri())}}),
+    );
+
+    let start = steel(home.path(), None, &["--local", "browser", "start"]).await;
+
+    assert!(start.status.success(), "{}", shown(&start));
+    let sent = local.received_requests().await.unwrap();
+    assert_eq!(credentials(&sent[0]), (None, Some("sk-config".into())));
+    assert!(cloud.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_device_login_issued_for_the_local_runtime_keeps_its_bearer() {
+    let local = runtime().await;
+    let home = tempfile::tempdir().unwrap();
+    let local_url = format!("{}/v1", local.uri());
+    write_device_state(home.path(), &local_url);
+    write_config(home.path(), &json!({"browser": {"apiUrl": local_url}}));
+
+    let start = steel(home.path(), None, &["--local", "browser", "start"]).await;
+
+    assert!(start.status.success(), "{}", shown(&start));
+    let sent = local.received_requests().await.unwrap();
+    assert_eq!(credentials(&sent[0]), (Some(BEARER.into()), None));
+}
+
+#[tokio::test]
+async fn an_explicit_api_url_override_still_refuses_a_mismatched_device_login() {
+    let issued = MockServer::start().await;
+    let other = runtime().await;
+    let home = tempfile::tempdir().unwrap();
+    write_device_state(home.path(), &format!("{}/v1", issued.uri()));
+    let other_url = format!("{}/v1", other.uri());
+    // A URL other than the configured local runtime is an arbitrary override, even
+    // with --local (which --api-url overrides).
+    write_config(
+        home.path(),
+        &json!({"browser": {"apiUrl": "http://127.0.0.1:9/v1"}}),
+    );
+
+    for args in [
+        vec!["--api-url", other_url.as_str(), "browser", "start"],
+        vec![
+            "--local",
+            "--api-url",
+            other_url.as_str(),
+            "browser",
+            "start",
+        ],
+    ] {
+        let output = steel(home.path(), None, &args).await;
+        assert!(!output.status.success(), "{}", shown(&output));
+    }
+    let output = steel(home.path(), Some(&other_url), &["browser", "start"]).await;
+    assert!(!output.status.success(), "{}", shown(&output));
+
+    assert!(issued.received_requests().await.unwrap().is_empty());
+    assert!(other.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn credential_precedence_is_env_key_then_device_login_then_config_key() {
+    let api = runtime().await;
+    let home = tempfile::tempdir().unwrap();
+    let api_url = format!("{}/v1", api.uri());
+    write_device_state(home.path(), &api_url);
+    write_config(home.path(), &json!({"apiKey": "sk-config"}));
+
+    let device = steel(home.path(), None, &["browser", "start", "--session", "d"]).await;
+    assert!(device.status.success(), "{}", shown(&device));
+    let env = steel_with(
+        home.path(),
+        &[("STEEL_API_KEY", "sk-env"), ("STEEL_API_URL", &api_url)],
+        &["browser", "start", "--session", "e"],
+    )
+    .await;
+    assert!(env.status.success(), "{}", shown(&env));
+
+    let sent = api.received_requests().await.unwrap();
+    assert_eq!(credentials(&sent[0]), (Some(BEARER.into()), None));
+    assert_eq!(credentials(&sent[1]), (None, Some("sk-env".into())));
+}
+
+#[tokio::test]
+async fn login_with_a_saved_api_key_does_not_start_device_authorization() {
+    let issuer = MockServer::start().await;
+    let home = tempfile::tempdir().unwrap();
+    write_config(home.path(), &json!({"apiKey": "sk-config"}));
+
+    let login = steel_with(
+        home.path(),
+        &[("STEEL_AUTH_ISSUER", &issuer.uri())],
+        &["login", "--no-wait", "--no-browser"],
+    )
+    .await;
+
+    assert!(login.status.success(), "{}", shown(&login));
+    let out: serde_json::Value = serde_json::from_slice(&login.stdout).unwrap();
+    assert_eq!(
+        out["data"],
+        json!({"status": "authenticated", "method": "api_key"})
+    );
+    assert!(issuer.received_requests().await.unwrap().is_empty());
+    assert!(!home.path().join("auth.json").exists());
+}
+
+#[tokio::test]
+async fn displayed_connect_urls_show_only_allowlisted_values_in_json_and_text() {
+    let secrets = [
+        "u-secret",
+        "p-secret",
+        "tok-secret",
+        "sig-secret",
+        "amz-secret",
+        "auth-secret",
+        "frag-secret",
+    ];
+    let given = "wss://u-secret:p-secret@connect.steel.dev/?sessionId=s1&token=tok-secret&sig=sig-secret&X-Amz-Signature=amz-secret&authorization=auth-secret#frag-secret";
+    let api = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/sessions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"id":ID,"status":"live","websocketUrl":given})),
+        )
+        .mount(&api)
+        .await;
+    let home = tempfile::tempdir().unwrap();
+    write_device_state(home.path(), &format!("{}/v1", api.uri()));
+
+    let json_out = steel(home.path(), None, &["browser", "start", "--session", "j"]).await;
+    assert!(json_out.status.success(), "{}", shown(&json_out));
+    let out: serde_json::Value = serde_json::from_slice(&json_out.stdout).unwrap();
+    let shown_url = out["data"]["connectUrl"].as_str().unwrap();
+    assert!(shown_url.contains("sessionId=s1"), "{shown_url}");
+
+    let text_out = tokio::process::Command::new(env!("CARGO_BIN_EXE_steel"))
+        .current_dir(home.path())
+        .env("HOME", home.path())
+        .env("STEEL_CONFIG_DIR", home.path())
+        .env("STEEL_TELEMETRY_DISABLED", "1")
+        .env_remove("STEEL_API_KEY")
+        .env_remove("STEEL_API_URL")
+        .args(["--no-update-check", "browser", "start", "--session", "t"])
+        .output()
+        .await
+        .unwrap();
+    assert!(text_out.status.success(), "{}", shown(&text_out));
+    assert!(
+        shown(&text_out).contains("sessionId=s1"),
+        "{}",
+        shown(&text_out)
+    );
+
+    for output in [&json_out, &text_out] {
+        for secret in secrets {
+            assert!(
+                !shown(output).contains(secret),
+                "{secret}: {}",
+                shown(output)
+            );
+        }
+    }
 }
