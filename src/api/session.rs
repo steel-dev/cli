@@ -249,6 +249,7 @@ mod tests {
     fn key(api_key: Option<&str>) -> Auth {
         Auth {
             api_key: api_key.map(str::to_string),
+            access_token: None,
             source: crate::config::auth::AuthSource::Env,
         }
     }
@@ -327,6 +328,23 @@ mod tests {
                 .unwrap()
                 .contains("apiKey")
         );
+    }
+
+    #[test]
+    fn device_auth_uses_the_api_provided_connect_url_unchanged() {
+        let device = Auth {
+            api_key: None,
+            access_token: Some("synthetic-access-token".into()),
+            source: crate::config::auth::AuthSource::Device,
+        };
+        let given = "wss://connect.steel.dev?sessionId=s1&token=synthetic-connect-token";
+        let s = session(json!({"id": "s1", "websocketUrl": given}));
+        assert_eq!(
+            s.connect_url(ApiMode::Cloud, &device).as_deref(),
+            Some(given)
+        );
+        let bare = session(json!({"id": "s1"}));
+        assert_eq!(bare.connect_url(ApiMode::Cloud, &device), None);
     }
 
     #[test]
@@ -433,6 +451,7 @@ mod tests {
     fn client(server: &MockServer) -> SteelClient {
         let auth = Auth {
             api_key: Some("test-key".into()),
+            access_token: None,
             source: AuthSource::Env,
         };
         SteelClient::with(server.uri(), ApiMode::Local, auth).unwrap()

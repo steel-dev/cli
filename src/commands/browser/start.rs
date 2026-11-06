@@ -279,30 +279,37 @@ fn humanize_secs(secs: u64) -> String {
     }
 }
 
+/// Query parameters known to be safe to display; every other value is redacted.
+const DISPLAYED_CONNECT_PARAMS: &[&str] = &["sessionId"];
+
+/// Connection URLs are display metadata, not a credential export. Only allowlisted
+/// query values are shown; userinfo and fragments are dropped. The URL the API
+/// returned is never altered for transport.
 fn sanitize_connect_url(url: &str) -> String {
-    if let Ok(mut parsed) = url::Url::parse(url) {
-        let pairs: Vec<(String, String)> = parsed
-            .query_pairs()
-            .map(|(k, v)| {
-                if k == "apiKey" && v.len() > 7 {
-                    (k.to_string(), format!("{}...", &v[..7]))
+    let Ok(mut parsed) = url::Url::parse(url) else {
+        return "[redacted connection URL]".to_string();
+    };
+    let _ = parsed.set_username("");
+    let _ = parsed.set_password(None);
+    parsed.set_fragment(None);
+    let pairs: Vec<(String, String)> = parsed
+        .query_pairs()
+        .map(|(k, v)| {
+            let shown = DISPLAYED_CONNECT_PARAMS.contains(&k.as_ref());
+            (
+                k.to_string(),
+                if shown {
+                    v.to_string()
                 } else {
-                    (k.to_string(), v.to_string())
-                }
-            })
-            .collect();
-
-        if !pairs.is_empty() {
-            parsed.query_pairs_mut().clear();
-            for (k, v) in &pairs {
-                parsed.query_pairs_mut().append_pair(k, v);
-            }
-        }
-
-        parsed.to_string()
-    } else {
-        url.to_string()
+                    "[redacted]".to_string()
+                },
+            )
+        })
+        .collect();
+    if !pairs.is_empty() {
+        parsed.query_pairs_mut().clear().extend_pairs(&pairs);
     }
+    parsed.to_string()
 }
 
 const fn resolve_inactivity_timeout(explicit: Option<u64>) -> Option<u64> {
@@ -345,17 +352,31 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_masks_long_api_keys_only() {
+    fn sanitize_redacts_every_connection_credential() {
         let masked =
             sanitize_connect_url("wss://connect.steel.dev?apiKey=sk-12345678&sessionId=s1");
-        assert!(masked.contains("sk-1234..."));
+        assert!(!masked.contains("sk-1234"));
         assert!(masked.contains("sessionId=s1"));
-        assert!(!masked.contains("sk-12345678"));
         let short = "wss://connect.steel.dev?apiKey=short&sessionId=s1";
-        assert!(sanitize_connect_url(short).contains("apiKey=short"));
+        assert!(!sanitize_connect_url(short).contains("short"));
+        let token = sanitize_connect_url(
+            "wss://user:pass@connect.steel.dev?sessionId=s1&token=synthetic-connect-token",
+        );
+        assert!(!token.contains("synthetic-connect-token"));
+        assert!(!token.contains("user") && !token.contains("pass"));
         let local = "ws://localhost:3000/ws?sessionId=sess-1";
         assert_eq!(sanitize_connect_url(local), local);
-        assert_eq!(sanitize_connect_url("not a valid url"), "not a valid url");
+        assert_eq!(
+            sanitize_connect_url("not a valid url?token=secret"),
+            "[redacted connection URL]"
+        );
+        let signed = sanitize_connect_url(
+            "wss://connect.steel.dev/s?sessionId=s1&sig=a1&signature=a2&X-Amz-Signature=a3&authorization=a4&capability=a5#frag-secret",
+        );
+        assert_eq!(
+            signed,
+            "wss://connect.steel.dev/s?sessionId=s1&sig=%5Bredacted%5D&signature=%5Bredacted%5D&X-Amz-Signature=%5Bredacted%5D&authorization=%5Bredacted%5D&capability=%5Bredacted%5D"
+        );
     }
 
     #[test]

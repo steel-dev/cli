@@ -1,13 +1,13 @@
 pub mod auth;
+pub mod device;
 pub mod settings;
 
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_API_URL: &str = "https://api.steel.dev/v1";
+pub const DEFAULT_AUTH_ISSUER: &str = "https://auth.steel.dev";
+pub const DEFAULT_AUTH_AUDIENCE: &str = "https://api.steel.dev";
 pub const DEFAULT_LOCAL_API_URL: &str = "http://localhost:3000/v1";
-pub const LOGIN_URL: &str = "https://app.steel.dev/sign-in";
-pub const SUCCESS_URL: &str = "https://app.steel.dev/sign-in/cli-success";
-pub const API_KEYS_URL: &str = "https://api.steel.dev/v1/api-keys";
 pub const REPO_URL: &str = "https://github.com/steel-dev/steel-browser.git";
 
 /// Resolve the Steel config directory.
@@ -58,6 +58,13 @@ mod tests {
     fn config_dir_with_none() {
         let dir = config_dir_with(None);
         assert!(dir.ends_with(".config/steel"));
+    }
+
+    #[test]
+    fn device_auth_defaults_to_production() {
+        assert_eq!(DEFAULT_AUTH_ISSUER, "https://auth.steel.dev");
+        assert_eq!(DEFAULT_AUTH_AUDIENCE, "https://api.steel.dev");
+        assert_eq!(DEFAULT_API_URL, "https://api.steel.dev/v1");
     }
 
     #[test]

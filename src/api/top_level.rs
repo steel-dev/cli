@@ -279,6 +279,7 @@ mod tests {
     fn client(server: &MockServer) -> SteelClient {
         let auth = Auth {
             api_key: Some("test-key".into()),
+            access_token: None,
             source: AuthSource::Env,
         };
         SteelClient::with(server.uri(), ApiMode::Local, auth).unwrap()

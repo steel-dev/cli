@@ -167,7 +167,7 @@ fn resolve_name(positional: Option<String>, flag: Option<String>) -> anyhow::Res
 
 fn api_client() -> anyhow::Result<SteelClient> {
     let client = SteelClient::new()?;
-    if client.mode() == ApiMode::Cloud && client.auth().api_key.is_none() {
+    if client.mode() == ApiMode::Cloud && !client.auth().has_credentials() {
         return Err(ApiError::MissingAuth.into());
     }
     Ok(client)

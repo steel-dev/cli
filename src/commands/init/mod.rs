@@ -36,7 +36,17 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     status!("");
 
     // Step 1: login (no-ops if already logged in).
-    login::run(login::Args {}).await?;
+    let login = login::authorize(login::Args {
+        no_wait: args.agent,
+        no_browser: args.agent,
+        ..Default::default()
+    })
+    .await?;
+    if login["status"] != "authenticated" || !config::auth::resolve_auth().has_credentials() {
+        // The resumable handoff is this run's only result; do not report setup ready.
+        output::success_data(login);
+        return Ok(());
+    }
 
     // Step 2: preflight check.
     status!("");

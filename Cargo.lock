@@ -2027,6 +2027,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hmac",
  "jiff",
+ "libc",
  "open",
  "parking_lot",
  "pbkdf2",

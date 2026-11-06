@@ -533,7 +533,16 @@ async fn follow_if_live(
     )?;
     status!("Following live session {session_id}. Press Ctrl-C to stop.");
 
-    let (ws_stream, _) = connect_async(url.as_str()).await.with_context(|| {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mut request = url.as_str().into_client_request()?;
+    if client.auth().access_token.is_some() {
+        crate::config::device::validate_websocket_transport(client.base_url(), &url)?;
+        let token = crate::config::device::access_token_for(client.base_url()).await?;
+        request
+            .headers_mut()
+            .insert("Authorization", format!("Bearer {token}").parse()?);
+    }
+    let (ws_stream, _) = connect_async(request).await.with_context(|| {
         format!(
             "Failed to connect to live {} stream",
             stream_label(stream_kind)
@@ -566,7 +575,7 @@ fn build_ws_url(
     session_id: &str,
 ) -> Result<String> {
     let ws_base_url = std::env::var("STEEL_WS_URL").unwrap_or_else(|_| {
-        if mode == ApiMode::Cloud {
+        if mode == ApiMode::Cloud && auth.access_token.is_none() {
             "wss://connect.steel.dev".to_string()
         } else {
             base_url.to_string()
@@ -790,6 +799,7 @@ mod tests {
             ApiMode::Cloud,
             &Auth {
                 api_key: Some("sk_test".into()),
+                access_token: None,
                 source: crate::config::auth::AuthSource::Env,
             },
             StreamKind::Traces,
@@ -809,6 +819,7 @@ mod tests {
             ApiMode::Local,
             &Auth {
                 api_key: Some("sk_test".into()),
+                access_token: None,
                 source: crate::config::auth::AuthSource::Env,
             },
             StreamKind::Logs,
@@ -1006,6 +1017,7 @@ mod tests {
         fn client(server: &MockServer) -> SteelClient {
             let auth = Auth {
                 api_key: Some("test-key".into()),
+                access_token: None,
                 source: AuthSource::Env,
             };
             SteelClient::with(server.uri(), ApiMode::Local, auth).unwrap()

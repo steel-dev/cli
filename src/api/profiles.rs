@@ -21,7 +21,8 @@ fn profile_form(zip: Vec<u8>) -> Result<Form, ApiError> {
 impl SteelClient {
     pub async fn create_profile(&self, zip: Vec<u8>) -> anyhow::Result<String> {
         let req = self
-            .authed(reqwest::Method::POST, "/profiles")?
+            .authed(reqwest::Method::POST, "/profiles")
+            .await?
             .timeout(upload_timeout(zip.len()))
             .multipart(profile_form(zip)?);
         let body = self.send(req, "/profiles").await?;
@@ -34,7 +35,8 @@ impl SteelClient {
     pub async fn update_profile(&self, profile_id: &str, zip: Vec<u8>) -> Result<(), ApiError> {
         let path = format!("/profiles/{}", urlencoding::encode(profile_id));
         let req = self
-            .authed(reqwest::Method::PATCH, &path)?
+            .authed(reqwest::Method::PATCH, &path)
+            .await?
             .timeout(upload_timeout(zip.len()))
             .multipart(profile_form(zip)?);
         self.send(req, &path).await?;
@@ -68,6 +70,7 @@ mod tests {
     fn client(server: &MockServer) -> SteelClient {
         let auth = Auth {
             api_key: Some("sk-test".into()),
+            access_token: None,
             source: AuthSource::Env,
         };
         SteelClient::with(server.uri(), ApiMode::Local, auth).unwrap()
@@ -109,9 +112,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn profile_uploads_and_updates_refuse_redirects() {
+        use crate::api::client::redirect_fixture;
+
+        let pair = redirect_fixture::pair(307).await;
+        let err = client(&pair.origin)
+            .create_profile(b"zip".to_vec())
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err.downcast_ref::<ApiError>(),
+            Some(ApiError::Redirected { status: 307, .. })
+        ));
+        pair.assert_target_untouched().await;
+
+        let pair = redirect_fixture::pair(308).await;
+        let err = client(&pair.origin)
+            .update_profile("prof_1", b"zip".to_vec())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ApiError::Redirected { status: 308, .. }));
+        pair.assert_target_untouched().await;
+    }
+
+    #[tokio::test]
     async fn cloud_uploads_need_an_api_key() {
         let auth = Auth {
             api_key: None,
+            access_token: None,
             source: AuthSource::None,
         };
         let client = SteelClient::with("http://127.0.0.1:1".into(), ApiMode::Cloud, auth).unwrap();

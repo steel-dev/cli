@@ -1315,6 +1315,12 @@ steel login
 
 Aliases: `auth`
 
+### Parameters
+
+- `--resume` (boolean, optional): Continue the saved authorization request; do not issue a new code
+- `--no-wait` (boolean, optional): Show the handoff without waiting; check an existing request once if due
+- `--no-browser` (boolean, optional): Do not open a browser on this host
+
 ## steel logout
 
 Logout from Steel CLI
@@ -1324,6 +1330,10 @@ Logout from Steel CLI
 ```bash
 steel logout
 ```
+
+### Parameters
+
+- `--local-only` (boolean, optional): Forget local device state without server revocation (offline recovery)
 
 ## steel credentials
 

@@ -47,8 +47,8 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 
 ### Account and Utility Commands
 
-- `steel login`: authenticate and save API key in config.
-- `steel logout`: clear local auth.
+- `steel login`: device login; approve the shown code in any browser. `--resume` continues a saved request, `--no-wait` returns while approval is pending, `--no-browser` skips opening a browser. Reports an existing API key instead of starting device login.
+- `steel logout`: revoke the device login's refresh grant, then forget local auth (state is kept if revocation fails). `--local-only` forgets local state without contacting the server; revoke the device in your account too. Issued access tokens stay valid until they expire.
 - `steel config`: print current auth/session context.
 - `steel settings`: switch persisted local/cloud preference.
 - `steel cache`: clean cache.
@@ -89,7 +89,8 @@ Telemetry can be disabled persistently in `config.json` with:
 
 ## Environment Variables (Common)
 
-- `STEEL_API_KEY`: cloud auth for the session and commands APIs.
+- `STEEL_API_KEY`: cloud auth for the session and commands APIs; takes precedence over a device login, which takes precedence over a saved API key.
+- `STEEL_AUTH_ISSUER`, `STEEL_AUTH_AUDIENCE`: device login issuer and audience (default production); test environments only.
 - `STEEL_API_URL`: API endpoint override, cloud or self-hosted.
 - `STEEL_WS_URL`: WebSocket endpoint for `steel sessions logs --follow` and `traces --follow`.
 - `STEEL_CONFIG_DIR`: override config directory root.

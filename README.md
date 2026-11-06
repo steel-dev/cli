@@ -51,6 +51,45 @@ Alternatives:
 
 After install, either restart your shell or run `export PATH="$HOME/.steel/bin:$PATH"`.
 
+### Device login
+
+`steel login` shows a short code and authorization URL; approve in a browser on
+any machine. `steel login --resume` continues the saved request after interruption.
+Non-interactive commands return promptly while approval is pending. Repeat
+`steel init` after approval to continue setup. API keys remain supported.
+
+Credentials are used in this order: `STEEL_API_KEY`, then a device login, then an
+API key saved by an older `steel login`. While a saved API key is the active
+credential, `steel login` reports it and does not start device authorization; run
+`steel logout` first to switch to device login.
+
+The defaults are production values. These settings may be independently overridden
+for a test environment; an audience is an exact resource identifier, not an API URL:
+
+| Setting | Default |
+| --- | --- |
+| `STEEL_AUTH_ISSUER` | `https://auth.steel.dev` |
+| `STEEL_AUTH_AUDIENCE` | `https://api.steel.dev` |
+| `STEEL_API_URL` | `https://api.steel.dev/v1` |
+
+Use a separate `STEEL_CONFIG_DIR` for testing. Auth context, pending authorization
+and credentials are saved privately in its `auth.json`; credentials are never
+silently retargeted when an override changes: `STEEL_API_URL` or `--api-url`
+pointing elsewhere fails without sending the token. Device access tokens use
+Bearer authorization and refresh automatically; API keys still use `Steel-Api-Key`.
+Product API requests never follow redirects. The configured local runtime
+(`--local`, `browser.apiUrl`) never receives a device login issued for another
+API; it gets `STEEL_API_KEY` or a saved API key if present, as before. Connection
+URLs are shown with only `sessionId` visible.
+
+`steel doctor --preflight` checks product API access. `steel logout` revokes the
+saved refresh grant, and deletes local state only after revocation succeeds.
+Revocation ends the grant; access JWTs already issued stay valid until they
+expire. A login without a refresh token cannot be revoked by
+the CLI: revoke the device in your account, then run `steel logout --local-only`,
+which forgets local state without contacting the server.
+Do not paste or log access/refresh tokens, device codes or signed connection URLs.
+
 ## Shell Completions
 
 Shell completions are installed automatically by `install.sh`. To regenerate or install manually:

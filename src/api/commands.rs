@@ -67,17 +67,18 @@ impl Session<'_> {
         let url = self.client.url(&path);
         let mut req = self
             .client
-            .authed(reqwest::Method::POST, &path)?
+            .authed(reqwest::Method::POST, &path)
+            .await?
             .timeout(REQUEST_TIMEOUT)
             .json(body);
         if let Some(key) = key {
             req = req.header("Idempotency-Key", key);
         }
-        let unreachable = |source| ApiError::Unreachable {
-            url: url.clone(),
-            source,
-        };
+        let unreachable = |source| ApiError::transport(url.clone(), source);
         let resp = req.send().await.map_err(unreachable)?;
+        if let Some(err) = ApiError::redirect_response(&url, &resp) {
+            return Err(err);
+        }
         let status = resp.status().as_u16();
         let retry_after = resp
             .headers()
@@ -196,15 +197,16 @@ impl Session<'_> {
             .text("path", name.to_string());
         let resp = self
             .client
-            .authed(reqwest::Method::POST, &path)?
+            .authed(reqwest::Method::POST, &path)
+            .await?
             .timeout(FILE_TIMEOUT)
             .multipart(form)
             .send()
             .await
-            .map_err(|source| ApiError::Unreachable {
-                url: url.clone(),
-                source,
-            })?;
+            .map_err(|source| ApiError::transport(url.clone(), source))?;
+        if let Some(err) = ApiError::redirect_response(&url, &resp) {
+            return Err(err);
+        }
         let status = resp.status();
         let body: Value = resp.json().await.unwrap_or(Value::Null);
         if !status.is_success() {
@@ -226,14 +228,15 @@ impl Session<'_> {
         let url = self.client.url(&path);
         let resp = self
             .client
-            .authed(reqwest::Method::GET, &path)?
+            .authed(reqwest::Method::GET, &path)
+            .await?
             .timeout(FILE_TIMEOUT)
             .send()
             .await
-            .map_err(|source| ApiError::Unreachable {
-                url: url.clone(),
-                source,
-            })?;
+            .map_err(|source| ApiError::transport(url.clone(), source))?;
+        if let Some(err) = ApiError::redirect_response(&url, &resp) {
+            return Err(err);
+        }
         let status = resp.status();
         if !status.is_success() {
             let body: Value = resp.json().await.unwrap_or(Value::Null);
@@ -275,6 +278,7 @@ mod tests {
     fn auth() -> Auth {
         Auth {
             api_key: Some("sk-test".into()),
+            access_token: None,
             source: AuthSource::Env,
         }
     }
@@ -530,6 +534,7 @@ mod tests {
     async fn missing_api_key_fails_before_sending() {
         let auth = Auth {
             api_key: None,
+            access_token: None,
             source: AuthSource::None,
         };
         let client = SteelClient::with("http://127.0.0.1:1".into(), ApiMode::Cloud, auth).unwrap();
@@ -539,6 +544,41 @@ mod tests {
         };
         let result = session.run(json!({"commands": []})).await;
         assert!(matches!(result, Err(ApiError::MissingAuth)));
+    }
+
+    #[tokio::test]
+    async fn commands_and_files_refuse_redirects_without_retrying() {
+        use crate::api::client::redirect_fixture;
+
+        let pair = redirect_fixture::pair(307).await;
+        let result = run(&pair.origin, json!({"commands": []})).await;
+        assert!(matches!(
+            result,
+            Err(ApiError::Redirected { status: 307, .. })
+        ));
+        pair.assert_target_untouched().await;
+
+        for status in [302, 308] {
+            let pair = redirect_fixture::pair(status).await;
+            let client = SteelClient::with(pair.origin.uri(), ApiMode::Cloud, auth()).unwrap();
+            let session = Session {
+                client: &client,
+                id: ID,
+            };
+            let upload = session.upload_file(b"bytes".to_vec(), "a.txt").await;
+            assert!(matches!(upload, Err(ApiError::Redirected { .. })));
+            pair.assert_target_untouched().await;
+        }
+
+        let pair = redirect_fixture::pair(302).await;
+        let client = SteelClient::with(pair.origin.uri(), ApiMode::Cloud, auth()).unwrap();
+        let session = Session {
+            client: &client,
+            id: ID,
+        };
+        let download = session.download_file("a.txt").await;
+        assert!(matches!(download, Err(ApiError::Redirected { .. })));
+        pair.assert_target_untouched().await;
     }
 
     #[test]

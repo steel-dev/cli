@@ -122,7 +122,7 @@ pub async fn report(preflight: bool) -> Report {
 
 async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<Check> {
     let mut checks = Vec::new();
-    let has_key = auth.api_key.is_some();
+    let has_key = auth.has_credentials();
     let need_auth = mode == ApiMode::Cloud;
 
     if !has_key && need_auth {
@@ -148,7 +148,7 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
         });
         checks.push(Check {
             category: "auth",
-            name: format!("API key configured (source: {source})"),
+            name: format!("Credential configured (source: {source})"),
             status: "pass",
             detail: json!({"source": source, "key": masked}),
             fix: None,
@@ -202,7 +202,7 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
             if has_key && need_auth {
                 checks.push(Check {
                     category: "auth",
-                    name: "API key valid".into(),
+                    name: "Credential accepted by API".into(),
                     status: "pass",
                     detail: json!(null),
                     fix: None,
@@ -234,7 +234,7 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
             });
             checks.push(Check {
                 category: "auth",
-                name: "API key invalid".into(),
+                name: "Credential rejected by API".into(),
                 status: "fail",
                 detail: json!(null),
                 fix: Some("steel login"),
@@ -251,6 +251,30 @@ async fn check_auth_and_api(mode: ApiMode, base_url: &str, auth: &Auth) -> Vec<C
                 detail: json!({"url": base_url, "mode": mode.to_string(), "status": status}),
                 fix: None,
                 transient: true,
+            });
+        }
+        Err(ApiError::DeviceAuth(error)) => {
+            checks.push(Check {
+                category: "auth",
+                name: error.to_string(),
+                status: "fail",
+                detail: json!(null),
+                fix: Some("steel login --resume"),
+                transient: false,
+            });
+        }
+        Err(ApiError::Redirected {
+            status, location, ..
+        }) => {
+            checks.push(Check {
+                category: "api",
+                name: format!(
+                    "{base_url} redirects ({status}) to {location}; redirects are refused"
+                ),
+                status: "fail",
+                detail: json!({"url": base_url, "mode": mode.to_string(), "status": status}),
+                fix: Some("Set STEEL_API_URL or --api-url to the final API address"),
+                transient: false,
             });
         }
         Err(ApiError::MissingAuth) => {

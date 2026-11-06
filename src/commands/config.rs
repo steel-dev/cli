@@ -5,7 +5,6 @@ use serde_json::json;
 
 use crate::api::client::SteelClient;
 use crate::api::projects::{Project, environment_label, parse_projects, resolve_current_project};
-use crate::config::auth;
 use crate::config::settings::{ApiMode, read_config};
 use crate::util::output;
 
@@ -13,11 +12,10 @@ use crate::util::output;
 pub struct Args {}
 
 pub async fn run(_args: Args) -> anyhow::Result<()> {
-    let auth = auth::resolve_auth();
+    let (mode, api_url, auth) = crate::util::api::resolve_with_auth();
     let config = read_config().ok();
-    let (mode, api_url) = crate::util::api::resolve();
 
-    if auth.api_key.is_none() && config.is_none() {
+    if !auth.has_credentials() && config.is_none() {
         output::success(
             json!({ "loggedIn": false, "apiUrl": api_url, "mode": mode.to_string() }),
             "You are not logged in. Please run `steel login` to authenticate.\n",
@@ -26,7 +24,7 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
     }
 
     let mut data = json!({
-        "loggedIn": auth.api_key.is_some(),
+        "loggedIn": auth.has_credentials(),
         "apiUrl": api_url,
         "mode": mode.to_string(),
     });
@@ -37,6 +35,10 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
         lines.push(format!("apiKey: {masked}"));
         lines.push(format!("source: {}", auth.source));
         data["apiKey"] = json!(masked);
+        data["source"] = json!(auth.source.to_string());
+    }
+    if auth.access_token.is_some() {
+        lines.push(format!("source: {} (token redacted)", auth.source));
         data["source"] = json!(auth.source.to_string());
     }
     lines.push(format!("apiUrl: {api_url} ({mode})"));
@@ -83,7 +85,7 @@ fn mask(key: &str) -> String {
 /// so `steel config` stays usable offline.
 async fn current_project() -> Option<Project> {
     let client = SteelClient::new().ok()?;
-    if client.mode() != ApiMode::Cloud || client.auth().api_key.is_none() {
+    if client.mode() != ApiMode::Cloud || !client.auth().has_credentials() {
         return None;
     }
 

@@ -200,6 +200,7 @@ mod tests {
 
         let auth = Auth {
             api_key: Some("test-key".into()),
+            access_token: None,
             source: AuthSource::Env,
         };
         let client = SteelClient::with(server.uri(), ApiMode::Cloud, auth).unwrap();

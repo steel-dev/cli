@@ -37,6 +37,20 @@ fn api_url() -> Option<&'static str> {
 pub fn resolve() -> (ApiMode, String) {
     let config = crate::config::settings::read_config().ok();
     let env_api_url = std::env::var("STEEL_API_URL").ok();
+    // Device tokens are bound to the API transport they were issued for, so an
+    // unconfigured invocation targets that transport rather than the default.
+    let explicit = api_url().is_some_and(|s| !s.trim().is_empty())
+        || is_local()
+        || env_api_url.as_deref().is_some_and(|s| !s.trim().is_empty());
+    if !explicit
+        && auth::resolve_auth().access_token.is_some()
+        && let Ok(Some(settings)) = crate::config::device::saved_settings()
+    {
+        return (
+            ApiMode::for_url(&settings.api_base_url),
+            settings.api_base_url,
+        );
+    }
     let base_url = resolve_base_url(
         api_url(),
         is_local(),
@@ -49,6 +63,44 @@ pub fn resolve() -> (ApiMode, String) {
 /// Resolve API mode, base URL, and auth credentials.
 pub fn resolve_with_auth() -> (ApiMode, String, Auth) {
     let (mode, base_url) = resolve();
-    let auth = auth::resolve_auth();
+    let auth = auth_for_target(auth::resolve_auth(), &base_url);
     (mode, base_url, auth)
+}
+
+/// The local runtime `--local` targets: `browser.apiUrl` from config, or the default.
+fn local_runtime_url() -> String {
+    let config = crate::config::settings::read_config().ok();
+    resolve_base_url(
+        None,
+        true,
+        None,
+        config.as_ref().and_then(Config::local_api_url),
+    )
+}
+
+/// Credentials to present to `base_url`.
+///
+/// A device login is bound to the API transport it was issued for and is refused
+/// anywhere else. The configured local runtime is the one deliberate exception: it
+/// is a separate target that never received the device login, so it gets the
+/// API-key credentials it had before device login instead of a refusal. A device
+/// login issued for that same local URL keeps its Bearer token.
+///
+/// The exception needs device state that was read safely and names a different
+/// transport. Unreadable, unsafe or missing state keeps the device marker, so the
+/// request fails before sending anything rather than falling back to a saved key.
+pub fn auth_for_target(auth: Auth, base_url: &str) -> Auth {
+    if auth.access_token.is_none() || !same_url(base_url, &local_runtime_url()) {
+        return auth;
+    }
+    match crate::config::device::saved_settings() {
+        Ok(Some(settings)) if !same_url(&settings.api_base_url, base_url) => {
+            auth::resolve_api_key_auth()
+        }
+        _ => auth,
+    }
+}
+
+fn same_url(a: &str, b: &str) -> bool {
+    a.trim_end_matches('/') == b.trim_end_matches('/')
 }

@@ -6,6 +6,7 @@ use crate::config::settings;
 pub enum AuthSource {
     Env,
     Config,
+    Device,
     None,
 }
 
@@ -14,15 +15,32 @@ impl std::fmt::Display for AuthSource {
         match self {
             Self::Env => write!(f, "env (STEEL_API_KEY)"),
             Self::Config => write!(f, "config"),
+            Self::Device => write!(f, "device (Bearer)"),
             Self::None => write!(f, "none"),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Auth {
     pub api_key: Option<String>,
+    pub access_token: Option<String>,
     pub source: AuthSource,
+}
+
+impl Auth {
+    pub const fn has_credentials(&self) -> bool {
+        self.api_key.is_some() || self.access_token.is_some()
+    }
+}
+
+impl std::fmt::Debug for Auth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Auth")
+            .field("source", &self.source)
+            .field("configured", &self.has_credentials())
+            .finish()
+    }
 }
 
 /// Resolve API key with explicit inputs (testable).
@@ -36,6 +54,7 @@ pub fn resolve_auth_with(env_api_key: Option<&str>, config_api_key: Option<&str>
         if !trimmed.is_empty() {
             return Auth {
                 api_key: Some(trimmed.to_string()),
+                access_token: None,
                 source: AuthSource::Env,
             };
         }
@@ -47,6 +66,7 @@ pub fn resolve_auth_with(env_api_key: Option<&str>, config_api_key: Option<&str>
         if !trimmed.is_empty() {
             return Auth {
                 api_key: Some(trimmed.to_string()),
+                access_token: None,
                 source: AuthSource::Config,
             };
         }
@@ -54,6 +74,7 @@ pub fn resolve_auth_with(env_api_key: Option<&str>, config_api_key: Option<&str>
 
     Auth {
         api_key: None,
+        access_token: None,
         source: AuthSource::None,
     }
 }
@@ -66,11 +87,30 @@ pub fn read_api_key_from_config(path: &Path) -> Option<String> {
         .filter(|k| !k.trim().is_empty())
 }
 
-/// Resolve API key from environment and default config path.
+/// Resolve credentials from environment, device login and default config path.
+///
+/// Priority: `STEEL_API_KEY` → saved device login → saved config API key → none.
+/// A device login deliberately outranks a key saved by an older CLI, so signing in
+/// with `steel login` is what the CLI uses; `steel logout` clears both.
 pub fn resolve_auth() -> Auth {
+    let explicit = resolve_auth_with(std::env::var("STEEL_API_KEY").ok().as_deref(), None);
+    if explicit.has_credentials() {
+        return explicit;
+    }
+    if let Some(token) = super::device::saved_access_token() {
+        return Auth {
+            api_key: None,
+            access_token: Some(token),
+            source: AuthSource::Device,
+        };
+    }
+    resolve_api_key_auth()
+}
+
+/// Resolve API-key credentials only (env → config), ignoring any device login.
+pub fn resolve_api_key_auth() -> Auth {
     let env_key = std::env::var("STEEL_API_KEY").ok();
     let config_key = read_api_key_from_config(&super::config_path());
-
     resolve_auth_with(env_key.as_deref(), config_key.as_deref())
 }
 
