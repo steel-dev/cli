@@ -85,13 +85,19 @@ fn local_runtime_url() -> String {
 /// is a separate target that never received the device login, so it gets the
 /// API-key credentials it had before device login instead of a refusal. A device
 /// login issued for that same local URL keeps its Bearer token.
+///
+/// The exception needs device state that was read safely and names a different
+/// transport. Unreadable, unsafe or missing state keeps the device marker, so the
+/// request fails before sending anything rather than falling back to a saved key.
 pub fn auth_for_target(auth: Auth, base_url: &str) -> Auth {
     if auth.access_token.is_none() || !same_url(base_url, &local_runtime_url()) {
         return auth;
     }
     match crate::config::device::saved_settings() {
-        Ok(Some(settings)) if same_url(&settings.api_base_url, base_url) => auth,
-        _ => auth::resolve_api_key_auth(),
+        Ok(Some(settings)) if !same_url(&settings.api_base_url, base_url) => {
+            auth::resolve_api_key_auth()
+        }
+        _ => auth,
     }
 }
 

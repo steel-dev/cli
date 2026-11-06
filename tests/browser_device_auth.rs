@@ -410,3 +410,113 @@ async fn displayed_connect_urls_show_only_allowlisted_values_in_json_and_text() 
         }
     }
 }
+
+/// Device state the CLI must refuse to read: it may not fall back to a saved key.
+fn write_unsafe_device_state(home: &Path, kind: &str, api_base_url: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    let file = home.join("auth.json");
+    match kind {
+        "insecure" => {
+            write_device_state(home, api_base_url);
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        "malformed" => {
+            std::fs::write(&file, b"{not json").unwrap();
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        "symlink" => {
+            let real = tempfile::tempdir().unwrap().keep();
+            write_device_state(&real, api_base_url);
+            std::os::unix::fs::symlink(real.join("auth.json"), &file).unwrap();
+        }
+        other => panic!("unknown state {other}"),
+    }
+}
+
+#[tokio::test]
+async fn unsafe_device_state_never_falls_back_to_a_saved_key_for_the_local_runtime() {
+    for kind in ["insecure", "malformed", "symlink"] {
+        let cloud = MockServer::start().await;
+        let local = runtime().await;
+        let local_url = format!("{}/v1", local.uri());
+        let home = tempfile::tempdir().unwrap();
+        write_unsafe_device_state(home.path(), kind, &format!("{}/v1", cloud.uri()));
+        write_config(
+            home.path(),
+            &json!({"apiKey": "sk-config", "browser": {"apiUrl": local_url}}),
+        );
+
+        let attempts = [
+            steel(home.path(), None, &["--local", "browser", "start"]).await,
+            steel(
+                home.path(),
+                None,
+                &["--api-url", &local_url, "browser", "start"],
+            )
+            .await,
+            steel(home.path(), Some(&local_url), &["browser", "start"]).await,
+        ];
+
+        for output in &attempts {
+            assert!(!output.status.success(), "{kind}: {}", shown(output));
+            for secret in [
+                "sk-config",
+                "synthetic-access-token",
+                "synthetic-refresh-token",
+            ] {
+                assert!(!shown(output).contains(secret), "{kind}: {}", shown(output));
+            }
+        }
+        assert!(
+            local.received_requests().await.unwrap().is_empty(),
+            "{kind}"
+        );
+        assert!(
+            cloud.received_requests().await.unwrap().is_empty(),
+            "{kind}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_exact_url_override_for_the_local_runtime_follows_the_local_policy() {
+    let cloud = MockServer::start().await;
+    let local = runtime().await;
+    let local_url = format!("{}/v1", local.uri());
+    let home = tempfile::tempdir().unwrap();
+    write_device_state(home.path(), &format!("{}/v1", cloud.uri()));
+    write_config(
+        home.path(),
+        &json!({"apiKey": "sk-config", "browser": {"apiUrl": local_url}}),
+    );
+
+    let flag = steel(
+        home.path(),
+        None,
+        &[
+            "--api-url",
+            &local_url,
+            "browser",
+            "start",
+            "--session",
+            "a",
+        ],
+    )
+    .await;
+    assert!(flag.status.success(), "{}", shown(&flag));
+    let env = steel(
+        home.path(),
+        Some(&local_url),
+        &["browser", "start", "--session", "b"],
+    )
+    .await;
+    assert!(env.status.success(), "{}", shown(&env));
+
+    let sent = local.received_requests().await.unwrap();
+    assert_eq!(sent.len(), 2);
+    assert!(
+        sent.iter()
+            .all(|r| credentials(r) == (None, Some("sk-config".into())))
+    );
+    assert!(cloud.received_requests().await.unwrap().is_empty());
+}
