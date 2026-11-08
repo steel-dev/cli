@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::commands::{doctor, login, skills};
 use crate::config;
-use crate::config::settings::{OnboardingConfig, read_config_from, write_config_to};
+use crate::config::settings::{read_config_from, write_config_to};
 use crate::status;
 use crate::util::output;
 
@@ -17,7 +17,7 @@ pub struct Args {
     pub agent: bool,
 
     /// Coding client for targeted agent setup (currently: opencode)
-    #[arg(long = "from")]
+    #[arg(long = "from", requires = "agent")]
     pub from: Option<String>,
 
     /// Open the Steel skills installer flow. With no value, lets you choose skills interactively
@@ -34,21 +34,34 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     if let Some(source) = onboarding_source_from_env(args.from.as_deref()) {
         skills::validate_setup_agent(&source)?;
         status!("Onboarding source: {source}");
+        record_onboarding_client(&source)?;
+    } else if let Some(source) =
+        onboarding_source_from_env(std::env::var("STEEL_ONBOARDING_FROM").ok().as_deref())
+    {
+        // Retain the legacy metadata contract without treating an environment
+        // hint as an implicit installer target.
         record_onboarding_source(&source)?;
     }
     // The persisted explicit selection is the only resume target. Do not infer
     // a client from environment variables or provider credentials.
-    let source = config::settings::read_config()
-        .ok()
+    let onboarding = config::settings::read_config().ok();
+    let source = onboarding
+        .as_ref()
         .and_then(|cfg| cfg.onboarding_source().map(str::to_string));
-    let targeted_agent = args.agent && source.as_deref() == Some("opencode");
+    let setup_client = onboarding
+        .as_ref()
+        .and_then(|cfg| cfg.onboarding_setup_client().map(str::to_string));
+    let targeted_agent = args.agent && setup_client.as_deref() == Some("opencode");
     status!("");
 
     // A targeted installation checks its local tools before beginning device
     // authorization, so a pending approval is never created for a host that
     // cannot complete the requested setup.
     if targeted_agent && !args.no_skills {
-        skills::check_install_prerequisites()?;
+        let names = setup_skill_names(&args)?;
+        if skills::setup_needs_install(&names, "opencode")? {
+            skills::check_install_prerequisites()?;
+        }
     }
 
     // Step 1: login (no-ops if already logged in).
@@ -125,12 +138,7 @@ async fn install_skills(args: &Args, source: Option<&str>) -> anyhow::Result<&'s
 
     let install_result = match (args.agent, source) {
         (true, Some(source)) => {
-            let names = match &args.skills {
-                Some(selected) if selected.is_empty() => return Ok("skipped"),
-                Some(selected) if is_all_selection(selected) => vec!["steel-browser".to_string()],
-                Some(selected) => selected.clone(),
-                None => vec!["steel-browser".to_string()],
-            };
+            let names = setup_skill_names(args)?;
             skills::install_setup_names(&names, source).await
         }
         _ => match &args.skills {
@@ -169,6 +177,15 @@ async fn install_skills(args: &Args, source: Option<&str>) -> anyhow::Result<&'s
     }
 }
 
+fn setup_skill_names(args: &Args) -> anyhow::Result<Vec<String>> {
+    match &args.skills {
+        Some(selected) if selected.is_empty() => anyhow::bail!("no setup skills selected"),
+        Some(selected) if is_all_selection(selected) => Ok(vec!["steel-browser".to_string()]),
+        Some(selected) => Ok(selected.clone()),
+        None => Ok(vec!["steel-browser".to_string()]),
+    }
+}
+
 fn is_all_selection(selected: &[String]) -> bool {
     selected.len() == 1 && matches!(selected[0].as_str(), "__all__" | "all")
 }
@@ -181,13 +198,25 @@ fn onboarding_source_from_env(value: Option<&str>) -> Option<String> {
 }
 
 fn record_onboarding_source(source: &str) -> anyhow::Result<()> {
+    persist_onboarding(source, None)
+}
+
+fn record_onboarding_client(source: &str) -> anyhow::Result<()> {
+    persist_onboarding(source, Some(source))
+}
+
+fn persist_onboarding(source: &str, setup_client: Option<&str>) -> anyhow::Result<()> {
     let config_path = config::config_path_in(&config::config_dir());
-    persist_onboarding_source(&config_path, source)?;
+    persist_onboarding_source(&config_path, source, setup_client)?;
     crate::telemetry::set_onboarding_source(source);
     Ok(())
 }
 
-fn persist_onboarding_source(config_path: &Path, source: &str) -> anyhow::Result<()> {
+fn persist_onboarding_source(
+    config_path: &Path,
+    source: &str,
+    setup_client: Option<&str>,
+) -> anyhow::Result<()> {
     if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -196,9 +225,12 @@ fn persist_onboarding_source(config_path: &Path, source: &str) -> anyhow::Result
     } else {
         Default::default()
     };
-    cfg.onboarding = Some(OnboardingConfig {
-        source: Some(source.to_string()),
-    });
+    let mut onboarding = cfg.onboarding.unwrap_or_default();
+    onboarding.source = Some(source.to_string());
+    if let Some(setup_client) = setup_client {
+        onboarding.setup_client = Some(setup_client.to_string());
+    }
+    cfg.onboarding = Some(onboarding);
     write_config_to(config_path, &cfg)?;
     Ok(())
 }
@@ -223,7 +255,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("nested").join("config.json");
 
-        persist_onboarding_source(&path, "cursor").unwrap();
+        persist_onboarding_source(&path, "cursor", None).unwrap();
 
         let cfg = read_config_from(&path).unwrap();
         assert_eq!(cfg.onboarding_source(), Some("cursor"));
@@ -235,11 +267,12 @@ mod tests {
         let path = dir.path().join("config.json");
         std::fs::write(&path, r#"{"apiKey":"k","instance":"cloud"}"#).unwrap();
 
-        persist_onboarding_source(&path, "codex").unwrap();
+        persist_onboarding_source(&path, "codex", Some("opencode")).unwrap();
 
         let cfg = read_config_from(&path).unwrap();
         assert_eq!(cfg.api_key.as_deref(), Some("k"));
         assert_eq!(cfg.instance.as_deref(), Some("cloud"));
         assert_eq!(cfg.onboarding_source(), Some("codex"));
+        assert_eq!(cfg.onboarding_setup_client(), Some("opencode"));
     }
 }

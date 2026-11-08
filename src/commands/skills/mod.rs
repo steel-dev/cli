@@ -297,6 +297,26 @@ pub fn check_install_prerequisites() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Validate selected setup skills and determine whether the installer must run.
+/// This uses the bundled catalog so it is safe to call before device auth.
+pub fn setup_needs_install(names: &[String], agent: &str) -> anyhow::Result<bool> {
+    validate_setup_agent(agent)?;
+    let manifest = fallback_manifest();
+    for name in names {
+        ensure_known_skill(&manifest, name)?;
+        if !manifest.skills[name]
+            .agents
+            .iter()
+            .any(|target| target == agent)
+        {
+            anyhow::bail!("Skill {name} does not support {agent}; choose a compatible skill.");
+        }
+    }
+    Ok(names
+        .iter()
+        .any(|name| !is_skill_readable_for_agent(agent, name)))
+}
+
 /// Install skills for the selected setup client. A readable existing skill is
 /// intentionally enough to skip npx: setup must not implicitly update it.
 pub async fn install_setup_names(names: &[String], agent: &str) -> anyhow::Result<()> {
@@ -758,7 +778,10 @@ fn run_npx_setup(args: &[&str]) -> anyhow::Result<()> {
     command
         .arg("--yes")
         .args(args)
-        .env("npm_config_engine_strict", "true");
+        .env("npm_config_engine_strict", "true")
+        // The installer does not need Steel API access. This is env hygiene,
+        // not a sandbox: it still executes with the invoking user's account.
+        .env_remove("STEEL_API_KEY");
     if output::is_json() {
         command.stdout(std::process::Stdio::from(std::io::stderr()));
     }

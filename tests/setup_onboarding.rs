@@ -108,6 +108,8 @@ async fn installs_once_with_exact_noninteractive_opencode_arguments() {
         "npx",
         r#"
 if [ "$1" = --version ]; then exit 0; fi
+if [ -n "$STEEL_API_KEY" ]; then exit 9; fi
+if [ -z "$HOME" ] || [ -z "$PATH" ]; then exit 8; fi
 echo "$*" >> "$HOME/npx-args"
 /bin/mkdir -p "$HOME/.agents/skills/steel-browser"
 printf '%s\n' 'fixture skill' > "$HOME/.agents/skills/steel-browser/SKILL.md"
@@ -198,4 +200,64 @@ async fn no_skills_keeps_the_existing_setup_contract() {
     assert_eq!(lines.lines().filter(|line| !line.is_empty()).count(), 1);
     let result: serde_json::Value = serde_json::from_str(&lines).unwrap();
     assert_eq!(result["data"]["skills"], "skipped");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn readable_skill_skips_prerequisites_and_installer() {
+    let home = tempfile::tempdir().unwrap();
+    let api = api().await;
+    let skill = home.path().join(".agents/skills/steel-browser/SKILL.md");
+    std::fs::create_dir_all(skill.parent().unwrap()).unwrap();
+    std::fs::write(&skill, "fixture skill").unwrap();
+    let empty_path = home.path().join("empty-path");
+    std::fs::create_dir(&empty_path).unwrap();
+
+    let output = command(home.path())
+        .env("PATH", empty_path)
+        .env("STEEL_API_KEY", "synthetic-key")
+        .env("STEEL_API_URL", api.uri())
+        .args(["init", "--agent", "--from", "opencode"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(!home.path().join("npx-args").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn missing_skill_blocks_at_prerequisites_before_auth() {
+    let home = tempfile::tempdir().unwrap();
+    let empty_path = home.path().join("empty-path");
+    std::fs::create_dir(&empty_path).unwrap();
+    let output = command(home.path())
+        .env("PATH", empty_path)
+        .args(["init", "--agent", "--from", "opencode"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap()
+            .contains("`node` is unavailable")
+    );
+    assert!(!home.path().join("config/auth.json").exists());
+}
+
+#[test]
+fn from_requires_agent_and_does_not_write_config() {
+    let home = tempfile::tempdir().unwrap();
+    let output = command(home.path())
+        .args(["init", "--from", "opencode", "--no-skills"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--agent"));
+    assert!(!home.path().join("config/config.json").exists());
 }

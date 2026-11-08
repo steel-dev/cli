@@ -67,3 +67,32 @@ fn project_xdg_and_global_roots_are_consistent_across_paths_list_and_doctor() {
     let doctor = run(home.path(), project.path(), &["doctor", "--offline"]);
     assert_eq!(doctor["data"]["checks"]["installed_paths"], installed_count);
 }
+
+#[test]
+fn nested_project_stops_discovery_at_git_worktree_boundary() {
+    let home = tempfile::tempdir().unwrap();
+    let outer = tempfile::tempdir().unwrap();
+    install(&outer.path().join(".opencode/skills/steel-browser/SKILL.md"));
+    let project = outer.path().join("project");
+    let nested = project.join("nested/package");
+    std::fs::create_dir_all(&nested).unwrap();
+    // Worktrees use a .git file, not necessarily a directory.
+    std::fs::write(project.join(".git"), "gitdir: synthetic-worktree\n").unwrap();
+    let inside = project.join(".agents/skills/steel-browser/SKILL.md");
+    install(&inside);
+
+    let paths = run(home.path(), &nested, &["paths"])["data"].clone();
+    let found: Vec<_> = paths
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["agent"] == "OpenCode" && row["installed"] == true)
+        .collect();
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        Path::new(found[0]["path"].as_str().unwrap())
+            .canonicalize()
+            .unwrap(),
+        inside.canonicalize().unwrap()
+    );
+}
