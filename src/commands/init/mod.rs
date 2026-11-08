@@ -123,21 +123,22 @@ async fn install_skills(args: &Args, source: Option<&str>) -> anyhow::Result<&'s
         return Ok("skipped");
     }
 
-    let install_result = if args.agent && source.is_some() {
-        let names = match &args.skills {
-            Some(selected) if selected.is_empty() => return Ok("skipped"),
-            Some(selected) if is_all_selection(selected) => vec!["steel-browser".to_string()],
-            Some(selected) => selected.clone(),
-            None => vec!["steel-browser".to_string()],
-        };
-        skills::install_setup_names(&names, source.expect("checked above")).await
-    } else {
-        match &args.skills {
+    let install_result = match (args.agent, source) {
+        (true, Some(source)) => {
+            let names = match &args.skills {
+                Some(selected) if selected.is_empty() => return Ok("skipped"),
+                Some(selected) if is_all_selection(selected) => vec!["steel-browser".to_string()],
+                Some(selected) => selected.clone(),
+                None => vec!["steel-browser".to_string()],
+            };
+            skills::install_setup_names(&names, source).await
+        }
+        _ => match &args.skills {
             Some(selected) if selected.is_empty() => return Ok("skipped"),
             Some(selected) if is_all_selection(selected) => skills::install_catalog_flow().await,
             Some(selected) => skills::install_names(selected, false).await,
             None => skills::install_catalog_flow().await,
-        }
+        },
     };
 
     match install_result {
