@@ -45,9 +45,6 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     // The persisted explicit selection is the only resume target. Do not infer
     // a client from environment variables or provider credentials.
     let onboarding = config::settings::read_config().ok();
-    let source = onboarding
-        .as_ref()
-        .and_then(|cfg| cfg.onboarding_source().map(str::to_string));
     let setup_client = onboarding
         .as_ref()
         .and_then(|cfg| cfg.onboarding_setup_client().map(str::to_string));
@@ -74,8 +71,8 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     if login["status"] != "authenticated" || !config::auth::resolve_auth().has_credentials() {
         // The resumable handoff is this run's only result; do not report setup ready.
         let mut handoff = login;
-        if let Some(source) = &source {
-            handoff["client"] = json!(source);
+        if let Some(client) = &setup_client {
+            handoff["client"] = json!(client);
         }
         output::success_data(handoff);
         return Ok(());
@@ -118,7 +115,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
                 "status": "incomplete",
                 "doctor": report.to_json(),
                 "skills": installed_skills,
-                "client": source,
+                "client": setup_client,
                 "skill_loading": "unverified",
                 "first_task": "unverified",
             }));

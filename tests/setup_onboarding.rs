@@ -80,6 +80,7 @@ async fn pending_then_resume_preserves_explicit_opencode_target() {
         .env("STEEL_AUTH_ISSUER", auth.uri())
         .env("STEEL_AUTH_AUDIENCE", auth.uri())
         .env("STEEL_API_URL", auth.uri())
+        .env("STEEL_ONBOARDING_FROM", "cursor")
         .args(["init", "--agent", "--no-skills"])
         .output()
         .unwrap();
@@ -88,11 +89,11 @@ async fn pending_then_resume_preserves_explicit_opencode_target() {
         serde_json::from_slice::<serde_json::Value>(&resumed.stdout).unwrap()["data"]["client"],
         "opencode"
     );
-    assert!(
-        std::fs::read_to_string(home.path().join("config/config.json"))
-            .unwrap()
-            .contains("opencode")
-    );
+    let config: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(home.path().join("config/config.json")).unwrap())
+            .unwrap();
+    assert_eq!(config["onboarding"]["source"], "cursor");
+    assert_eq!(config["onboarding"]["setupClient"], "opencode");
 }
 
 #[cfg(unix)]
@@ -138,11 +139,22 @@ exit 0
             .count(),
         1
     );
-    let second = run();
+    let second = command(home.path())
+        .env("PATH", home.path().join("bin"))
+        .env("STEEL_API_KEY", "synthetic-key")
+        .env("STEEL_API_URL", api.uri())
+        .env("STEEL_ONBOARDING_FROM", "cursor")
+        .args(["init", "--agent"])
+        .output()
+        .unwrap();
     assert!(
         second.status.success(),
         "{}",
         String::from_utf8_lossy(&second.stdout)
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&second.stdout).unwrap()["data"]["client"],
+        "opencode"
     );
     let invocations = std::fs::read_to_string(home.path().join("npx-args")).unwrap();
     assert_eq!(invocations.lines().count(), 1);
