@@ -2,6 +2,8 @@
 use std::path::Path;
 use std::process::Command;
 
+use sha2::{Digest, Sha256};
+
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -19,6 +21,16 @@ fn command(home: &Path) -> Command {
         .env_remove("XDG_CONFIG_HOME")
         .args(["--no-update-check", "--json"]);
     command
+}
+
+fn file_snapshot(path: &Path) -> (String, std::time::SystemTime) {
+    let body = std::fs::read(path).unwrap();
+    let hash = Sha256::digest(body)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let modified = std::fs::metadata(path).unwrap().modified().unwrap();
+    (hash, modified)
 }
 
 #[cfg(unix)]
@@ -111,6 +123,7 @@ async fn installs_once_with_exact_noninteractive_opencode_arguments() {
 if [ "$1" = --version ]; then exit 0; fi
 if [ -n "$STEEL_API_KEY" ]; then exit 9; fi
 if [ -z "$HOME" ] || [ -z "$PATH" ]; then exit 8; fi
+if [ "$REJECT_NPX" = 1 ]; then exit 97; fi
 echo "$*" >> "$HOME/npx-args"
 /bin/mkdir -p "$HOME/.agents/skills/steel-browser"
 printf '%s\n' 'fixture skill' > "$HOME/.agents/skills/steel-browser/SKILL.md"
@@ -139,11 +152,16 @@ exit 0
             .count(),
         1
     );
+    let skill = home.path().join(".agents/skills/steel-browser/SKILL.md");
+    let before = file_snapshot(&skill);
     let second = command(home.path())
         .env("PATH", home.path().join("bin"))
         .env("STEEL_API_KEY", "synthetic-key")
         .env("STEEL_API_URL", api.uri())
         .env("STEEL_ONBOARDING_FROM", "cursor")
+        // A valid API key avoids device auth. Reject any npx invocation to prove
+        // the persisted target resumes without prerequisites or reinstallation.
+        .env("REJECT_NPX", "1")
         .args(["init", "--agent"])
         .output()
         .unwrap();
@@ -162,6 +180,7 @@ exit 0
         invocations.trim(),
         "--yes skills add steel-dev/skills --skill steel-browser -a opencode -g -y"
     );
+    assert_eq!(file_snapshot(&skill), before);
 }
 
 #[cfg(unix)]
