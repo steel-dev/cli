@@ -224,6 +224,35 @@ struct AgentPath {
     installed: bool,
 }
 
+/// The intentionally small set of coding clients supported by `steel init
+/// --agent --from`.  Keep the installer spelling separate from the locations
+/// that the native client actually reads: several clients share `.agents`,
+/// but that does not make that directory exclusive to one client.
+#[derive(Clone, Copy)]
+struct SetupAgent {
+    installer_id: &'static str,
+    display_name: &'static str,
+}
+
+const SETUP_AGENTS: &[SetupAgent] = &[
+    SetupAgent {
+        installer_id: "opencode",
+        display_name: "OpenCode",
+    },
+    SetupAgent {
+        installer_id: "claude-code",
+        display_name: "Claude Code",
+    },
+    SetupAgent {
+        installer_id: "codex",
+        display_name: "Codex",
+    },
+    SetupAgent {
+        installer_id: "pi",
+        display_name: "Pi",
+    },
+];
+
 pub const fn telemetry_name(command: &SkillsCommand) -> &'static str {
     match command {
         SkillsCommand::List { .. } => "list",
@@ -274,12 +303,24 @@ pub async fn install_names(names: &[String], yes: bool) -> anyhow::Result<()> {
 /// Validate the deliberately small setup integration surface. Other callers
 /// keep using the normal `steel skills install` options.
 pub fn validate_setup_agent(source: &str) -> anyhow::Result<()> {
-    if source == "opencode" {
-        return Ok(());
-    }
-    anyhow::bail!(
-        "Setup supports `--from opencode` in this local candidate; use `steel skills install` for other clients."
-    );
+    setup_agent(source).map(|_| ())
+}
+
+fn setup_agent(source: &str) -> anyhow::Result<SetupAgent> {
+    SETUP_AGENTS
+        .iter()
+        .copied()
+        .find(|agent| agent.installer_id == source)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Unsupported setup client `{source}`. Supported clients: {}.",
+                SETUP_AGENTS
+                    .iter()
+                    .map(|agent| agent.installer_id)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
 }
 
 pub fn check_install_prerequisites() -> anyhow::Result<()> {
@@ -290,7 +331,7 @@ pub fn check_install_prerequisites() -> anyhow::Result<()> {
             .is_ok_and(|output| output.status.success())
         {
             anyhow::bail!(
-                "Setup blocked at skill prerequisites: `{program}` is unavailable. The native Steel binary needs no Node.js, but the skills installer needs Node.js/npm and git. Install them in the agent tool environment, then rerun init --agent --from opencode."
+                "Setup blocked at skill prerequisites: `{program}` is unavailable. The native Steel binary needs no Node.js, but the skills installer needs Node.js/npm and git. Install them in the agent tool environment, then rerun init --agent --from <client>."
             );
         }
     }
@@ -350,7 +391,9 @@ pub async fn install_setup_names(names: &[String], agent: &str) -> anyhow::Resul
         status!("Installed {name}");
         if !is_skill_readable_for_agent(agent, name) {
             anyhow::bail!(
-                "Skill installer succeeded but {name} is not readable in an OpenCode skill location. Rerun init --agent --from opencode after resolving the install path."
+                "Skill installer succeeded but {name} is not readable in a {} skill location. Rerun init --agent --from {} after resolving the install path.",
+                setup_agent(agent)?.display_name,
+                agent,
             );
         }
     }
@@ -676,26 +719,51 @@ fn agent_paths_for_skill_with(
     config_home: &Path,
     cwd: Option<&Path>,
 ) -> Vec<AgentPath> {
+    let claude_home = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".claude"));
+    let codex_home = std::env::var_os("CODEX_HOME")
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".codex"));
+    let pi_agent_home = std::env::var_os("PI_CODING_AGENT_DIR")
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".pi").join("agent"));
+
     let mut paths = vec![
         (
             "Claude Code",
-            home.join(".claude")
+            claude_home.join("skills").join(name).join("SKILL.md"),
+        ),
+        (
+            "Codex",
+            home.join(".agents")
                 .join("skills")
                 .join(name)
                 .join("SKILL.md"),
+        ),
+        (
+            "Codex",
+            codex_home.join("skills").join(name).join("SKILL.md"),
+        ),
+        (
+            "Pi",
+            home.join(".agents")
+                .join("skills")
+                .join(name)
+                .join("SKILL.md"),
+        ),
+        (
+            "Pi",
+            pi_agent_home.join("skills").join(name).join("SKILL.md"),
         ),
         (
             "Cursor",
             home.join(".cursor")
                 .join("rules")
                 .join(format!("{name}.mdc")),
-        ),
-        (
-            "Codex/Pi",
-            home.join(".agents")
-                .join("skills")
-                .join(name)
-                .join("SKILL.md"),
         ),
     ];
 
@@ -712,9 +780,18 @@ fn agent_paths_for_skill_with(
             .find(|dir| dir.join(".git").exists())
             .unwrap_or(cwd);
         for dir in cwd.ancestors() {
-            for source in [".opencode", ".agents", ".claude"] {
-                opencode_sources.push(dir.join(source).join("skills"));
-            }
+            opencode_sources.push(dir.join(".opencode").join("skills"));
+            opencode_sources.push(dir.join(".agents").join("skills"));
+            paths.push((
+                "Claude Code",
+                dir.join(".claude/skills").join(name).join("SKILL.md"),
+            ));
+            paths.push((
+                "Codex",
+                dir.join(".agents/skills").join(name).join("SKILL.md"),
+            ));
+            paths.push(("Pi", dir.join(".agents/skills").join(name).join("SKILL.md")));
+            paths.push(("Pi", dir.join(".pi/skills").join(name).join("SKILL.md")));
             if dir == root {
                 break;
             }
@@ -737,10 +814,13 @@ fn agent_paths_for_skill_with(
 }
 
 fn is_skill_readable_for_agent(agent: &str, name: &str) -> bool {
-    agent == "opencode"
-        && agent_paths_for_skill(name).iter().any(|path| {
-            path.agent == "OpenCode" && path.installed && fs::read_to_string(&path.path).is_ok()
-        })
+    let agent = match setup_agent(agent) {
+        Ok(agent) => agent,
+        Err(_) => return false,
+    };
+    agent_paths_for_skill(name).iter().any(|path| {
+        path.agent == agent.display_name && path.installed && fs::read_to_string(&path.path).is_ok()
+    })
 }
 
 fn is_skill_installed(name: &str) -> bool {
@@ -789,7 +869,7 @@ fn run_npx_setup(args: &[&str]) -> anyhow::Result<()> {
         Ok(status) if status.success() => Ok(()),
         Ok(status) => Err(anyhow::anyhow!("npx exited with status {status}")),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(anyhow::anyhow!(
-            "`npx` was not found. Install Node.js/npm, then rerun init --agent --from opencode."
+            "`npx` was not found. Install Node.js/npm, then rerun init --agent --from <client>."
         )),
         Err(error) => Err(error.into()),
     }

@@ -16,7 +16,7 @@ pub struct Args {
     #[arg(long)]
     pub agent: bool,
 
-    /// Coding client for targeted agent setup (currently: opencode)
+    /// Coding client for targeted agent setup (opencode, claude-code, codex, pi)
     #[arg(long = "from", requires = "agent")]
     pub from: Option<String>,
 
@@ -48,7 +48,15 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     let setup_client = onboarding
         .as_ref()
         .and_then(|cfg| cfg.onboarding_setup_client().map(str::to_string));
-    let targeted_agent = args.agent && setup_client.as_deref() == Some("opencode");
+    let targeted_agent = args.agent
+        && setup_client
+            .as_deref()
+            .is_some_and(|client| skills::validate_setup_agent(client).is_ok());
+    let targeted_source = targeted_agent.then(|| {
+        setup_client
+            .as_deref()
+            .expect("targeted setup has a client")
+    });
     status!("");
 
     // A targeted installation checks its local tools before beginning device
@@ -56,7 +64,10 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
     // cannot complete the requested setup.
     if targeted_agent && !args.no_skills {
         let names = setup_skill_names(&args)?;
-        if skills::setup_needs_install(&names, "opencode")? {
+        if skills::setup_needs_install(
+            &names,
+            targeted_source.expect("targeted setup has a client"),
+        )? {
             skills::check_install_prerequisites()?;
         }
     }
@@ -90,13 +101,18 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     // Step 3: install Steel skills.
     status!("");
-    let installed_skills = install_skills(&args, targeted_agent.then_some("opencode")).await?;
+    let installed_skills = install_skills(&args, targeted_source).await?;
 
     // Next steps.
     status!("");
     if targeted_agent {
         status!("CLI/auth/API configured; skill loading and first task remain unverified.");
-        status!("Load steel-browser through OpenCode's skill mechanism before using it.");
+        status!(
+            "Load steel-browser through {}'s skill mechanism before using it.",
+            setup_client
+                .as_deref()
+                .expect("targeted setup has a client")
+        );
     } else if args.agent {
         status!("Steel is ready. Suggest one of these to the user:");
         status!("  • Scrape a webpage to markdown. Ask for a URL, then run: steel scrape <url>");
@@ -160,9 +176,10 @@ async fn install_skills(args: &Args, source: Option<&str>) -> anyhow::Result<&'s
             } else {
                 status!("  npx skills add steel-dev/skills");
             }
-            if source.is_some() {
+            if let Some(source) = source {
                 Err(anyhow::anyhow!(
-                    "Setup incomplete at skill installation. Resolve the error above, then rerun init --agent --from opencode: {error:#}"
+                    "Setup incomplete at skill installation. Resolve the error above, then rerun init --agent --from {}: {error:#}",
+                    source
                 ))
             } else {
                 // Preserve the prior general `init` flow. Targeted setup is
