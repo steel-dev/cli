@@ -23,6 +23,7 @@ fn steel_cmd() -> (Command, tempfile::TempDir) {
     cmd.env("STEEL_CONFIG_DIR", tmp.path());
     cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     cmd.env_remove("STEEL_API_KEY");
+    cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     // Suppress update checks so they don't interfere with output
     cmd.arg("--no-update-check");
     (cmd, tmp)
@@ -689,6 +690,7 @@ fn steel_config_dir_is_respected() {
     cmd.env("STEEL_CONFIG_DIR", &config_dir);
     cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     cmd.env_remove("STEEL_API_KEY");
+    cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     cmd.args(["--no-update-check", "config"]);
 
     let output = cmd.output().expect("failed to execute steel binary");
