@@ -150,9 +150,13 @@ Every command that calls the Steel API uses one URL, chosen in this order:
 1. `--api-url <url>`
 2. `--local`: `browser.apiUrl` in `~/.config/steel/config.json`, or `http://localhost:3000/v1`
 3. `STEEL_API_URL`
-4. `https://api.steel.dev/v1`
+4. With no explicit override and an active device credential, the API URL saved with that device login
+5. Otherwise, `https://api.steel.dev/v1`
 
-URLs on `steel.dev` are Steel Cloud and need an API key. Any other URL is treated as self-hosted.
+URLs on `steel.dev` are Steel Cloud and require authentication through device
+login or an API key. Any other URL is treated as self-hosted. An explicit
+`STEEL_API_KEY` takes precedence over device login and does not activate the
+saved-device-endpoint fallback.
 
 ## Output and Runtime Notes
 
