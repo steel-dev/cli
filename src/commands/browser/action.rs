@@ -122,8 +122,6 @@ pub enum ActionCommand {
         #[command(subcommand)]
         command: TabCommand,
     },
-    /// Accept or dismiss an open dialog
-    Dialog(DialogArgs),
     /// Wait for a command that is still running
     Status(ExecutionArgs),
     /// Stop a command that is still running
@@ -145,6 +143,8 @@ pub enum ActionCommand {
     ScrollIntoView(RemovedArgs),
     #[command(name = "setvalue", hide = true)]
     SetValue(RemovedArgs),
+    #[command(hide = true)]
+    Dialog(RemovedArgs),
 }
 
 impl ActionCommand {
@@ -498,18 +498,6 @@ pub struct TabCloseArgs {
 }
 
 #[derive(Parser)]
-pub struct DialogArgs {
-    /// accept or dismiss
-    #[arg(value_parser = ["accept", "dismiss"])]
-    pub action: String,
-    /// Dialog id such as d-2 (default: the last dialog the CLI saw)
-    pub id: Option<String>,
-    /// Answer for a prompt dialog
-    #[arg(long)]
-    pub text: Option<String>,
-}
-
-#[derive(Parser)]
 pub struct ExecutionArgs {
     /// Execution id such as x-7
     pub execution: String,
@@ -534,8 +522,6 @@ pub enum Output {
     Switch(String),
     Saved(PathBuf),
     Download(Option<PathBuf>),
-    Execution,
-    Dialog,
 }
 
 pub struct Step {
@@ -564,7 +550,7 @@ impl Step {
 
 pub enum Plan {
     Run(Step),
-    Control(Value, Output),
+    Control(Value),
 }
 
 struct Cmd(Map<String, Value>);
@@ -860,21 +846,11 @@ impl ActionCommand {
                     single(cmd("tab").set("action", "close").opt("tab", a.tab), O::None)
                 }
             },
-            Self::Dialog(a) => Ok(Plan::Control(
-                cmd("dialog")
-                    .opt("dialog", a.id)
-                    .set("action", a.action)
-                    .opt("text", a.text)
-                    .done(),
-                O::Dialog,
-            )),
             Self::Status(a) => Ok(Plan::Control(
                 cmd("status").set("execution", a.execution).done(),
-                O::Execution,
             )),
             Self::Cancel(a) => Ok(Plan::Control(
                 cmd("cancel").set("execution", a.execution).done(),
-                O::Execution,
             )),
             Self::Cookies(_) => Err(removed(
                 "cookies",
@@ -907,6 +883,9 @@ impl ActionCommand {
             Self::SetValue(_) => Err(removed(
                 "setvalue",
                 "Use `steel browser fill <selector> <value>`.",
+            )),
+            Self::Dialog(_) => Err(anyhow!(
+                "`steel browser dialog` was removed because commands can no longer answer dialogs. Close the dialog in the live view (`steel browser live`), or run `steel browser tab close <tab>`."
             )),
         }
     }
@@ -981,7 +960,7 @@ fn scoped(mut command: Value, tab: Option<&str>) -> Value {
         return command;
     };
     let eligible = match map.get("command").and_then(Value::as_str) {
-        Some("status" | "cancel" | "dialog") | None => false,
+        Some("status" | "cancel") | None => false,
         Some("tab") => map.get("action").and_then(Value::as_str) == Some("close"),
         Some(_) => true,
     };
@@ -1026,7 +1005,9 @@ fn hint(code: &str, message: &str) -> &'static str {
         "stale_ref" => " Run `steel browser snapshot -i`.",
         "tab_required" => " Run `steel browser tab switch <tab>`.",
         "tab_not_found" => " Run `steel browser tab list`.",
-        "dialog_pending" => " Run `steel browser dialog accept` or `steel browser dialog dismiss`.",
+        "dialog_pending" => {
+            " Run `steel browser live` to open the live view, or `steel browser tab close <tab>`."
+        }
         "browser_restarted" => " Run `steel browser tab list`, then `steel browser snapshot -i`.",
         "missing_capability" => " Run `steel browser start`.",
         "invalid_operation_token" => " If it did not run, run it again.",
@@ -1081,7 +1062,7 @@ fn notices(
     }
     if body["epochChanged"] == true {
         notes.push(
-            "The page changed since your last command, by another client or a dialog answer. Take a new snapshot before using old refs."
+            "The page changed since your last command, by another client. Take a new snapshot before using old refs."
                 .to_string(),
         );
     }
@@ -1100,11 +1081,11 @@ fn notices(
         );
     }
     if let Some(dialog) = body.get("dialog").filter(|d| d.is_object()) {
+        let tab = dialog["tab"].as_str().unwrap_or("<tab>");
         notes.push(format!(
-            "Dialog {} ({}) is open on {}: {}. Answer it with `steel browser dialog accept` or `steel browser dialog dismiss`.",
+            "Dialog {} ({}) is open on {tab}: {}. Commands cannot answer it. Close it in the live view (`steel browser live`), or run `steel browser tab close {tab}`.",
             dialog["id"].as_str().unwrap_or("?"),
             dialog["type"].as_str().unwrap_or("dialog"),
-            dialog["tab"].as_str().unwrap_or("?"),
             dialog["message"],
         ));
     }
@@ -1166,9 +1147,6 @@ fn tab_line(tab: &Value, current: Option<&str>) -> String {
 fn absorb_page(state: &mut BrowserSession, body: &Value) {
     if let Some(cursor) = body["events"]["cursor"].as_str() {
         state.events = Some(cursor.to_string());
-    }
-    if let Some(dialog) = body["dialog"]["id"].as_str() {
-        state.dialog = Some(dialog.to_string());
     }
 }
 
@@ -1330,9 +1308,6 @@ impl Browser {
         if let Some(next) = reply.body.get("next").and_then(Value::as_str) {
             self.state.next = Some(next.to_string());
         }
-        if code == "dialog_not_pending" {
-            self.state.dialog = None;
-        }
         self.save()?;
         Err(fail(
             &code,
@@ -1467,7 +1442,7 @@ impl Browser {
 
     async fn render(&mut self, output: &Output, result: &mut Value) -> Result<Option<String>> {
         Ok(match output {
-            Output::None | Output::Execution | Output::Dialog => None,
+            Output::None => None,
             Output::Snapshot => result["snapshot"].as_str().map(str::to_string),
             Output::Value => show(&result["value"]),
             Output::Find => Some(find_lines(result)),
@@ -1540,24 +1515,11 @@ impl Browser {
         })
     }
 
-    pub async fn control(&mut self, mut command: Value, output: Output) -> Result<()> {
-        if command["command"] == "dialog" && command.get("dialog").is_none() {
-            let Some(id) = self.state.dialog.clone() else {
-                bail!(
-                    "No open dialog is known. Pass its id, such as `steel browser dialog accept d-2`."
-                );
-            };
-            command["dialog"] = json!(id);
-        }
-        let reply = self
-            .send(self.session().control(command.clone(), None))
-            .await?;
+    pub async fn control(&mut self, command: Value) -> Result<()> {
+        let reply = self.send(self.session().control(command, None)).await?;
         let reply = self.check(reply)?;
         let body = reply.body;
         absorb_page(&mut self.state, &body);
-        if matches!(output, Output::Dialog) {
-            self.state.dialog = None;
-        }
         self.save()?;
         let failed = failure(&body);
         if output::is_json() {
@@ -1569,24 +1531,15 @@ impl Browser {
                 Some((code, message)) => Err(fail(&code, &message, Some(&body))),
             };
         }
-        if let Some(answered) = body.get("answered").filter(|a| a.is_object()) {
-            let verb = if answered["accepted"] == true {
-                "accepted"
-            } else {
-                "dismissed"
-            };
-            println!("Dialog {} {verb}.", answered["id"].as_str().unwrap_or("?"));
-        } else {
-            let execution = &body["execution"];
-            println!(
-                "{} {} (effect: {})",
-                execution["id"].as_str().unwrap_or("?"),
-                execution["state"].as_str().unwrap_or("?"),
-                execution["effect"].as_str().unwrap_or("?")
-            );
-            for result in body["results"].as_array().into_iter().flatten() {
-                println!("{result}");
-            }
+        let execution = &body["execution"];
+        println!(
+            "{} {} (effect: {})",
+            execution["id"].as_str().unwrap_or("?"),
+            execution["state"].as_str().unwrap_or("?"),
+            execution["effect"].as_str().unwrap_or("?")
+        );
+        for result in body["results"].as_array().into_iter().flatten() {
+            println!("{result}");
         }
         match failed {
             None => Ok(()),
@@ -1601,9 +1554,9 @@ pub async fn run(action: ActionCommand, session: Option<&str>, diff: bool) -> Re
             let mut browser = Browser::open(session, true).await?;
             browser.execute(vec![step], diff).await
         }
-        Plan::Control(command, output) => {
+        Plan::Control(command) => {
             let mut browser = Browser::open(session, false).await?;
-            browser.control(command, output).await
+            browser.control(command).await
         }
     }
 }
@@ -1820,14 +1773,35 @@ mod tests {
     #[test]
     fn control_commands() {
         assert!(matches!(
-            plan(&["dialog", "accept", "d-2", "--text", "yes"]).unwrap(),
-            Plan::Control(ref c, Output::Dialog)
-                if *c == json!({"command": "dialog", "dialog": "d-2", "action": "accept", "text": "yes"})
+            plan(&["status", "x-7"]).unwrap(),
+            Plan::Control(ref c) if *c == json!({"command": "status", "execution": "x-7"})
         ));
         assert!(matches!(
-            plan(&["status", "x-7"]).unwrap(),
-            Plan::Control(ref c, Output::Execution) if *c == json!({"command": "status", "execution": "x-7"})
+            plan(&["cancel", "x-7"]).unwrap(),
+            Plan::Control(ref c) if *c == json!({"command": "cancel", "execution": "x-7"})
         ));
+    }
+
+    #[test]
+    fn dialog_points_at_the_live_view_and_tab_close() {
+        for args in [
+            vec!["dialog", "accept"],
+            vec!["dialog", "accept", "d-2", "--text", "yes"],
+            vec!["dialog", "dismiss", "d-2"],
+        ] {
+            let err = plan(&args)
+                .err()
+                .unwrap_or_else(|| panic!("{args:?} should fail"));
+            let message = err.to_string();
+            assert!(
+                message.contains("steel browser live"),
+                "{args:?}: {message}"
+            );
+            assert!(
+                message.contains("steel browser tab close"),
+                "{args:?}: {message}"
+            );
+        }
     }
 
     #[test]
@@ -1970,6 +1944,20 @@ mod tests {
         assert!(message.contains("effect: applied"));
         assert!(message.ends_with("Run `steel browser snapshot -i`."));
         assert!(failure(&json!({"execution": {"state": "completed"}})).is_none());
+
+        let blocked = json!({
+            "execution": {"id": "x-2", "state": "failed", "effect": "none"},
+            "results": [{"ok": false, "effect": "none", "error": {
+                "code": "dialog_pending",
+                "message": "Tab t1 shows confirm dialog d-2: \"Sure?\". Close it in the live view, or close its tab."
+            }}]
+        });
+        let (code, message) = failure(&blocked).unwrap();
+        assert_eq!(code, "dialog_pending");
+        assert!(
+            message.ends_with("Run `steel browser live` to open the live view, or `steel browser tab close <tab>`."),
+            "{message}"
+        );
     }
 
     #[test]
@@ -1985,7 +1973,10 @@ mod tests {
         });
         let notes = notices(&body, true, Some("t1"), false);
         assert!(notes.iter().any(|n| n.contains("Nothing ran again")));
-        assert!(notes.iter().any(|n| n.contains("Dialog d-2 (confirm)")));
+        assert!(notes.iter().any(|n| n.contains("Dialog d-2 (confirm)")
+            && n.contains("steel browser live")
+            && n.contains("steel browser tab close t1")));
+        assert!(!notes.iter().any(|n| n.contains("steel browser dialog")));
         assert!(notes.iter().any(|n| n.contains("still loading")));
         assert!(notes.iter().any(|n| n.contains("tab switch t3")));
         assert_eq!(notes.len(), 4);

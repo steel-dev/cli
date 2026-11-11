@@ -88,7 +88,8 @@ steel browser start --local --session "$SESSION_NAME"
 - `stale_ref`: take a new snapshot and use the new refs.
 - `tab_required`: several tabs are open. Run `steel browser tab list`, then
   `steel browser tab switch <tab>`.
-- `dialog_pending`: answer with `steel browser dialog accept` or `dismiss`.
+- `dialog_pending`: commands cannot answer dialogs. Close it in the live view
+  (`steel browser live`), or run `steel browser tab close <tab>`.
 - `delivery_failed`: the API could not reach the browser. Run the same command
   again; it will not run twice.
 - Stale state:

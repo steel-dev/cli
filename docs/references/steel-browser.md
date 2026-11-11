@@ -187,7 +187,8 @@ Self-hosted steel-browser serves the commands API only when it runs with
   ensure all steps share the same `--session <name>`.
 - `stale_ref`: take a new snapshot (`steel browser snapshot -i`) and use the new refs.
 - `tab_required`: several tabs are open. Pick one with `steel browser tab switch <tab>`.
-- `dialog_pending`: answer the dialog with `steel browser dialog accept` or `dismiss`.
+- `dialog_pending`: a dialog blocks the tab, and commands cannot answer it. Close
+  it in the live view (`steel browser live`), or run `steel browser tab close <tab>`.
 - `This is the stored result of an earlier run`: the same command already ran
   after the last response the CLI received. Nothing ran again.
 - `delivery_failed`: the API could not reach the browser. Run the same command

@@ -64,7 +64,6 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel browser tab new](#steel-browser-tab-new)
 - [steel browser tab switch](#steel-browser-tab-switch)
 - [steel browser tab close](#steel-browser-tab-close)
-- [steel browser dialog](#steel-browser-dialog)
 - [steel browser status](#steel-browser-status)
 - [steel browser cancel](#steel-browser-cancel)
 - [steel sessions](#steel-sessions)
@@ -222,7 +221,6 @@ steel browser
 - `is`: Check element state
 - `wait`: Wait for an element, text, URL, load state, download, or a fixed time
 - `tab`: List, open, switch, or close tabs
-- `dialog`: Accept or dismiss an open dialog
 - `status`: Wait for a command that is still running
 - `cancel`: Stop a command that is still running
 
@@ -1044,22 +1042,6 @@ steel browser tab close
 ### Parameters
 
 - `tab` (string, optional): Tab id from `tab list`, such as t2
-
-## steel browser dialog
-
-Accept or dismiss an open dialog
-
-### Usage
-
-```bash
-steel browser dialog
-```
-
-### Parameters
-
-- `action` (enum, required): accept or dismiss
-- `id` (string, optional): Dialog id such as d-2 (default: the last dialog the CLI saw)
-- `--text` (string, optional): Answer for a prompt dialog
 
 ## steel browser status
 
