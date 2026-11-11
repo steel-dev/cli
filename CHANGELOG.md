@@ -33,10 +33,12 @@ Stable release of the functionality shipped in `v0.5.0-preview.9`.
   pass `--json`; each command emits one JSON result.
 - Use `steel browser stop` in place of the former `browser close` command.
   Review `steel browser start --help` for the current create-time flags.
-- Stopping an ID-attached browser session forgets its local attachment without
-  releasing the cloud session. `browser stop --all` also leaves attached cloud
-  sessions running. Use an explicit `steel sessions release` target when release
-  is intended; account-wide release requires `--all`.
+- An explicit `browser stop --session <session-id>` releases that cloud session,
+  even when it was only attached by ID. Only `browser stop --all` forgets
+  ID-attached sessions without releasing them; it also releases other CLI-created
+  sessions. Do not use either command to detach a borrowed session without
+  considering ownership. `steel sessions release <session-id>` explicitly
+  releases its target; account-wide release requires `--all`.
 - `sessions agent-logs --follow` is no longer available. Computer, checkpoint,
   secret, and environment commands from earlier 0.5 previews have been removed.
 - `STEEL_ONBOARDING_FROM` remains telemetry metadata. Pass `--from` directly to
