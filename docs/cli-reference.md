@@ -296,7 +296,7 @@ steel browser captcha
 ### Subcommands
 
 - `solve`: Solve every detected CAPTCHA, or the one a flag picks
-- `status`: Check CAPTCHA status
+- `status`: Check CAPTCHA status and list page and task ids
 
 ## steel browser captcha solve
 
@@ -310,13 +310,13 @@ steel browser captcha solve
 
 ### Parameters
 
-- `--page-id` (string, optional): Solve only the CAPTCHA on this page
+- `--page-id` (string, optional): Solve only the CAPTCHA on this page (ids from `captcha status`)
 - `--url` (string, optional): Solve only the CAPTCHA on the page at this URL
-- `--task-id` (string, optional): Solve only this CAPTCHA task
+- `--task-id` (string, optional): Solve only this CAPTCHA task (ids from `captcha status`)
 
 ## steel browser captcha status
 
-Check CAPTCHA status
+Check CAPTCHA status and list page and task ids
 
 ### Usage
 
@@ -326,7 +326,7 @@ steel browser captcha status
 
 ### Parameters
 
-- `--page-id` (string, optional): Page ID
+- `--page-id` (string, optional): Check only this page
 - `-w, --wait` (boolean, optional): Wait for terminal status
 - `--timeout` (string, optional): Timeout in milliseconds for --wait mode
 - `--interval` (string, optional): Poll interval in milliseconds for --wait mode

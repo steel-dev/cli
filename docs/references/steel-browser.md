@@ -131,7 +131,8 @@ Main flags:
 
 Purpose: manually trigger CAPTCHA solving for a target session. Without flags it
 solves every CAPTCHA detected in the session. `--page-id`, `--url`, or
-`--task-id` solves only the one it names.
+`--task-id` solves only the one it names. `steel browser captcha status` lists
+the page and task ids.
 
 Main flags:
 
@@ -147,6 +148,25 @@ API mapping:
 - Endpoint: `POST /v1/sessions/{sessionId}/captchas/solve`
 - Request body: optional `pageId`, `url`, `taskId`
 - Response: `success` + optional `message`
+
+### `steel browser captcha status`
+
+Purpose: print the overall CAPTCHA status, then one line per page and per task:
+
+```text
+solving turnstile
+page 9F3C2A1B https://example.com/login
+  task 7d1e turnstile solving
+```
+
+Pass the page id to `--page-id` and the task id to `--task-id`. `--page-id` on
+`status` checks only that page. `--json` returns the same ids under `data.pages`.
+
+Main flags:
+
+- `--session <name|id>`
+- `--page-id <id>`
+- `-w, --wait`, `--timeout <ms>`, `--interval <ms>`
 
 ## Profile Persistence
 
