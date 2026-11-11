@@ -129,7 +129,9 @@ Main flags:
 
 ### `steel browser captcha solve`
 
-Purpose: manually trigger CAPTCHA solving for a target session.
+Purpose: manually trigger CAPTCHA solving for a target session. Without flags it
+solves every CAPTCHA detected in the session. `--page-id`, `--url`, or
+`--task-id` solves only the one it names.
 
 Main flags:
 

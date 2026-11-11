@@ -297,12 +297,12 @@ steel browser captcha
 
 ### Subcommands
 
-- `solve`: Solve a CAPTCHA on the current page
+- `solve`: Solve every detected CAPTCHA, or the one a flag picks
 - `status`: Check CAPTCHA status
 
 ## steel browser captcha solve
 
-Solve a CAPTCHA on the current page
+Solve every detected CAPTCHA, or the one a flag picks
 
 ### Usage
 
@@ -312,9 +312,9 @@ steel browser captcha solve
 
 ### Parameters
 
-- `--page-id` (string, optional): Page ID
-- `--url` (string, optional): Page URL for targeted CAPTCHA solving
-- `--task-id` (string, optional): CAPTCHA task ID for targeted solving
+- `--page-id` (string, optional): Solve only the CAPTCHA on this page
+- `--url` (string, optional): Solve only the CAPTCHA on the page at this URL
+- `--task-id` (string, optional): Solve only this CAPTCHA task
 
 ## steel browser captcha status
 
@@ -774,7 +774,7 @@ steel browser get
 - `attr`: Get an element attribute
 - `url`: Get the page URL
 - `title`: Get the page title
-- `count`: Count matching elements
+- `count`: Count elements that match a CSS selector
 - `box`: Get an element's bounding box
 
 ## steel browser get text
@@ -870,7 +870,7 @@ steel browser get title
 
 ## steel browser get count
 
-Count matching elements
+Count elements that match a CSS selector
 
 ### Usage
 
@@ -880,7 +880,7 @@ steel browser get count
 
 ### Parameters
 
-- `selector` (string, required): Element ref (e.g. e5) or CSS selector
+- `selector` (string, required): CSS selector (refs do not work here)
 
 ## steel browser get box
 

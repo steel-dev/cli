@@ -27,6 +27,12 @@ pub struct OptionalSelectorArg {
 }
 
 #[derive(Parser)]
+pub struct CssSelectorArg {
+    /// CSS selector (refs do not work here)
+    pub selector: String,
+}
+
+#[derive(Parser)]
 pub struct RemovedArgs {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
     pub args: Vec<String>,
@@ -207,8 +213,8 @@ pub enum GetCommand {
     Url,
     /// Get the page title
     Title,
-    /// Count matching elements
-    Count(SelectorArg),
+    /// Count elements that match a CSS selector
+    Count(CssSelectorArg),
     /// Get an element's bounding box
     #[command(name = "box")]
     Box(SelectorArg),

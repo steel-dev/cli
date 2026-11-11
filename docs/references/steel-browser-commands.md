@@ -77,7 +77,7 @@ steel browser get value <sel>
 steel browser get attr <sel> <name>
 steel browser get url
 steel browser get title
-steel browser get count <sel>
+steel browser get count <css>      # CSS selector only; a ref names one element
 steel browser get box <sel>
 steel browser is visible|enabled|checked <sel>
 steel browser find <value>         # CSS by default; --by role|text|label|placeholder|alt|title|testid, --name, --exact

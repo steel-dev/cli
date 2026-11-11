@@ -7,7 +7,7 @@ use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Solve a CAPTCHA on the current page
+    /// Solve every detected CAPTCHA, or the one a flag picks
     Solve(SolveArgs),
 
     /// Check CAPTCHA status
@@ -25,15 +25,15 @@ impl Command {
 
 #[derive(Parser)]
 pub struct SolveArgs {
-    /// Page ID
+    /// Solve only the CAPTCHA on this page
     #[arg(long)]
     pub page_id: Option<String>,
 
-    /// Page URL for targeted CAPTCHA solving
+    /// Solve only the CAPTCHA on the page at this URL
     #[arg(long)]
     pub url: Option<String>,
 
-    /// CAPTCHA task ID for targeted solving
+    /// Solve only this CAPTCHA task
     #[arg(long)]
     pub task_id: Option<String>,
 }
