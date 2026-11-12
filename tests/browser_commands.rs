@@ -354,6 +354,75 @@ async fn ctrl_c_cancels_a_command_once_its_execution_id_arrives() {
 
 #[cfg(unix)]
 #[tokio::test]
+async fn ctrl_c_while_waiting_to_retry_a_busy_command_does_not_send_it() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(commands_path()))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .insert_header("Retry-After", "5")
+                .set_body_json(json!({"error": {
+                    "code": "queue_full",
+                    "message": "Too many executions are waiting in this session."
+                }})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/sessions/{ID}/commands/executions/x-9/cancel"
+        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(execution_reply("cancelled", json!([]))),
+        )
+        .expect(0)
+        .mount(&server)
+        .await;
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let out = interrupt_once_sent(&cli, &server, &commands_path()).await;
+    assert_eq!(out.status.code(), Some(130), "{out:?}");
+    let body = json_out(&out);
+    assert_eq!(body["error_code"], "interrupted");
+    assert_eq!(body["error"], "Stopped. The command did not start.");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ctrl_c_exits_130_even_when_the_cancel_fails() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(commands_path()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_millis(1500))
+                .set_body_json(execution_reply("running", json!([]))),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/sessions/{ID}/commands/executions/x-9/cancel"
+        )))
+        .respond_with(ResponseTemplate::new(410).set_body_json(json!({"error": {
+            "code": "session_ended",
+            "message": "The session has ended."
+        }})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let out = interrupt_once_sent(&cli, &server, &commands_path()).await;
+    assert_eq!(out.status.code(), Some(130), "{out:?}");
+    assert_eq!(json_out(&out)["error_code"], "session_ended");
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn ctrl_c_cancels_a_command_while_waiting_for_it() {
     let server = MockServer::start().await;
     let route = format!("/v1/sessions/{ID}/commands/executions/x-9");

@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use serde_json::{Map, Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
-use crate::api::commands::{Reply, Session};
+use crate::api::commands::{Reply, Session, Submitted};
 use crate::api::session::Session as RemoteSession;
 use crate::browser::state::{self, BrowserSession, SnapshotInfo};
 use crate::config::settings::ApiMode;
@@ -1195,6 +1195,15 @@ fn stopped_waiting(id: Option<&str>) -> anyhow::Error {
     interrupted(fail("interrupted", &message, None))
 }
 
+fn not_sent(maybe_ran: bool) -> anyhow::Error {
+    let message = if maybe_ran {
+        "Stopped before sending the command again. An earlier attempt may have reached the browser, so check the page before running it again."
+    } else {
+        "Stopped. The command did not start."
+    };
+    interrupted(fail("interrupted", message, None))
+}
+
 fn exit_on_interrupt() {
     tokio::spawn(async {
         if tokio::signal::ctrl_c().await.is_ok() {
@@ -1404,7 +1413,8 @@ impl Browser {
             let injected = self.state.tab.is_some();
             let (commands, body) = self.request(&steps, diff);
             let (reply, stopped) = self.run_or_cancel(body.clone()).await?;
-            let mut reply = self.check(reply)?;
+            let exit = |err| if stopped { interrupted(err) } else { err };
+            let mut reply = self.check(reply).map_err(exit)?;
             self.absorb(&commands, &reply.body, body.get("observe"));
             let lost_tab = injected
                 && !stopped
@@ -1421,31 +1431,35 @@ impl Browser {
             exit_on_interrupt();
             let result = self.report(&steps, &mut reply.body).await;
             self.save()?;
-            return if stopped {
-                result.map_err(interrupted)
-            } else {
-                result
-            };
+            return result.map_err(exit);
         }
     }
 
     async fn run_or_cancel(&self, body: Value) -> Result<(Reply, bool)> {
         let session = self.session();
+        let (stop, stopping) = tokio::sync::watch::channel(false);
         let mut interrupt = std::pin::pin!(tokio::signal::ctrl_c());
-        let mut submitting = std::pin::pin!(self.send(session.submit(body)));
-        let submitted = tokio::select! {
+        let mut submitting = std::pin::pin!(self.send(session.submit(body, stopping)));
+        let (submitted, stopped) = tokio::select! {
             biased;
-            reply = &mut submitting => reply?,
+            submitted = &mut submitting => (submitted?, false),
             _ = &mut interrupt => {
                 crate::status!("Stopping the command. Press Ctrl-C again to stop waiting.");
-                let reply = tokio::select! {
+                stop.send_replace(true);
+                tokio::select! {
                     biased;
-                    reply = &mut submitting => reply?,
+                    submitted = &mut submitting => (submitted.map_err(interrupted)?, true),
                     _ = tokio::signal::ctrl_c() => return Err(stopped_waiting(None)),
-                };
-                return Ok((self.stop(reply).await?, true));
+                }
             }
         };
+        let submitted = match submitted {
+            Submitted::Reply(reply) => reply,
+            Submitted::Stopped { maybe_ran } => return Err(not_sent(maybe_ran)),
+        };
+        if stopped {
+            return Ok((self.stop(submitted).await.map_err(interrupted)?, true));
+        }
         let execution = running(&submitted.body);
         let mut settling = std::pin::pin!(self.send(session.settle(submitted)));
         tokio::select! {
@@ -1456,7 +1470,7 @@ impl Browser {
                 let Some(id) = execution else {
                     return Ok((settling.await?, false));
                 };
-                Ok((self.cancel(&id).await?, true))
+                Ok((self.cancel(&id).await.map_err(interrupted)?, true))
             }
         }
     }
