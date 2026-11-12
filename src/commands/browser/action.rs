@@ -889,7 +889,7 @@ impl ActionCommand {
                 "Use `steel browser fill <selector> <value>`.",
             )),
             Self::Dialog(_) => Err(anyhow!(
-                "`steel browser dialog` was removed because commands can no longer answer dialogs. Close the dialog in the live view (`steel browser live`), or run `steel browser tab close <tab>`."
+                "`steel browser dialog` was removed because commands can no longer answer dialogs. Close the dialog in the live view (`steel browser live`), or run `steel browser tab new`, then `steel browser tab close <tab>`."
             )),
         }
     }
@@ -1010,7 +1010,7 @@ fn hint(code: &str, message: &str) -> &'static str {
         "tab_required" => " Run `steel browser tab switch <tab>`.",
         "tab_not_found" => " Run `steel browser tab list`.",
         "dialog_pending" => {
-            " Run `steel browser live` to open the live view, or `steel browser tab close <tab>`."
+            " Run `steel browser live` to open the live view, or run `steel browser tab new`, then `steel browser tab close <tab>`."
         }
         "browser_restarted" => " Run `steel browser tab list`, then `steel browser snapshot -i`.",
         "missing_capability" => " Run `steel browser start`.",
@@ -1082,7 +1082,7 @@ fn notices(body: &Value) -> Vec<String> {
     if let Some(dialog) = body.get("dialog").filter(|d| d.is_object()) {
         let tab = dialog["tab"].as_str().unwrap_or("<tab>");
         notes.push(format!(
-            "Dialog {} ({}) is open on {tab}: {}. Commands cannot answer it. Close it in the live view (`steel browser live`), or run `steel browser tab close {tab}`.",
+            "Dialog {} ({}) is open on {tab}: {}. Commands cannot answer it. Close it in the live view (`steel browser live`), or run `steel browser tab new`, then `steel browser tab close {tab}`.",
             dialog["id"].as_str().unwrap_or("?"),
             dialog["type"].as_str().unwrap_or("dialog"),
             dialog["message"],
@@ -1759,7 +1759,7 @@ mod tests {
                 "{args:?}: {message}"
             );
             assert!(
-                message.contains("steel browser tab close"),
+                message.contains("steel browser tab new`, then `steel browser tab close"),
                 "{args:?}: {message}"
             );
         }
@@ -1916,7 +1916,7 @@ mod tests {
         let (code, message) = failure(&blocked).unwrap();
         assert_eq!(code, "dialog_pending");
         assert!(
-            message.ends_with("Run `steel browser live` to open the live view, or `steel browser tab close <tab>`."),
+            message.ends_with("Run `steel browser live` to open the live view, or run `steel browser tab new`, then `steel browser tab close <tab>`."),
             "{message}"
         );
     }
@@ -1932,7 +1932,7 @@ mod tests {
         assert!(notes.iter().any(|n| n.contains("Nothing ran again")));
         assert!(notes.iter().any(|n| n.contains("Dialog d-2 (confirm)")
             && n.contains("steel browser live")
-            && n.contains("steel browser tab close t1")));
+            && n.contains("steel browser tab new`, then `steel browser tab close t1")));
         assert!(!notes.iter().any(|n| n.contains("steel browser dialog")));
         assert!(notes.iter().any(|n| n.contains("still loading")));
         assert_eq!(notes.len(), 3);

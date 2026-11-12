@@ -89,7 +89,8 @@ steel browser start --local --session "$SESSION_NAME"
 - `tab_required`: several tabs are open. Run `steel browser tab list`, then
   `steel browser tab switch <tab>`.
 - `dialog_pending`: commands cannot answer dialogs. Close it in the live view
-  (`steel browser live`), or run `steel browser tab close <tab>`.
+  (`steel browser live`), or run `steel browser tab new`, then
+  `steel browser tab close <tab>`.
 - `delivery_failed`: the API could not reach the browser. Run the same command
   again; it will not run twice.
 - Stale state:
