@@ -293,17 +293,20 @@ async fn mount_cancel(server: &MockServer) {
 }
 
 #[cfg(unix)]
-async fn interrupt_once_sent(cli: &Cli, server: &MockServer, route: &str) -> Output {
-    let child = cli.spawn(&[
-        "browser",
-        "wait",
-        "--text",
-        "Done",
-        "--timeout",
-        "50000",
-        "--session",
-        "work",
-    ]);
+const WAIT_FOR_TEXT: &[&str] = &[
+    "browser",
+    "wait",
+    "--text",
+    "Done",
+    "--timeout",
+    "50000",
+    "--session",
+    "work",
+];
+
+#[cfg(unix)]
+async fn interrupt_once_sent(cli: &Cli, server: &MockServer, route: &str, args: &[&str]) -> Output {
+    let child = cli.spawn(args);
     for _ in 0..250 {
         let requests = server.received_requests().await.unwrap();
         if requests.iter().any(|r| r.url.path() == route) {
@@ -347,7 +350,7 @@ async fn ctrl_c_cancels_a_command_once_its_execution_id_arrives() {
     let cli = Cli::new(&server);
     cli.write_state("work");
 
-    let out = interrupt_once_sent(&cli, &server, &commands_path()).await;
+    let out = interrupt_once_sent(&cli, &server, &commands_path(), WAIT_FOR_TEXT).await;
     assert_eq!(out.status.code(), Some(130), "{out:?}");
     assert_eq!(json_out(&out)["error_code"], "cancelled");
 }
@@ -382,7 +385,7 @@ async fn ctrl_c_while_waiting_to_retry_a_busy_command_does_not_send_it() {
     let cli = Cli::new(&server);
     cli.write_state("work");
 
-    let out = interrupt_once_sent(&cli, &server, &commands_path()).await;
+    let out = interrupt_once_sent(&cli, &server, &commands_path(), WAIT_FOR_TEXT).await;
     assert_eq!(out.status.code(), Some(130), "{out:?}");
     let body = json_out(&out);
     assert_eq!(body["error_code"], "interrupted");
@@ -416,9 +419,48 @@ async fn ctrl_c_exits_130_even_when_the_cancel_fails() {
     let cli = Cli::new(&server);
     cli.write_state("work");
 
-    let out = interrupt_once_sent(&cli, &server, &commands_path()).await;
+    let out = interrupt_once_sent(&cli, &server, &commands_path(), WAIT_FOR_TEXT).await;
     assert_eq!(out.status.code(), Some(130), "{out:?}");
     assert_eq!(json_out(&out)["error_code"], "session_ended");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ctrl_c_while_saving_a_download_keeps_the_session_state() {
+    let server = MockServer::start().await;
+    let route = format!("/v1/sessions/{ID}/files/report.csv");
+    Mock::given(method("POST"))
+        .and(path(commands_path()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(completed(
+            "op_7",
+            json!([{"command": "wait", "ok": true, "effect": "none", "file": "report.csv"}]),
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(route.clone()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_secs(5))
+                .set_body_bytes(b"a,b\n".to_vec()),
+        )
+        .mount(&server)
+        .await;
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let out = interrupt_once_sent(
+        &cli,
+        &server,
+        &route,
+        &["browser", "wait", "--download", "--session", "work"],
+    )
+    .await;
+    assert_eq!(out.status.code(), Some(130), "{out:?}");
+    assert_eq!(json_out(&out)["error_code"], "interrupted");
+    assert_eq!(cli.state("work").unwrap()["next"], "op_7");
+    assert!(!cli.config.path().join("report.csv").exists());
 }
 
 #[cfg(unix)]
@@ -447,7 +489,7 @@ async fn ctrl_c_cancels_a_command_while_waiting_for_it() {
     let cli = Cli::new(&server);
     cli.write_state("work");
 
-    let out = interrupt_once_sent(&cli, &server, &route).await;
+    let out = interrupt_once_sent(&cli, &server, &route, WAIT_FOR_TEXT).await;
     assert_eq!(out.status.code(), Some(130), "{out:?}");
     assert_eq!(json_out(&out)["error_code"], "cancelled");
     assert_eq!(cli.state("work").unwrap()["next"], "op_2");

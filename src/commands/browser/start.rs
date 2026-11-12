@@ -137,7 +137,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         && inactivity >= timeout
     {
         eprintln!(
-            "warning: --inactivity-timeout ({inactivity}ms) >= --timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
+            "warning: --inactivity-timeout ({inactivity}ms) >= the session timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
         );
     }
 

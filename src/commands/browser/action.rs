@@ -1024,7 +1024,10 @@ fn session_flag(name: &str) -> String {
 fn hint(code: &str, message: &str) -> &'static str {
     match code {
         "tab_not_found" | "browser_restarted" if message.contains("tab list") => "",
-        "invalid_argument" if message.contains("is not a valid CSS selector") => {
+        "invalid_argument"
+            if message.contains("is not a valid CSS selector")
+                || message.contains("is not a valid selector") =>
+        {
             " A target is a ref or a CSS selector. Run `steel browser find --by <kind> <value>` to get a ref."
         }
         "stale_ref" => " Run `steel browser snapshot -i`.",
@@ -1202,14 +1205,6 @@ fn not_sent(maybe_ran: bool) -> anyhow::Error {
         "Stopped. The command did not start."
     };
     interrupted(fail("interrupted", message, None))
-}
-
-fn exit_on_interrupt() {
-    tokio::spawn(async {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            std::process::exit(exit_code::INTERRUPTED);
-        }
-    });
 }
 
 pub struct Browser {
@@ -1428,8 +1423,15 @@ impl Browser {
                 retried = true;
                 continue;
             }
-            exit_on_interrupt();
-            let result = self.report(&steps, &mut reply.body).await;
+            let result = tokio::select! {
+                biased;
+                result = self.report(&steps, &mut reply.body) => result,
+                _ = tokio::signal::ctrl_c() => Err(interrupted(fail(
+                    "interrupted",
+                    "Stopped. The command already finished, but its output was cut short.",
+                    None,
+                ))),
+            };
             self.save()?;
             return result.map_err(exit);
         }
@@ -2116,6 +2118,15 @@ mod tests {
             message.ends_with("Run `steel browser find --by <kind> <value>` to get a ref."),
             "{message}"
         );
+        let older = json!({
+            "execution": {"id": "x-5", "state": "failed", "effect": "none"},
+            "results": [{"ok": false, "effect": "none", "error": {
+                "code": "invalid_argument",
+                "message": "The locator css=\"label=Password\" is not valid: SyntaxError: Failed to execute 'querySelectorAll' on 'Document': 'label=Password' is not a valid selector."
+            }}]
+        });
+        let (_, message) = failure(&older).unwrap();
+        assert!(message.ends_with("to get a ref."), "{message}");
     }
 
     #[test]
