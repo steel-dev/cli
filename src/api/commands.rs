@@ -111,7 +111,7 @@ impl Session<'_> {
         })
     }
 
-    pub async fn run(&self, mut body: Value) -> Result<Reply, ApiError> {
+    pub async fn submit(&self, mut body: Value) -> Result<Reply, ApiError> {
         let mut key = new_key();
         let mut maybe_ran = false;
         let mut delivery = 0;
@@ -150,7 +150,6 @@ impl Session<'_> {
                     key = new_key();
                     renewed = true;
                 }
-                (200, _) => return self.settle(reply).await,
                 _ => return Ok(reply),
             }
         }
@@ -183,7 +182,7 @@ impl Session<'_> {
         }
     }
 
-    async fn settle(&self, mut reply: Reply) -> Result<Reply, ApiError> {
+    pub async fn settle(&self, mut reply: Reply) -> Result<Reply, ApiError> {
         for _ in 0..STATUS_POLLS {
             if !reply.is_pending() {
                 return Ok(reply);
@@ -318,7 +317,7 @@ mod tests {
             client: &client,
             id: ID,
         };
-        session.run(body).await
+        session.settle(session.submit(body).await?).await
     }
 
     fn commands_path() -> String {
@@ -591,7 +590,7 @@ mod tests {
             client: &client,
             id: ID,
         };
-        let result = session.run(json!({"commands": []})).await;
+        let result = session.submit(json!({"commands": []})).await;
         assert!(matches!(result, Err(ApiError::MissingAuth)));
     }
 
