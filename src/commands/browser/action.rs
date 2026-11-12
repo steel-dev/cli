@@ -550,7 +550,12 @@ impl Step {
 
 pub enum Plan {
     Run(Step),
-    Control(Value),
+    Control(Control),
+}
+
+pub enum Control {
+    Status(String),
+    Cancel(String),
 }
 
 struct Cmd(Map<String, Value>);
@@ -792,11 +797,14 @@ impl ActionCommand {
             ),
             Self::Eval(a) => single(cmd("eval").set("script", a.script), O::Value),
             Self::Find(a) => single(
-                cmd("find")
-                    .set("by", a.by)
-                    .set("value", a.value)
-                    .opt("name", a.name)
-                    .on("exact", a.exact),
+                cmd("find").set(
+                    "target",
+                    Cmd(Map::new())
+                        .set(&a.by, a.value)
+                        .opt("name", a.name)
+                        .on("exact", a.exact)
+                        .done(),
+                ),
                 O::Find,
             ),
             Self::Content => single(
@@ -846,12 +854,8 @@ impl ActionCommand {
                     single(cmd("tab").set("action", "close").opt("tab", a.tab), O::None)
                 }
             },
-            Self::Status(a) => Ok(Plan::Control(
-                cmd("status").set("execution", a.execution).done(),
-            )),
-            Self::Cancel(a) => Ok(Plan::Control(
-                cmd("cancel").set("execution", a.execution).done(),
-            )),
+            Self::Status(a) => Ok(Plan::Control(Control::Status(a.execution))),
+            Self::Cancel(a) => Ok(Plan::Control(Control::Cancel(a.execution))),
             Self::Cookies(_) => Err(removed(
                 "cookies",
                 "Read cookies with `steel browser eval \"document.cookie\"` (HttpOnly cookies are not visible). Keep logins across sessions with `steel browser start --profile <name>`.",
@@ -960,7 +964,7 @@ fn scoped(mut command: Value, tab: Option<&str>) -> Value {
         return command;
     };
     let eligible = match map.get("command").and_then(Value::as_str) {
-        Some("status" | "cancel") | None => false,
+        None => false,
         Some("tab") => map.get("action").and_then(Value::as_str) == Some("close"),
         Some(_) => true,
     };
@@ -1050,12 +1054,7 @@ fn failure(body: &Value) -> Option<(String, String)> {
     ))
 }
 
-fn notices(
-    body: &Value,
-    events: bool,
-    current_tab: Option<&str>,
-    downloading: bool,
-) -> Vec<String> {
+fn notices(body: &Value) -> Vec<String> {
     let mut notes = Vec::new();
     if body["execution"]["replayed"] == true {
         notes.push("This is the stored result of an earlier run. Nothing ran again.".to_string());
@@ -1092,31 +1091,6 @@ fn notices(
     if let Some(message) = body["observe"]["error"]["message"].as_str() {
         notes.push(format!("Could not take the diff: {message}"));
     }
-    if !events {
-        return notes;
-    }
-    for item in body["events"]["items"].as_array().into_iter().flatten() {
-        let tab = item["tab"].as_str().unwrap_or("?");
-        match item["type"].as_str() {
-            Some("tab_opened") if Some(tab) != current_tab => {
-                let from = item["opener"]
-                    .as_str()
-                    .map(|opener| format!(" from {opener}"))
-                    .unwrap_or_default();
-                notes.push(format!(
-                    "Tab {tab} opened{from}. Switch to it with `steel browser tab switch {tab}`."
-                ));
-            }
-            Some("tab_closed") => notes.push(format!("Tab {tab} closed.")),
-            Some("download") if !downloading && item["state"] == "completed" => {
-                notes.push(format!(
-                    "Downloaded {}. Save it with `steel browser wait --download`.",
-                    item["file"].as_str().unwrap_or("a file")
-                ));
-            }
-            _ => {}
-        }
-    }
     notes
 }
 
@@ -1142,12 +1116,6 @@ fn tab_line(tab: &Value, current: Option<&str>) -> String {
         tab["url"].as_str().unwrap_or(""),
         tab["title"].as_str().unwrap_or("")
     )
-}
-
-fn absorb_page(state: &mut BrowserSession, body: &Value) {
-    if let Some(cursor) = body["events"]["cursor"].as_str() {
-        state.events = Some(cursor.to_string());
-    }
 }
 
 fn restarted(body: &Value) -> bool {
@@ -1216,10 +1184,7 @@ impl Browser {
             .flat_map(|step| step.commands.iter().cloned())
             .map(|command| scoped(command, self.state.tab.as_deref()))
             .collect();
-        let mut body = json!({
-            "commands": commands,
-            "eventsAfter": self.state.events.as_deref().unwrap_or("c-0"),
-        });
+        let mut body = json!({ "commands": commands });
         if let Some(next) = &self.state.next {
             body["after"] = json!(next);
         }
@@ -1323,7 +1288,6 @@ impl Browser {
         if let Some(tab) = body["page"]["tab"].as_str() {
             self.state.tab = Some(tab.to_string());
         }
-        absorb_page(&mut self.state, body);
         let results = body["results"]
             .as_array()
             .map(Vec::as_slice)
@@ -1355,7 +1319,6 @@ impl Browser {
                 .with_context(|| format!("Could not read {}", path.display()))?;
             self.send(self.session().upload_file(bytes, name)).await?;
         }
-        let events = self.state.events.is_some();
         let tab_commands = steps
             .iter()
             .flat_map(|step| step.commands.iter())
@@ -1378,17 +1341,14 @@ impl Browser {
                 retried = true;
                 continue;
             }
-            let result = self.report(&steps, &mut reply.body, events).await;
+            let result = self.report(&steps, &mut reply.body).await;
             self.save()?;
             return result;
         }
     }
 
-    async fn report(&mut self, steps: &[Step], body: &mut Value, events: bool) -> Result<()> {
-        let downloading = steps
-            .iter()
-            .any(|s| matches!(s.output, Output::Download(_)));
-        let notes = notices(body, events, self.state.tab.as_deref(), downloading);
+    async fn report(&mut self, steps: &[Step], body: &mut Value) -> Result<()> {
+        let notes = notices(body);
         let failed = failure(body);
         let mut lines = Vec::new();
         let mut index = 0;
@@ -1515,12 +1475,13 @@ impl Browser {
         })
     }
 
-    pub async fn control(&mut self, command: Value) -> Result<()> {
-        let reply = self.send(self.session().control(command, None)).await?;
+    pub async fn control(&mut self, control: Control) -> Result<()> {
+        let reply = match &control {
+            Control::Status(id) => self.send(self.session().execution(id)).await?,
+            Control::Cancel(id) => self.send(self.session().cancel(id)).await?,
+        };
         let reply = self.check(reply)?;
         let body = reply.body;
-        absorb_page(&mut self.state, &body);
-        self.save()?;
         let failed = failure(&body);
         if output::is_json() {
             return match failed {
@@ -1554,9 +1515,9 @@ pub async fn run(action: ActionCommand, session: Option<&str>, diff: bool) -> Re
             let mut browser = Browser::open(session, true).await?;
             browser.execute(vec![step], diff).await
         }
-        Plan::Control(command) => {
+        Plan::Control(control) => {
             let mut browser = Browser::open(session, false).await?;
-            browser.control(command).await
+            browser.control(control).await
         }
     }
 }
@@ -1724,14 +1685,14 @@ mod tests {
     fn find_defaults_to_css() {
         assert_eq!(
             commands(&["find", "button.primary"]),
-            vec![json!({"command": "find", "by": "css", "value": "button.primary"})]
+            vec![json!({"command": "find", "target": {"css": "button.primary"}})]
         );
         assert_eq!(
             commands(&[
                 "find", "button", "--by", "role", "--name", "Save", "--exact"
             ]),
             vec![
-                json!({"command": "find", "by": "role", "value": "button", "name": "Save", "exact": true})
+                json!({"command": "find", "target": {"role": "button", "name": "Save", "exact": true}})
             ]
         );
     }
@@ -1774,11 +1735,11 @@ mod tests {
     fn control_commands() {
         assert!(matches!(
             plan(&["status", "x-7"]).unwrap(),
-            Plan::Control(ref c) if *c == json!({"command": "status", "execution": "x-7"})
+            Plan::Control(Control::Status(ref id)) if id == "x-7"
         ));
         assert!(matches!(
             plan(&["cancel", "x-7"]).unwrap(),
-            Plan::Control(ref c) if *c == json!({"command": "cancel", "execution": "x-7"})
+            Plan::Control(Control::Cancel(ref id)) if id == "x-7"
         ));
     }
 
@@ -1961,26 +1922,20 @@ mod tests {
     }
 
     #[test]
-    fn notices_cover_replays_dialogs_and_popups() {
+    fn notices_cover_replays_dialogs_and_loading() {
         let body = json!({
             "execution": {"state": "completed", "replayed": true},
             "dialog": {"id": "d-2", "type": "confirm", "tab": "t1", "message": "Sure?"},
-            "results": [{"ok": true, "loading": true}],
-            "events": {"cursor": "c-5", "items": [
-                {"type": "tab_opened", "tab": "t3", "opener": "t1"},
-                {"type": "navigation", "tab": "t1"},
-            ]}
+            "results": [{"ok": true, "loading": true}]
         });
-        let notes = notices(&body, true, Some("t1"), false);
+        let notes = notices(&body);
         assert!(notes.iter().any(|n| n.contains("Nothing ran again")));
         assert!(notes.iter().any(|n| n.contains("Dialog d-2 (confirm)")
             && n.contains("steel browser live")
             && n.contains("steel browser tab close t1")));
         assert!(!notes.iter().any(|n| n.contains("steel browser dialog")));
         assert!(notes.iter().any(|n| n.contains("still loading")));
-        assert!(notes.iter().any(|n| n.contains("tab switch t3")));
-        assert_eq!(notes.len(), 4);
-        assert_eq!(notices(&body, false, Some("t1"), false).len(), 3);
+        assert_eq!(notes.len(), 3);
     }
 
     #[test]

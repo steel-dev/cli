@@ -7,6 +7,7 @@ This reference defines how `steel browser` runs and the contracts of its session
 Each `steel browser` action is one HTTP request to the session's commands API:
 
 - `POST /v1/sessions/{sessionId}/commands` with the API key, a random `Idempotency-Key`, and `after` (the last operation id the CLI received).
+- `steel browser status` and `steel browser cancel` use `GET /v1/sessions/{sessionId}/commands/executions/{executionId}` and `POST .../cancel`. The CLI also uses the `GET` to wait for a command that is still running.
 - The browser engine runs inside the session next to Chrome. It holds refs, tabs, dialogs, and the execution records.
 - The CLI keeps no process running. It stores per-session state in `~/.config/steel/browser-sessions/<name>.json`.
 
@@ -195,6 +196,8 @@ Profile metadata is stored at `~/.config/steel/profiles/<name>.json`.
 Self-hosted steel-browser serves the commands API only when it runs with
 `ENABLE_COMMANDS_API=true`. Without it, browser actions fail with
 `missing_capability`. `steel dev start` does not turn it on yet.
+It also needs steel-browser from 2026-11-09 or later. Older builds do not
+serve the execution routes or the `find` target form.
 
 ## Troubleshooting (Agent-Focused)
 

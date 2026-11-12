@@ -109,7 +109,7 @@ steel browser tab switch t2
 steel browser tab close [t2]     # the current tab if omitted
 ```
 
-Commands without a ref run on the current tab. When a page opens a tab, the CLI prints `Tab t3 opened from t1` and stays on the current tab.
+Commands without a ref run on the current tab. When a page opens a tab, the CLI stays on the current tab. Run `steel browser tab list` to find the new one.
 
 ## Dialogs and long commands
 

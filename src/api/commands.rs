@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::api::client::{ApiError, SteelClient};
 
@@ -63,14 +63,27 @@ impl Session<'_> {
     }
 
     async fn post(&self, body: &Value, key: Option<&str>) -> Result<Reply, ApiError> {
-        let path = self.path("/commands");
+        self.call(reqwest::Method::POST, "/commands", Some(body), key)
+            .await
+    }
+
+    async fn call(
+        &self,
+        method: reqwest::Method,
+        suffix: &str,
+        body: Option<&Value>,
+        key: Option<&str>,
+    ) -> Result<Reply, ApiError> {
+        let path = self.path(suffix);
         let url = self.client.url(&path);
         let mut req = self
             .client
-            .authed(reqwest::Method::POST, &path)
+            .authed(method, &path)
             .await?
-            .timeout(REQUEST_TIMEOUT)
-            .json(body);
+            .timeout(REQUEST_TIMEOUT);
+        if let Some(body) = body {
+            req = req.json(body);
+        }
         if let Some(key) = key {
             req = req.header("Idempotency-Key", key);
         }
@@ -137,20 +150,26 @@ impl Session<'_> {
                     key = new_key();
                     renewed = true;
                 }
-                (200, _) => return self.settle(reply, body.get("eventsAfter")).await,
+                (200, _) => return self.settle(reply).await,
                 _ => return Ok(reply),
             }
         }
     }
 
-    pub async fn control(&self, command: Value, events: Option<&Value>) -> Result<Reply, ApiError> {
-        let mut body = json!({ "commands": [command] });
-        if let Some(cursor) = events {
-            body["eventsAfter"] = cursor.clone();
-        }
+    pub async fn execution(&self, id: &str) -> Result<Reply, ApiError> {
+        let suffix = format!("/commands/executions/{}", urlencoding::encode(id));
+        self.control(reqwest::Method::GET, &suffix).await
+    }
+
+    pub async fn cancel(&self, id: &str) -> Result<Reply, ApiError> {
+        let suffix = format!("/commands/executions/{}/cancel", urlencoding::encode(id));
+        self.control(reqwest::Method::POST, &suffix).await
+    }
+
+    async fn control(&self, method: reqwest::Method, suffix: &str) -> Result<Reply, ApiError> {
         let mut delivery = 0;
         loop {
-            let result = self.post(&body, None).await;
+            let result = self.call(method.clone(), suffix, None, None).await;
             let retry = match &result {
                 Err(ApiError::Unreachable { .. }) => true,
                 Ok(reply) => reply.status == 503,
@@ -164,17 +183,16 @@ impl Session<'_> {
         }
     }
 
-    async fn settle(&self, mut reply: Reply, events: Option<&Value>) -> Result<Reply, ApiError> {
+    async fn settle(&self, mut reply: Reply) -> Result<Reply, ApiError> {
         for _ in 0..STATUS_POLLS {
             if !reply.is_pending() {
                 return Ok(reply);
             }
-            let Some(execution) = reply.body["execution"]["id"].as_str() else {
+            let Some(execution) = reply.body["execution"]["id"].as_str().map(str::to_string) else {
                 return Ok(reply);
             };
             let next = reply.body.get("next").cloned();
-            let status = json!({ "command": "status", "execution": execution });
-            let mut polled = self.control(status, events).await?;
+            let mut polled = self.execution(&execution).await?;
             if polled.status != 200 {
                 return Ok(polled);
             }
@@ -270,6 +288,7 @@ mod tests {
     use super::*;
     use crate::config::auth::{Auth, AuthSource};
     use crate::config::settings::ApiMode;
+    use serde_json::json;
     use wiremock::matchers::{body_partial_json, header, header_exists, method, path};
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
@@ -472,43 +491,73 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn waits_for_a_running_execution_with_status() {
+    async fn waits_for_a_running_execution_on_its_route() {
         let server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path(commands_path()))
-            .and(body_partial_json(json!({"commands": [{"command": "status", "execution": "x-7"}]})))
+        Mock::given(method("GET"))
+            .and(path(format!("/sessions/{ID}/commands/executions/x-7")))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "epoch": 2,
                 "page": null,
                 "execution": {"id": "x-7", "state": "completed", "effect": "none", "replayed": false, "ran": 1},
-                "results": [{"ok": true, "effect": "none", "waited": "text"}],
-                "events": {"cursor": "c-9", "items": []}
+                "results": [{"ok": true, "effect": "none", "waited": "text"}]
             })))
+            .expect(1)
             .mount(&server)
             .await;
         Mock::given(method("POST"))
             .and(path(commands_path()))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "next": "op_9",
-                "epoch": 2,
                 "page": null,
                 "execution": {"id": "x-7", "state": "running", "effect": "none", "replayed": false, "ran": 1},
                 "results": []
             })))
+            .expect(1)
             .mount(&server)
             .await;
         let reply = run(
             &server,
-            json!({"commands": [{"command": "wait", "text": "Done"}], "eventsAfter": "c-3"}),
+            json!({"commands": [{"command": "wait", "text": "Done"}]}),
         )
         .await
         .unwrap();
         assert_eq!(reply.body["execution"]["state"], "completed");
         assert_eq!(reply.body["next"], "op_9");
         let requests = server.received_requests().await.unwrap();
-        let status: Value = serde_json::from_slice(&requests[1].body).unwrap();
-        assert_eq!(status["eventsAfter"], "c-3");
         assert!(requests[1].headers.get("idempotency-key").is_none());
+    }
+
+    #[tokio::test]
+    async fn cancels_on_the_execution_route_and_retries_delivery() {
+        let server = MockServer::start().await;
+        let route = format!("/sessions/{ID}/commands/executions/x-7/cancel");
+        Mock::given(method("POST"))
+            .and(path(route.clone()))
+            .respond_with(ResponseTemplate::new(503).set_body_json(
+                json!({"error": {"code": "delivery_failed", "message": "unreachable"}}),
+            ))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "page": null,
+                "execution": {"id": "x-7", "state": "cancelled", "effect": "none", "replayed": false, "ran": 0},
+                "results": []
+            })))
+            .mount(&server)
+            .await;
+        let client = SteelClient::with(server.uri(), ApiMode::Cloud, auth()).unwrap();
+        let session = Session {
+            client: &client,
+            id: ID,
+        };
+        let reply = session.cancel("x-7").await.unwrap();
+        assert_eq!(reply.status, 200);
+        assert_eq!(reply.body["execution"]["state"], "cancelled");
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests.iter().all(|r| r.body.is_empty()));
     }
 
     #[tokio::test]
