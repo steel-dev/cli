@@ -167,7 +167,7 @@ async fn start_act_and_stop_without_a_daemon() {
     let state = cli.state("work").unwrap();
     assert_eq!(state["next"], "op_1");
     assert_eq!(state["tab"], "t1");
-    assert_eq!(state["events"], "c-4");
+    assert!(state.get("events").is_none());
 
     let snap = cli
         .run(&["browser", "snapshot", "-i", "--session", "work"])
@@ -185,14 +185,13 @@ async fn start_act_and_stop_without_a_daemon() {
     let bodies = command_bodies(&server).await;
     assert_eq!(
         bodies[0],
-        json!({"commands": [{"command": "click", "target": "e5"}], "eventsAfter": "c-0"})
+        json!({"commands": [{"command": "click", "target": "e5"}]})
     );
     assert_eq!(
         bodies[1],
         json!({
             "after": "op_1",
-            "commands": [{"command": "snapshot", "interactive": true, "tab": "t1"}],
-            "eventsAfter": "c-4"
+            "commands": [{"command": "snapshot", "interactive": true, "tab": "t1"}]
         })
     );
     let keys: Vec<_> = server
@@ -209,6 +208,45 @@ async fn start_act_and_stop_without_a_daemon() {
     let stopped = cli.run(&["browser", "stop", "--session", "work"]).await;
     assert!(stopped.status.success(), "{stopped:?}");
     assert!(cli.state("work").is_none());
+}
+
+#[tokio::test]
+async fn status_and_cancel_use_the_execution_routes() {
+    let server = MockServer::start().await;
+    let execution = |state: &str| {
+        json!({
+            "page": null,
+            "execution": {"id": "x-7", "state": state, "effect": "none", "replayed": false, "ran": 1},
+            "results": []
+        })
+    };
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/sessions/{ID}/commands/executions/x-7")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(execution("completed")))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/sessions/{ID}/commands/executions/x-7/cancel"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(execution("cancelled")))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let status = cli
+        .run(&["browser", "status", "x-7", "--session", "work"])
+        .await;
+    assert!(status.status.success(), "{status:?}");
+    assert_eq!(json_out(&status)["data"]["execution"]["state"], "completed");
+
+    cli.run(&["browser", "cancel", "x-7", "--session", "work"])
+        .await;
+    assert!(command_bodies(&server).await.is_empty());
 }
 
 #[tokio::test]

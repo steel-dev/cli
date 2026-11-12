@@ -64,7 +64,6 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel browser tab new](#steel-browser-tab-new)
 - [steel browser tab switch](#steel-browser-tab-switch)
 - [steel browser tab close](#steel-browser-tab-close)
-- [steel browser dialog](#steel-browser-dialog)
 - [steel browser status](#steel-browser-status)
 - [steel browser cancel](#steel-browser-cancel)
 - [steel sessions](#steel-sessions)
@@ -222,7 +221,6 @@ steel browser
 - `is`: Check element state
 - `wait`: Wait for an element, text, URL, load state, download, or a fixed time
 - `tab`: List, open, switch, or close tabs
-- `dialog`: Accept or dismiss an open dialog
 - `status`: Wait for a command that is still running
 - `cancel`: Stop a command that is still running
 
@@ -297,12 +295,12 @@ steel browser captcha
 
 ### Subcommands
 
-- `solve`: Solve a CAPTCHA on the current page
-- `status`: Check CAPTCHA status
+- `solve`: Solve every detected CAPTCHA, or the one a flag picks
+- `status`: Check CAPTCHA status and list page and task ids
 
 ## steel browser captcha solve
 
-Solve a CAPTCHA on the current page
+Solve every detected CAPTCHA, or the one a flag picks
 
 ### Usage
 
@@ -312,13 +310,13 @@ steel browser captcha solve
 
 ### Parameters
 
-- `--page-id` (string, optional): Page ID
-- `--url` (string, optional): Page URL for targeted CAPTCHA solving
-- `--task-id` (string, optional): CAPTCHA task ID for targeted solving
+- `--page-id` (string, optional): Solve only the CAPTCHA on this page (ids from `captcha status`)
+- `--url` (string, optional): Solve only the CAPTCHA on the page at this URL
+- `--task-id` (string, optional): Solve only this CAPTCHA task (ids from `captcha status`)
 
 ## steel browser captcha status
 
-Check CAPTCHA status
+Check CAPTCHA status and list page and task ids
 
 ### Usage
 
@@ -328,7 +326,7 @@ steel browser captcha status
 
 ### Parameters
 
-- `--page-id` (string, optional): Page ID
+- `--page-id` (string, optional): Check only this page
 - `-w, --wait` (boolean, optional): Wait for terminal status
 - `--timeout` (string, optional): Timeout in milliseconds for --wait mode
 - `--interval` (string, optional): Poll interval in milliseconds for --wait mode
@@ -774,7 +772,7 @@ steel browser get
 - `attr`: Get an element attribute
 - `url`: Get the page URL
 - `title`: Get the page title
-- `count`: Count matching elements
+- `count`: Count elements that match a CSS selector
 - `box`: Get an element's bounding box
 
 ## steel browser get text
@@ -870,7 +868,7 @@ steel browser get title
 
 ## steel browser get count
 
-Count matching elements
+Count elements that match a CSS selector
 
 ### Usage
 
@@ -880,7 +878,7 @@ steel browser get count
 
 ### Parameters
 
-- `selector` (string, required): Element ref (e.g. e5) or CSS selector
+- `selector` (string, required): CSS selector (refs do not work here)
 
 ## steel browser get box
 
@@ -1044,22 +1042,6 @@ steel browser tab close
 ### Parameters
 
 - `tab` (string, optional): Tab id from `tab list`, such as t2
-
-## steel browser dialog
-
-Accept or dismiss an open dialog
-
-### Usage
-
-```bash
-steel browser dialog
-```
-
-### Parameters
-
-- `action` (enum, required): accept or dismiss
-- `id` (string, optional): Dialog id such as d-2 (default: the last dialog the CLI saw)
-- `--text` (string, optional): Answer for a prompt dialog
 
 ## steel browser status
 

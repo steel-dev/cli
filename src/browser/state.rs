@@ -41,10 +41,6 @@ pub struct BrowserSession {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tab: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub events: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dialog: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<SnapshotInfo>,
 }
 
@@ -63,8 +59,6 @@ impl BrowserSession {
             created_at_ms: None,
             next: None,
             tab: None,
-            events: None,
-            dialog: None,
             snapshot: None,
         }
     }
@@ -243,6 +237,18 @@ mod tests {
         assert_eq!(loaded.next, None);
         assert_eq!(loaded.snapshot, None);
         assert!(!loaded.attached);
+    }
+
+    #[test]
+    fn state_files_with_retired_fields_still_load() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("x.json"),
+            r#"{"name":"x","id":"abc","mode":"cloud","apiUrl":"https://api.steel.dev/v1","tab":"t1","dialog":"d-2","events":"c-4"}"#,
+        )
+        .unwrap();
+        let loaded = load_in("x", dir.path()).unwrap().unwrap();
+        assert_eq!(loaded.tab.as_deref(), Some("t1"));
     }
 
     #[test]

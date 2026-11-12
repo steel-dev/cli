@@ -77,7 +77,7 @@ steel browser get value <sel>
 steel browser get attr <sel> <name>
 steel browser get url
 steel browser get title
-steel browser get count <sel>
+steel browser get count <css>      # CSS selector only; a ref names one element
 steel browser get box <sel>
 steel browser is visible|enabled|checked <sel>
 steel browser find <value>         # CSS by default; --by role|text|label|placeholder|alt|title|testid, --name, --exact
@@ -109,17 +109,16 @@ steel browser tab switch t2
 steel browser tab close [t2]     # the current tab if omitted
 ```
 
-Commands without a ref run on the current tab. When a page opens a tab, the CLI prints `Tab t3 opened from t1` and stays on the current tab.
+Commands without a ref run on the current tab. When a page opens a tab, the CLI stays on the current tab. Run `steel browser tab list` to find the new one.
 
 ## Dialogs and long commands
 
 ```bash
-steel browser dialog accept [d-2]      # or dismiss; --text answers a prompt
 steel browser status x-7               # wait for a command that is still running
 steel browser cancel x-7               # stop it
 ```
 
-Dialogs stay open until you answer them. A command that opens one prints the dialog id.
+Commands cannot answer dialogs. A dialog stays open until it is closed, and commands on its tab fail with `dialog_pending` until then. The CLI prints the dialog id and its tab. Close the dialog in the live view (`steel browser live` prints its URL), or close its tab with `steel browser tab close <tab>`. The last open tab cannot be closed, so open another one first with `steel browser tab new`. `steel browser dialog` was removed and prints this advice.
 
 ## Batch
 
@@ -127,7 +126,7 @@ Dialogs stay open until you answer them. A command that opens one prints the dia
 steel browser batch "fill e3 Seoul" "fill e4 Tokyo" "click e5" "snapshot -i"
 ```
 
-Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. Each command is one string. Group words with double or single quotes (`"fill e3 'New York'"`). A quote opens only at the start of a word or right after `=`, and closes only at the end of a word. Quotes anywhere else stay as typed, so `"eval document.querySelector('h1').textContent"` works as written. Inside double quotes, `\"` and `\\` are escapes. An unclosed quote is an error. `tab new`, `tab switch`, `tab close`, `dialog`, `status`, and `cancel` must run on their own. `stop` is not a batch command.
+Batch sends all commands in one request (at most 50). They run in order and stop at the first failure. Each command is one string. Group words with double or single quotes (`"fill e3 'New York'"`). A quote opens only at the start of a word or right after `=`, and closes only at the end of a word. Quotes anywhere else stay as typed, so `"eval document.querySelector('h1').textContent"` works as written. Inside double quotes, `\"` and `\\` are escapes. An unclosed quote is an error. `tab new`, `tab switch`, `tab close`, `status`, and `cancel` must run on their own. `stop` is not a batch command.
 
 ## Retries and output
 

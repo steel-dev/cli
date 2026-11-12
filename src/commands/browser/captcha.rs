@@ -7,10 +7,10 @@ use crate::util::output;
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Solve a CAPTCHA on the current page
+    /// Solve every detected CAPTCHA, or the one a flag picks
     Solve(SolveArgs),
 
-    /// Check CAPTCHA status
+    /// Check CAPTCHA status and list page and task ids
     Status(StatusArgs),
 }
 
@@ -25,22 +25,22 @@ impl Command {
 
 #[derive(Parser)]
 pub struct SolveArgs {
-    /// Page ID
+    /// Solve only the CAPTCHA on this page (ids from `captcha status`)
     #[arg(long)]
     pub page_id: Option<String>,
 
-    /// Page URL for targeted CAPTCHA solving
+    /// Solve only the CAPTCHA on the page at this URL
     #[arg(long)]
     pub url: Option<String>,
 
-    /// CAPTCHA task ID for targeted solving
+    /// Solve only this CAPTCHA task (ids from `captcha status`)
     #[arg(long)]
     pub task_id: Option<String>,
 }
 
 #[derive(Parser)]
 pub struct StatusArgs {
-    /// Page ID
+    /// Check only this page
     #[arg(long)]
     pub page_id: Option<String>,
 
@@ -121,17 +121,20 @@ async fn run_solve(args: SolveArgs, session: Option<&str>) -> anyhow::Result<()>
 async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<()> {
     let (client, target) = client_for(session)?;
     let session_id = target.id;
+    let page_id = args
+        .page_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty());
 
     let timeout = args.timeout.unwrap_or(60_000);
     let interval = args.interval.unwrap_or(1_000);
     let started = std::time::Instant::now();
-    let (status, types) = loop {
-        let pages = client
-            .captcha_status(&session_id, args.page_id.as_deref())
-            .await?;
+    let (status, types, pages) = loop {
+        let pages = on_page(client.captcha_status(&session_id, page_id).await?, page_id);
         let (status, types) = normalize_captcha_status(&pages);
         if !args.wait || is_terminal_captcha_status(&status) {
-            break (status, types);
+            break (status, types, page_summaries(&pages));
         }
         if started.elapsed().as_millis() >= u128::from(timeout) {
             anyhow::bail!(
@@ -147,6 +150,7 @@ async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<(
     if !types.is_empty() {
         data["types"] = json!(types);
     }
+    data["pages"] = json!(pages);
 
     if !output::is_json() {
         let type_suffix = if types.is_empty() {
@@ -155,6 +159,9 @@ async fn run_status(args: StatusArgs, session: Option<&str>) -> anyhow::Result<(
             format!(" {}", types.join(","))
         };
         println!("{status}{type_suffix}");
+        for line in page_lines(&pages) {
+            println!("{line}");
+        }
     }
 
     if status != "solved" && status != "none" {
@@ -250,6 +257,54 @@ fn is_terminal_captcha_status(status: &str) -> bool {
     matches!(status, "solved" | "failed" | "none")
 }
 
+fn on_page(pages: Vec<Value>, page_id: Option<&str>) -> Vec<Value> {
+    match page_id {
+        Some(id) => pages
+            .into_iter()
+            .filter(|page| page["pageId"] == id)
+            .collect(),
+        None => pages,
+    }
+}
+
+fn page_summaries(pages: &[Value]) -> Vec<Value> {
+    pages
+        .iter()
+        .map(|page| {
+            let tasks: Vec<Value> = page["tasks"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|task| task.is_object())
+                .map(|task| json!({"id": task["id"], "type": task["type"], "status": task["status"]}))
+                .collect();
+            json!({"pageId": page["pageId"], "url": page["url"], "tasks": tasks})
+        })
+        .collect()
+}
+
+fn page_lines(pages: &[Value]) -> Vec<String> {
+    let text = |value: &Value| value.as_str().unwrap_or("?").to_string();
+    let mut lines = Vec::new();
+    for page in pages {
+        let mut line = format!("page {}", text(&page["pageId"]));
+        if let Some(url) = page["url"].as_str() {
+            line.push(' ');
+            line.push_str(url);
+        }
+        lines.push(line);
+        for task in page["tasks"].as_array().into_iter().flatten() {
+            lines.push(format!(
+                "  task {} {} {}",
+                text(&task["id"]),
+                text(&task["type"]),
+                text(&task["status"])
+            ));
+        }
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -289,5 +344,63 @@ mod tests {
         let (status, types) = normalize_captcha_status(&pages);
         assert_eq!(status, "failed");
         assert_eq!(types, vec!["turnstile"]);
+    }
+
+    fn two_pages() -> Vec<Value> {
+        vec![
+            json!({
+                "pageId": "p-1",
+                "url": "https://a.test/login",
+                "isSolvingCaptcha": true,
+                "tasks": [{"id": "k-1", "pageId": "p-1", "type": "turnstile", "status": "solving", "created": 1}]
+            }),
+            json!({
+                "pageId": "p-2",
+                "url": "https://b.test/",
+                "isSolvingCaptcha": false,
+                "tasks": [{"id": "k-2", "pageId": "p-2", "type": "recaptchaV2", "status": "solved"}]
+            }),
+        ]
+    }
+
+    #[test]
+    fn status_lists_page_and_task_ids() {
+        let pages = page_summaries(&two_pages());
+        assert_eq!(
+            pages,
+            vec![
+                json!({"pageId": "p-1", "url": "https://a.test/login", "tasks": [
+                    {"id": "k-1", "type": "turnstile", "status": "solving"}
+                ]}),
+                json!({"pageId": "p-2", "url": "https://b.test/", "tasks": [
+                    {"id": "k-2", "type": "recaptchaV2", "status": "solved"}
+                ]}),
+            ]
+        );
+        assert_eq!(
+            page_lines(&pages),
+            vec![
+                "page p-1 https://a.test/login",
+                "  task k-1 turnstile solving",
+                "page p-2 https://b.test/",
+                "  task k-2 recaptchaV2 solved",
+            ]
+        );
+    }
+
+    #[test]
+    fn page_id_keeps_only_that_page() {
+        let pages = on_page(two_pages(), Some("p-2"));
+        assert_eq!(pages.len(), 1);
+        assert_eq!(normalize_captcha_status(&pages).0, "solved");
+        assert_eq!(normalize_captcha_status(&two_pages()).0, "solving");
+        assert!(on_page(two_pages(), Some("p-9")).is_empty());
+        assert_eq!(on_page(two_pages(), None).len(), 2);
+    }
+
+    #[test]
+    fn page_lines_tolerate_missing_fields() {
+        let pages = page_summaries(&[json!({"pageId": "p-1", "tasks": [{"status": "detected"}]})]);
+        assert_eq!(page_lines(&pages), vec!["page p-1", "  task ? ? detected"]);
     }
 }
