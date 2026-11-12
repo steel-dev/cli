@@ -82,9 +82,9 @@ steel browser get box <sel>
 steel browser is visible|enabled|checked <sel>
 steel browser find <value>         # CSS by default; --by role|text|label|placeholder|alt|title|testid, --name, --exact
 steel browser content              # page HTML
-steel browser eval <script>        # run JavaScript and print its value
+steel browser eval <script>        # run JavaScript and print its value; --timeout <ms> (at most 50000)
 steel browser screenshot           # -o <path>, --full, --selector <sel>, --format, --quality
-steel browser pdf -o page.pdf      # headless sessions only
+steel browser pdf -o page.pdf      # --landscape, --print-background
 ```
 
 ## Waiting
@@ -117,6 +117,8 @@ Commands without a ref run on the current tab. When a page opens a tab, the CLI 
 steel browser status x-7               # wait for a command that is still running
 steel browser cancel x-7               # stop it
 ```
+
+When the CLI stops waiting for a command that is still running, it prints the execution id for these two commands. Ctrl-C while a command runs cancels it. Press Ctrl-C again to stop waiting for the cancel.
 
 Commands cannot answer dialogs. A dialog stays open until it is closed, and commands on its tab fail with `dialog_pending` until then. The CLI prints the dialog id and its tab. Close the dialog in the live view (`steel browser live` prints its URL), or close its tab with `steel browser tab close <tab>`. The last open tab cannot be closed, so open another one first with `steel browser tab new`. `steel browser dialog` was removed and prints this advice.
 

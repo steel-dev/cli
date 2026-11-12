@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
-use std::process::Output;
+use std::process::{Output, Stdio};
+use std::time::Duration;
 
 use base64::Engine as _;
 use serde_json::{Value, json};
@@ -22,8 +23,9 @@ impl Cli {
         }
     }
 
-    async fn run_in(&self, dir: &Path, args: &[&str]) -> Output {
-        tokio::process::Command::new(env!("CARGO_BIN_EXE_steel"))
+    fn command(&self, dir: &Path, args: &[&str]) -> tokio::process::Command {
+        let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_steel"));
+        command
             .current_dir(dir)
             .env("STEEL_CONFIG_DIR", self.config.path())
             .env("STEEL_API_URL", &self.api)
@@ -31,9 +33,19 @@ impl Cli {
             .env("STEEL_TELEMETRY_DISABLED", "1")
             .arg("--no-update-check")
             .arg("--json")
-            .args(args)
-            .output()
-            .await
+            .args(args);
+        command
+    }
+
+    async fn run_in(&self, dir: &Path, args: &[&str]) -> Output {
+        self.command(dir, args).output().await.unwrap()
+    }
+
+    fn spawn(&self, args: &[&str]) -> tokio::process::Child {
+        self.command(self.config.path(), args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .unwrap()
     }
 
@@ -118,7 +130,9 @@ async fn start_act_and_stop_without_a_daemon() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/sessions"))
-        .and(body_partial_json(json!({"inactivityTimeout": 600_000})))
+        .and(body_partial_json(
+            json!({"timeout": 900_000, "inactivityTimeout": 600_000}),
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(session_json()))
         .expect(1)
         .mount(&server)
@@ -244,9 +258,241 @@ async fn status_and_cancel_use_the_execution_routes() {
     assert!(status.status.success(), "{status:?}");
     assert_eq!(json_out(&status)["data"]["execution"]["state"], "completed");
 
-    cli.run(&["browser", "cancel", "x-7", "--session", "work"])
+    let cancel = cli
+        .run(&["browser", "cancel", "x-7", "--session", "work"])
         .await;
+    assert!(cancel.status.success(), "{cancel:?}");
+    assert_eq!(json_out(&cancel)["data"]["execution"]["state"], "cancelled");
     assert!(command_bodies(&server).await.is_empty());
+}
+
+fn execution_reply(state: &str, results: Value) -> Value {
+    json!({
+        "next": "op_2",
+        "page": null,
+        "execution": {"id": "x-9", "state": state, "effect": "none", "replayed": false, "ran": 1},
+        "results": results
+    })
+}
+
+async fn mount_cancel(server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/sessions/{ID}/commands/executions/x-9/cancel"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(execution_reply(
+            "cancelled",
+            json!([{"command": "wait", "ok": false, "effect": "none", "error": {
+                "code": "cancelled",
+                "message": "The execution was cancelled."
+            }}]),
+        )))
+        .expect(1)
+        .mount(server)
+        .await;
+}
+
+#[cfg(unix)]
+const WAIT_FOR_TEXT: &[&str] = &[
+    "browser",
+    "wait",
+    "--text",
+    "Done",
+    "--timeout",
+    "50000",
+    "--session",
+    "work",
+];
+
+#[cfg(unix)]
+async fn interrupt_once_sent(cli: &Cli, server: &MockServer, route: &str, args: &[&str]) -> Output {
+    let child = cli.spawn(args);
+    for _ in 0..250 {
+        let requests = server.received_requests().await.unwrap();
+        if requests.iter().any(|r| r.url.path() == route) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let pid = child.id().unwrap().to_string();
+    let sent = std::process::Command::new("kill")
+        .args(["-INT", &pid])
+        .status()
+        .unwrap();
+    assert!(sent.success());
+    child.wait_with_output().await.unwrap()
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ctrl_c_cancels_a_command_once_its_execution_id_arrives() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(commands_path()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_millis(1500))
+                .set_body_json(execution_reply("running", json!([]))),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/sessions/{ID}/commands/executions/x-9")))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(execution_reply("running", json!([]))),
+        )
+        .expect(0)
+        .mount(&server)
+        .await;
+    mount_cancel(&server).await;
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let out = interrupt_once_sent(&cli, &server, &commands_path(), WAIT_FOR_TEXT).await;
+    assert_eq!(out.status.code(), Some(130), "{out:?}");
+    assert_eq!(json_out(&out)["error_code"], "cancelled");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ctrl_c_while_waiting_to_retry_a_busy_command_does_not_send_it() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(commands_path()))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .insert_header("Retry-After", "5")
+                .set_body_json(json!({"error": {
+                    "code": "queue_full",
+                    "message": "Too many executions are waiting in this session."
+                }})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/sessions/{ID}/commands/executions/x-9/cancel"
+        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(execution_reply("cancelled", json!([]))),
+        )
+        .expect(0)
+        .mount(&server)
+        .await;
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let out = interrupt_once_sent(&cli, &server, &commands_path(), WAIT_FOR_TEXT).await;
+    assert_eq!(out.status.code(), Some(130), "{out:?}");
+    let body = json_out(&out);
+    assert_eq!(body["error_code"], "interrupted");
+    assert_eq!(body["error"], "Stopped. The command did not start.");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ctrl_c_exits_130_even_when_the_cancel_fails() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(commands_path()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_millis(1500))
+                .set_body_json(execution_reply("running", json!([]))),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(format!(
+            "/v1/sessions/{ID}/commands/executions/x-9/cancel"
+        )))
+        .respond_with(ResponseTemplate::new(410).set_body_json(json!({"error": {
+            "code": "session_ended",
+            "message": "The session has ended."
+        }})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let out = interrupt_once_sent(&cli, &server, &commands_path(), WAIT_FOR_TEXT).await;
+    assert_eq!(out.status.code(), Some(130), "{out:?}");
+    assert_eq!(json_out(&out)["error_code"], "session_ended");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ctrl_c_while_saving_a_download_keeps_the_session_state() {
+    let server = MockServer::start().await;
+    let route = format!("/v1/sessions/{ID}/files/report.csv");
+    Mock::given(method("POST"))
+        .and(path(commands_path()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(completed(
+            "op_7",
+            json!([{"command": "wait", "ok": true, "effect": "none", "file": "report.csv"}]),
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(route.clone()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_secs(5))
+                .set_body_bytes(b"a,b\n".to_vec()),
+        )
+        .mount(&server)
+        .await;
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let out = interrupt_once_sent(
+        &cli,
+        &server,
+        &route,
+        &["browser", "wait", "--download", "--session", "work"],
+    )
+    .await;
+    assert_eq!(out.status.code(), Some(130), "{out:?}");
+    assert_eq!(json_out(&out)["error_code"], "interrupted");
+    assert_eq!(cli.state("work").unwrap()["next"], "op_7");
+    assert!(!cli.config.path().join("report.csv").exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ctrl_c_cancels_a_command_while_waiting_for_it() {
+    let server = MockServer::start().await;
+    let route = format!("/v1/sessions/{ID}/commands/executions/x-9");
+    Mock::given(method("POST"))
+        .and(path(commands_path()))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(execution_reply("running", json!([]))),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(route.clone()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_secs(5))
+                .set_body_json(execution_reply("running", json!([]))),
+        )
+        .mount(&server)
+        .await;
+    mount_cancel(&server).await;
+    let cli = Cli::new(&server);
+    cli.write_state("work");
+
+    let out = interrupt_once_sent(&cli, &server, &route, WAIT_FOR_TEXT).await;
+    assert_eq!(out.status.code(), Some(130), "{out:?}");
+    assert_eq!(json_out(&out)["error_code"], "cancelled");
+    assert_eq!(cli.state("work").unwrap()["next"], "op_2");
 }
 
 #[tokio::test]
@@ -498,7 +744,9 @@ async fn the_default_session_starts_on_first_use() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/sessions"))
-        .and(body_partial_json(json!({"inactivityTimeout": 600_000})))
+        .and(body_partial_json(
+            json!({"timeout": 900_000, "inactivityTimeout": 600_000}),
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(session_json()))
         .expect(1)
         .mount(&server)

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use serde_json::Value;
+use tokio::sync::watch;
 
 use crate::api::client::{ApiError, SteelClient};
 
@@ -42,6 +43,11 @@ impl Reply {
     }
 }
 
+pub enum Submitted {
+    Reply(Reply),
+    Stopped { maybe_ran: bool },
+}
+
 pub struct Session<'a> {
     pub client: &'a SteelClient,
     pub id: &'a str,
@@ -55,6 +61,13 @@ pub fn new_key() -> String {
 
 const fn backoff(attempt: u32) -> Duration {
     Duration::from_millis(250 * 4u64.pow(attempt.saturating_sub(1)))
+}
+
+async fn pause(duration: Duration, stop: &mut watch::Receiver<bool>) {
+    tokio::select! {
+        () = tokio::time::sleep(duration) => {}
+        Ok(_) = stop.wait_for(|stopped| *stopped) => {}
+    }
 }
 
 impl Session<'_> {
@@ -111,13 +124,20 @@ impl Session<'_> {
         })
     }
 
-    pub async fn run(&self, mut body: Value) -> Result<Reply, ApiError> {
+    pub async fn submit(
+        &self,
+        mut body: Value,
+        mut stop: watch::Receiver<bool>,
+    ) -> Result<Submitted, ApiError> {
         let mut key = new_key();
         let mut maybe_ran = false;
         let mut delivery = 0;
         let mut busy = 0;
         let mut renewed = false;
         loop {
+            if *stop.borrow() {
+                return Ok(Submitted::Stopped { maybe_ran });
+            }
             let reply = match self.post(&body, Some(&key)).await {
                 Ok(reply) => reply,
                 Err(err @ ApiError::Unreachable { .. }) => {
@@ -126,7 +146,7 @@ impl Session<'_> {
                         return Err(err);
                     }
                     delivery += 1;
-                    tokio::time::sleep(backoff(delivery)).await;
+                    pause(backoff(delivery), &mut stop).await;
                     continue;
                 }
                 Err(err) => return Err(err),
@@ -135,23 +155,22 @@ impl Session<'_> {
                 (503, _) if delivery < DELIVERY_RETRIES => {
                     maybe_ran = true;
                     delivery += 1;
-                    tokio::time::sleep(backoff(delivery)).await;
+                    pause(backoff(delivery), &mut stop).await;
                 }
                 (429, _) if busy < BUSY_RETRIES => {
                     busy += 1;
                     let wait = reply.retry_after.unwrap_or(1).min(MAX_RETRY_AFTER_SECS);
-                    tokio::time::sleep(Duration::from_secs(wait)).await;
+                    pause(Duration::from_secs(wait), &mut stop).await;
                 }
                 (422, Some("invalid_operation_token")) if !maybe_ran && !renewed => {
                     let Some(next) = reply.body.get("next").cloned() else {
-                        return Ok(reply);
+                        return Ok(Submitted::Reply(reply));
                     };
                     body["after"] = next;
                     key = new_key();
                     renewed = true;
                 }
-                (200, _) => return self.settle(reply).await,
-                _ => return Ok(reply),
+                _ => return Ok(Submitted::Reply(reply)),
             }
         }
     }
@@ -183,7 +202,7 @@ impl Session<'_> {
         }
     }
 
-    async fn settle(&self, mut reply: Reply) -> Result<Reply, ApiError> {
+    pub async fn settle(&self, mut reply: Reply) -> Result<Reply, ApiError> {
         for _ in 0..STATUS_POLLS {
             if !reply.is_pending() {
                 return Ok(reply);
@@ -318,7 +337,11 @@ mod tests {
             client: &client,
             id: ID,
         };
-        session.run(body).await
+        let (_stop, stopping) = watch::channel(false);
+        match session.submit(body, stopping).await? {
+            Submitted::Reply(reply) => session.settle(reply).await,
+            Submitted::Stopped { .. } => panic!("nothing asked the submit to stop"),
+        }
     }
 
     fn commands_path() -> String {
@@ -430,6 +453,43 @@ mod tests {
         assert_eq!(reply.status, 200);
         let keys = keys(&server.received_requests().await.unwrap());
         assert_eq!(keys[0], keys[1]);
+    }
+
+    #[tokio::test]
+    async fn stops_instead_of_retrying_once_asked() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(commands_path()))
+            .respond_with(
+                ResponseTemplate::new(429)
+                    .insert_header("retry-after", "5")
+                    .set_body_json(json!({"error": {"code": "queue_full", "message": "busy"}})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = SteelClient::with(server.uri(), ApiMode::Cloud, auth()).unwrap();
+        let session = Session {
+            client: &client,
+            id: ID,
+        };
+        let (stop, stopping) = watch::channel(false);
+        let asked = async {
+            while server.received_requests().await.unwrap().is_empty() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            stop.send_replace(true);
+        };
+        let started = std::time::Instant::now();
+        let (submitted, ()) = tokio::join!(
+            session.submit(json!({"commands": [{"command": "reload"}]}), stopping),
+            asked
+        );
+        assert!(matches!(
+            submitted,
+            Ok(Submitted::Stopped { maybe_ran: false })
+        ));
+        assert!(started.elapsed() < Duration::from_secs(4));
     }
 
     #[tokio::test]
@@ -591,7 +651,8 @@ mod tests {
             client: &client,
             id: ID,
         };
-        let result = session.run(json!({"commands": []})).await;
+        let (_stop, stopping) = watch::channel(false);
+        let result = session.submit(json!({"commands": []}), stopping).await;
         assert!(matches!(result, Err(ApiError::MissingAuth)));
     }
 

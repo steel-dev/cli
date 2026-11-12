@@ -7,6 +7,7 @@ use crate::browser::profile_store;
 use crate::browser::state::{self, BrowserSession};
 use crate::util::{metadata, output};
 
+pub const DEFAULT_TIMEOUT_MS: u64 = 900_000;
 pub const DEFAULT_INACTIVITY_TIMEOUT_MS: u64 = 600_000;
 
 #[derive(Parser)]
@@ -19,7 +20,7 @@ pub struct Args {
     #[arg(short = 'p', long)]
     pub proxy: Option<String>,
 
-    /// Session timeout in milliseconds (create-time only)
+    /// Session timeout in milliseconds. Defaults to 900000 (15 minutes), which every plan allows (create-time only)
     #[arg(long, alias = "session-timeout")]
     pub timeout: Option<u64>,
 
@@ -62,6 +63,7 @@ pub struct Args {
 
 pub fn default_options() -> CreateSessionOptions {
     CreateSessionOptions {
+        timeout_ms: Some(DEFAULT_TIMEOUT_MS),
         inactivity_timeout_ms: Some(DEFAULT_INACTIVITY_TIMEOUT_MS),
         ..Default::default()
     }
@@ -129,12 +131,13 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let proxy_enabled = args.proxy.is_some();
     let namespace_set = args.namespace.is_some();
     let metadata_set = !session_metadata.is_empty();
+    let timeout = args.timeout.unwrap_or(DEFAULT_TIMEOUT_MS);
     let inactivity_timeout_ms = resolve_inactivity_timeout(args.inactivity_timeout);
-    if let (Some(timeout), Some(inactivity)) = (args.timeout, inactivity_timeout_ms)
+    if let Some(inactivity) = inactivity_timeout_ms
         && inactivity >= timeout
     {
         eprintln!(
-            "warning: --inactivity-timeout ({inactivity}ms) >= --timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
+            "warning: --inactivity-timeout ({inactivity}ms) >= the session timeout ({timeout}ms); inactivity timeout has no effect because the session timeout elapses first"
         );
     }
 
@@ -162,7 +165,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let options = CreateSessionOptions {
         stealth: args.stealth,
         proxy_url: args.proxy,
-        timeout_ms: args.timeout,
+        timeout_ms: Some(timeout),
         inactivity_timeout_ms,
         headless: args.headless,
         region: args.region,
@@ -344,10 +347,10 @@ mod tests {
     }
 
     #[test]
-    fn default_options_set_only_the_inactivity_timeout() {
+    fn default_options_set_the_session_and_inactivity_timeouts() {
         let options = default_options();
         assert_eq!(options.inactivity_timeout_ms, Some(600_000));
-        assert_eq!(options.timeout_ms, None);
+        assert_eq!(options.timeout_ms, Some(900_000));
         assert!(!options.stealth);
     }
 
