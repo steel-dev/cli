@@ -615,14 +615,14 @@ fn browser_action_with_missing_named_session_fails_without_starting_one() {
 }
 
 #[test]
-fn browser_action_without_session_warns_before_starting_default() {
+fn browser_action_without_session_notes_only_a_session_that_started() {
     let output = run(&["--json", "browser", "navigate", "https://example.com"]);
     assert!(!output.status.success());
 
     let err = stderr(&output);
     assert!(
-        err.contains("warning: session \"default\" is not running"),
-        "stderr should warn that a default session is being started, got: {err}"
+        !err.contains("started session") && !err.contains("warning:"),
+        "a failed start should not report a started session, got: {err}"
     );
 }
 

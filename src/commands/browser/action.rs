@@ -1235,10 +1235,7 @@ impl Browser {
         let signs_in = match &target {
             Some(Target::Saved(found)) => found.mode == ApiMode::Cloud,
             Some(Target::Id(_)) => true,
-            None if name.is_none() && start_default => {
-                eprintln!("warning: session \"default\" is not running; starting a new one");
-                true
-            }
+            None if name.is_none() && start_default => true,
             None => return Err(super::not_running(name)),
         };
         if signs_in {
@@ -1249,9 +1246,10 @@ impl Browser {
             Some(Target::Saved(found)) => *found,
             Some(Target::Id(id)) => attach(&client, &id).await?,
             None => {
-                start::create(&client, DEFAULT_SESSION, &start::default_options())
-                    .await?
-                    .0
+                let (created, _) =
+                    start::create(&client, DEFAULT_SESSION, &start::default_options()).await?;
+                eprintln!("note: {}", start::started_note(&created));
+                created
             }
         };
         let client = client.at(&state.api_url, state.mode);

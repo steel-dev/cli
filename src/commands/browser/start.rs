@@ -168,6 +168,24 @@ pub async fn create(
     Ok((created, session.connect_url(mode, client.auth())))
 }
 
+pub fn started_note(info: &BrowserSession) -> String {
+    let span = |ms: u64| humanize_secs(ms / 1000);
+    let ends = match (info.timeout_ms, info.inactivity_timeout_ms) {
+        (Some(total), Some(idle)) => format!(
+            " It ends after {}, or after {} without commands.",
+            span(total),
+            span(idle)
+        ),
+        (Some(total), None) => format!(" It ends after {}.", span(total)),
+        (None, Some(idle)) => format!(" It ends after {} without commands.", span(idle)),
+        (None, None) => String::new(),
+    };
+    format!(
+        "started session \"{}\".{ends} Stop it with `steel browser stop`.",
+        info.name
+    )
+}
+
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let session_name = session.unwrap_or("default").to_string();
     if state::looks_like_session_id(&session_name) {
@@ -381,12 +399,12 @@ fn remaining_time_str(info: &BrowserSession) -> Option<(u64, String)> {
 }
 
 fn humanize_secs(secs: u64) -> String {
-    if secs >= 3600 {
-        format!("{}h {}m", secs / 3600, (secs % 3600) / 60)
-    } else if secs >= 60 {
-        format!("{}m {}s", secs / 60, secs % 60)
-    } else {
-        format!("{secs}s")
+    match (secs / 3600, (secs % 3600) / 60, secs % 60) {
+        (0, 0, s) => format!("{s}s"),
+        (0, m, 0) => format!("{m}m"),
+        (0, m, s) => format!("{m}m {s}s"),
+        (h, 0, _) => format!("{h}h"),
+        (h, m, _) => format!("{h}h {m}m"),
     }
 }
 
@@ -493,7 +511,9 @@ mod tests {
     #[test]
     fn humanize_secs_formats() {
         assert_eq!(humanize_secs(45), "45s");
-        assert_eq!(humanize_secs(120), "2m 0s");
+        assert_eq!(humanize_secs(120), "2m");
+        assert_eq!(humanize_secs(125), "2m 5s");
+        assert_eq!(humanize_secs(3600), "1h");
         assert_eq!(humanize_secs(3661), "1h 1m");
     }
 }

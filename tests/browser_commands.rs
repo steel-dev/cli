@@ -742,12 +742,14 @@ async fn screenshots_are_written_to_the_output_path() {
 #[tokio::test]
 async fn the_default_session_starts_on_first_use() {
     let server = MockServer::start().await;
+    let mut created = session_json();
+    created["timeout"] = json!(900_000);
     Mock::given(method("POST"))
         .and(path("/v1/sessions"))
         .and(body_partial_json(
             json!({"timeout": 900_000, "inactivityTimeout": 600_000}),
         ))
-        .respond_with(ResponseTemplate::new(200).set_body_json(session_json()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(created))
         .expect(1)
         .mount(&server)
         .await;
@@ -766,7 +768,14 @@ async fn the_default_session_starts_on_first_use() {
         .run(&["browser", "navigate", "https://example.com"])
         .await;
     assert!(out.status.success(), "{out:?}");
-    assert!(String::from_utf8_lossy(&out.stderr).contains("starting a new one"));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains(
+            "note: started session \"default\". It ends after 15m, or after 10m without commands. Stop it with `steel browser stop`."
+        ),
+        "{err}"
+    );
+    assert!(!err.contains("warning:"), "{err}");
     assert_eq!(cli.state("default").unwrap()["next"], "op_1");
 }
 
