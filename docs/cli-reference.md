@@ -64,7 +64,6 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel browser tab new](#steel-browser-tab-new)
 - [steel browser tab switch](#steel-browser-tab-switch)
 - [steel browser tab close](#steel-browser-tab-close)
-- [steel browser dialog](#steel-browser-dialog)
 - [steel browser status](#steel-browser-status)
 - [steel browser cancel](#steel-browser-cancel)
 - [steel sessions](#steel-sessions)
@@ -214,7 +213,7 @@ steel browser
 - `mouse`: Mouse input at a point, for canvases and maps
 - `snapshot`: Take an accessibility tree snapshot with element refs
 - `screenshot`: Take a screenshot
-- `pdf`: Save the page as a PDF (headless sessions only)
+- `pdf`: Save the page as a PDF
 - `eval`: Run JavaScript in the page and print its value
 - `find`: Find elements and print their refs
 - `content`: Get the page HTML
@@ -222,7 +221,6 @@ steel browser
 - `is`: Check element state
 - `wait`: Wait for an element, text, URL, load state, download, or a fixed time
 - `tab`: List, open, switch, or close tabs
-- `dialog`: Accept or dismiss an open dialog
 - `status`: Wait for a command that is still running
 - `cancel`: Stop a command that is still running
 
@@ -240,7 +238,7 @@ steel browser start
 
 - `--stealth` (boolean, optional): Enable stealth mode (humanize interactions + auto CAPTCHA)
 - `-p, --proxy` (string, optional): Use a residential proxy
-- `--timeout` (string, optional): Session timeout in milliseconds (create-time only)
+- `--timeout` (string, optional): Session timeout in milliseconds. Defaults to 900000 (15 minutes), which every plan allows (create-time only)
 - `--inactivity-timeout` (string, optional): Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
 - `--solve-captcha` (boolean, optional): Enable manual CAPTCHA solving on new sessions (create-time only)
 - `--profile` (string, optional): Named profile to load (see `steel profile list`)
@@ -297,12 +295,12 @@ steel browser captcha
 
 ### Subcommands
 
-- `solve`: Solve a CAPTCHA on the current page
-- `status`: Check CAPTCHA status
+- `solve`: Solve every detected CAPTCHA, or the one a flag picks
+- `status`: Check CAPTCHA status and list page and task ids
 
 ## steel browser captcha solve
 
-Solve a CAPTCHA on the current page
+Solve every detected CAPTCHA, or the one a flag picks
 
 ### Usage
 
@@ -312,13 +310,13 @@ steel browser captcha solve
 
 ### Parameters
 
-- `--page-id` (string, optional): Page ID
-- `--url` (string, optional): Page URL for targeted CAPTCHA solving
-- `--task-id` (string, optional): CAPTCHA task ID for targeted solving
+- `--page-id` (string, optional): Solve only the CAPTCHA on this page (ids from `captcha status`)
+- `--url` (string, optional): Solve only the CAPTCHA on the page at this URL
+- `--task-id` (string, optional): Solve only this CAPTCHA task (ids from `captcha status`)
 
 ## steel browser captcha status
 
-Check CAPTCHA status
+Check CAPTCHA status and list page and task ids
 
 ### Usage
 
@@ -328,7 +326,7 @@ steel browser captcha status
 
 ### Parameters
 
-- `--page-id` (string, optional): Page ID
+- `--page-id` (string, optional): Check only this page
 - `-w, --wait` (boolean, optional): Wait for terminal status
 - `--timeout` (string, optional): Timeout in milliseconds for --wait mode
 - `--interval` (string, optional): Poll interval in milliseconds for --wait mode
@@ -700,7 +698,7 @@ steel browser screenshot
 
 ## steel browser pdf
 
-Save the page as a PDF (headless sessions only)
+Save the page as a PDF
 
 ### Usage
 
@@ -727,6 +725,7 @@ steel browser eval
 ### Parameters
 
 - `script` (string, required): JavaScript expression or function body; its value is printed
+- `--timeout` (string, optional): Time limit in milliseconds (default 10000, at most 50000)
 
 ## steel browser find
 
@@ -774,7 +773,7 @@ steel browser get
 - `attr`: Get an element attribute
 - `url`: Get the page URL
 - `title`: Get the page title
-- `count`: Count matching elements
+- `count`: Count elements that match a CSS selector
 - `box`: Get an element's bounding box
 
 ## steel browser get text
@@ -870,7 +869,7 @@ steel browser get title
 
 ## steel browser get count
 
-Count matching elements
+Count elements that match a CSS selector
 
 ### Usage
 
@@ -880,7 +879,7 @@ steel browser get count
 
 ### Parameters
 
-- `selector` (string, required): Element ref (e.g. e5) or CSS selector
+- `selector` (string, required): CSS selector (refs do not work here)
 
 ## steel browser get box
 
@@ -1044,22 +1043,6 @@ steel browser tab close
 ### Parameters
 
 - `tab` (string, optional): Tab id from `tab list`, such as t2
-
-## steel browser dialog
-
-Accept or dismiss an open dialog
-
-### Usage
-
-```bash
-steel browser dialog
-```
-
-### Parameters
-
-- `action` (enum, required): accept or dismiss
-- `id` (string, optional): Dialog id such as d-2 (default: the last dialog the CLI saw)
-- `--text` (string, optional): Answer for a prompt dialog
 
 ## steel browser status
 

@@ -207,8 +207,8 @@ mod tests {
             "tab switch t2",
             "tab new",
             "tab close",
-            "dialog accept",
             "status x-1",
+            "cancel x-1",
         ] {
             let err = run(
                 Args {
@@ -240,6 +240,18 @@ mod tests {
         .await
         .unwrap_err();
         assert!(format!("{err:#}").contains("was removed in 0.5"));
+
+        let err = run(
+            Args {
+                commands: vec!["dialog accept".to_string()],
+                bail: false,
+            },
+            Some("unused"),
+            false,
+        )
+        .await
+        .unwrap_err();
+        assert!(format!("{err:#}").contains("`steel browser dialog` was removed"));
 
         let err = run(
             Args {

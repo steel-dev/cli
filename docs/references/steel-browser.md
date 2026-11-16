@@ -7,6 +7,7 @@ This reference defines how `steel browser` runs and the contracts of its session
 Each `steel browser` action is one HTTP request to the session's commands API:
 
 - `POST /v1/sessions/{sessionId}/commands` with the API key, a random `Idempotency-Key`, and `after` (the last operation id the CLI received).
+- `steel browser status` and `steel browser cancel` use `GET /v1/sessions/{sessionId}/commands/executions/{executionId}` and `POST .../cancel`. The CLI also uses the `GET` to wait for a command that is still running.
 - The browser engine runs inside the session next to Chrome. It holds refs, tabs, dialogs, and the execution records.
 - The CLI keeps no process running. It stores per-session state in `~/.config/steel/browser-sessions/<name>.json`.
 
@@ -129,7 +130,10 @@ Main flags:
 
 ### `steel browser captcha solve`
 
-Purpose: manually trigger CAPTCHA solving for a target session.
+Purpose: manually trigger CAPTCHA solving for a target session. Without flags it
+solves every CAPTCHA detected in the session. `--page-id`, `--url`, or
+`--task-id` solves only the one it names. `steel browser captcha status` lists
+the page and task ids.
 
 Main flags:
 
@@ -145,6 +149,25 @@ API mapping:
 - Endpoint: `POST /v1/sessions/{sessionId}/captchas/solve`
 - Request body: optional `pageId`, `url`, `taskId`
 - Response: `success` + optional `message`
+
+### `steel browser captcha status`
+
+Purpose: print the overall CAPTCHA status, then one line per page and per task:
+
+```text
+solving turnstile
+page 9F3C2A1B https://example.com/login
+  task 7d1e turnstile solving
+```
+
+Pass the page id to `--page-id` and the task id to `--task-id`. `--page-id` on
+`status` checks only that page. `--json` returns the same ids under `data.pages`.
+
+Main flags:
+
+- `--session <name|id>`
+- `--page-id <id>`
+- `-w, --wait`, `--timeout <ms>`, `--interval <ms>`
 
 ## Profile Persistence
 
@@ -173,6 +196,8 @@ Profile metadata is stored at `~/.config/steel/profiles/<name>.json`.
 Self-hosted steel-browser serves the commands API only when it runs with
 `ENABLE_COMMANDS_API=true`. Without it, browser actions fail with
 `missing_capability`. `steel dev start` does not turn it on yet.
+It also needs steel-browser from 2026-11-09 or later. Older builds do not
+serve the execution routes or the `find` target form.
 
 ## Troubleshooting (Agent-Focused)
 
@@ -185,7 +210,9 @@ Self-hosted steel-browser serves the commands API only when it runs with
   ensure all steps share the same `--session <name>`.
 - `stale_ref`: take a new snapshot (`steel browser snapshot -i`) and use the new refs.
 - `tab_required`: several tabs are open. Pick one with `steel browser tab switch <tab>`.
-- `dialog_pending`: answer the dialog with `steel browser dialog accept` or `dismiss`.
+- `dialog_pending`: a dialog blocks the tab, and commands cannot answer it. Close
+  it in the live view (`steel browser live`), or run `steel browser tab new`, then
+  `steel browser tab close <tab>`.
 - `This is the stored result of an earlier run`: the same command already ran
   after the last response the CLI received. Nothing ran again.
 - `delivery_failed`: the API could not reach the browser. Run the same command
