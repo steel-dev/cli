@@ -130,7 +130,7 @@ steel scrape
 
 - `url` (string, optional): Target URL to scrape
 - `--format` (string, optional): Comma-separated output formats: html, readability, cleaned_html, markdown
-- `-d, --delay` (string, optional): Delay before scraping in milliseconds
+- `-d, --delay` (integer, optional): Delay before scraping in milliseconds
 - `--pdf` (boolean, optional): Include a generated PDF in the response
 - `--screenshot` (boolean, optional): Include a generated screenshot in the response
 - `--use-proxy` (boolean, optional): Use a Steel-managed residential proxy
@@ -149,7 +149,7 @@ steel screenshot
 ### Parameters
 
 - `url` (string, optional): Target URL to capture
-- `-d, --delay` (string, optional): Delay before capturing in milliseconds
+- `-d, --delay` (integer, optional): Delay before capturing in milliseconds
 - `-f, --full-page` (boolean, optional): Capture a full-page screenshot
 - `--use-proxy` (boolean, optional): Use a Steel-managed residential proxy
 - `-r, --region` (string, optional): Region identifier for request execution
@@ -167,7 +167,7 @@ steel pdf
 ### Parameters
 
 - `url` (string, optional): Target URL to generate PDF from
-- `-d, --delay` (string, optional): Delay before generating in milliseconds
+- `-d, --delay` (integer, optional): Delay before generating in milliseconds
 - `--use-proxy` (boolean, optional): Use a Steel-managed residential proxy
 - `-r, --region` (string, optional): Region identifier for request execution
 
@@ -240,8 +240,8 @@ steel browser start
 - `-p, --proxy` (string, optional): Route the session through your own proxy (http://user:pass@host:port)
 - `--use-proxy` (boolean, optional): Use a Steel-managed residential proxy
 - `--project` (string, optional): Project to create the session in, needed with an organization-wide API key. Defaults to STEEL_PROJECT_ID
-- `--timeout` (string, optional): Session timeout in milliseconds. Defaults to 900000 (15 minutes), which every plan allows (create-time only)
-- `--inactivity-timeout` (string, optional): Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
+- `--timeout` (integer, optional): Session timeout in milliseconds. Defaults to 900000 (15 minutes), which every plan allows (create-time only)
+- `--inactivity-timeout` (integer, optional): Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
 - `--solve-captcha` (boolean, optional): Enable manual CAPTCHA solving on new sessions (create-time only)
 - `--profile` (string, optional): Named profile to load (see `steel profile list`)
 - `--update-profile` (boolean, optional): Save session state back to the profile when the session ends; creates the profile if it does not exist
@@ -330,8 +330,8 @@ steel browser captcha status
 
 - `--page-id` (string, optional): Check only this page
 - `-w, --wait` (boolean, optional): Wait for terminal status
-- `--timeout` (string, optional): Timeout in milliseconds for --wait mode
-- `--interval` (string, optional): Poll interval in milliseconds for --wait mode
+- `--timeout` (integer, optional): Timeout in milliseconds for --wait mode
+- `--interval` (integer, optional): Poll interval in milliseconds for --wait mode
 
 ## steel browser batch
 
@@ -407,7 +407,7 @@ steel browser click
 ### Parameters
 
 - `selector` (string, required): Element ref (e.g. e5) or CSS selector
-- `--count` (string, optional): Number of clicks (2 for double-click)
+- `--count` (integer, optional): Number of clicks (2 for double-click)
 
 ## steel browser dblclick
 
@@ -453,7 +453,7 @@ steel browser type
 - `selector` (string, required): Element ref or CSS selector
 - `text` (string[], optional): Text to type
 - `--clear` (boolean, optional): Clear the field before typing
-- `--delay` (string, optional): Delay between keystrokes in milliseconds (at most 1000)
+- `--delay` (integer, optional): Delay between keystrokes in milliseconds (at most 1000)
 
 ## steel browser press
 
@@ -611,7 +611,7 @@ steel browser scroll
 ### Parameters
 
 - `direction` (enum, optional): Direction: up, down, left, right (default: down)
-- `amount` (string, optional): Scroll amount in pixels (default: 300)
+- `amount` (number, optional): Scroll amount in pixels (default: 300)
 - `-s, --selector` (string, optional): Element to scroll instead of the page
 
 ## steel browser drag
@@ -657,12 +657,12 @@ steel browser mouse
 ### Parameters
 
 - `action` (enum, required): move, down, up, click, or wheel
-- `x` (string, optional): X in CSS pixels of the visible page (needed for move, click, and wheel)
-- `y` (string, optional): Y in CSS pixels of the visible page (needed for move, click, and wheel)
+- `x` (number, optional): X in CSS pixels of the visible page (needed for move, click, and wheel)
+- `y` (number, optional): Y in CSS pixels of the visible page (needed for move, click, and wheel)
 - `--button` (enum, optional): Mouse button: left, right, middle
-- `--clicks` (string, optional): Click count for click (1 to 3)
-- `--dx` (string, optional): Horizontal wheel delta
-- `--dy` (string, optional): Vertical wheel delta
+- `--clicks` (integer, optional): Click count for click (1 to 3)
+- `--dx` (number, optional): Horizontal wheel delta
+- `--dy` (number, optional): Vertical wheel delta
 
 ## steel browser snapshot
 
@@ -678,7 +678,7 @@ steel browser snapshot
 
 - `-i, --interactive` (boolean, optional): Show only interactive elements
 - `-c, --compact` (boolean, optional): Keep only lines with refs or values, and their ancestors
-- `-d, --max-depth` (string, optional): Maximum nesting depth
+- `-d, --max-depth` (integer, optional): Maximum nesting depth
 
 ## steel browser screenshot
 
@@ -696,7 +696,7 @@ steel browser screenshot
 - `-o, --output` (string, optional): Output file path
 - `--selector` (string, optional): Capture one element (ref or CSS selector)
 - `--format` (enum, optional): Image format: png, jpeg, webp (default: from the output extension)
-- `--quality` (string, optional): JPEG/WebP quality (0-100)
+- `--quality` (integer, optional): JPEG/WebP quality (0-100)
 
 ## steel browser pdf
 
@@ -727,7 +727,7 @@ steel browser eval
 ### Parameters
 
 - `script` (string, required): JavaScript expression or function body; its value is printed
-- `--timeout` (string, optional): Time limit in milliseconds (default 10000, at most 50000)
+- `--timeout` (integer, optional): Time limit in milliseconds (default 10000, at most 50000)
 
 ## steel browser find
 
@@ -967,8 +967,8 @@ steel browser wait
 
 ### Parameters
 
-- `ms` (string, optional): Fixed time to wait in milliseconds (at most 30000)
-- `--timeout` (string, optional): Timeout in milliseconds (at most 50000)
+- `ms` (integer, optional): Fixed time to wait in milliseconds (at most 30000)
+- `--timeout` (integer, optional): Timeout in milliseconds (at most 50000)
 - `-t, --text` (string, optional): Wait for text to appear on the page
 - `--selector` (string, optional): Wait for an element (ref or CSS selector)
 - `--state` (enum, optional): Element state: visible, hidden, attached, detached
@@ -1106,7 +1106,7 @@ steel sessions list
 
 ### Parameters
 
-- `--limit` (string, optional): Number of sessions to return
+- `--limit` (integer, optional): Number of sessions to return
 - `--cursor-id` (string, optional): Cursor ID for pagination
 - `--status` (string, optional): Filter by status: live, released, or failed
 - `--metadata` (string[], optional): Filter by metadata KEY=VALUE, repeatable; all must match
@@ -1209,8 +1209,8 @@ steel sessions logs
 - `--since` (string, optional): Alias for --start-time
 - `--end-time` (string, optional): ISO timestamp upper bound
 - `--event-type` (string[], optional): Event type filter, repeatable or comma-separated
-- `--limit` (string, optional): Number of events to return
-- `--offset` (string, optional): Pagination offset
+- `--limit` (integer, optional): Number of events to return
+- `--offset` (integer, optional): Pagination offset
 
 ### API Operations
 
@@ -1237,8 +1237,8 @@ steel sessions agent-logs
 - `--since` (string, optional): Alias for --start-time
 - `--end-time` (string, optional): ISO timestamp upper bound
 - `--event-type` (string[], optional): Event type filter, repeatable or comma-separated
-- `--limit` (string, optional): Number of events to return
-- `--offset` (string, optional): Pagination offset
+- `--limit` (integer, optional): Number of events to return
+- `--offset` (integer, optional): Pagination offset
 
 ### API Operations
 
@@ -1449,7 +1449,7 @@ steel dev start
 
 ### Parameters
 
-- `-p, --port` (string, optional): API port for local Steel Browser runtime
+- `-p, --port` (integer, optional): API port for local Steel Browser runtime
 - `-V, --verbose` (boolean, optional): Enable verbose Docker command output
 - `-d, --docker-check` (boolean, optional): Only verify Docker availability and exit
 
