@@ -41,6 +41,7 @@ pub mod exit_code {
     pub const NETWORK: i32 = 4;
     pub const API_CLIENT: i32 = 5;
     pub const API_SERVER: i32 = 6;
+    pub const INTERRUPTED: i32 = 130;
 }
 
 /// Sentinel error: the command already printed its own output and reported

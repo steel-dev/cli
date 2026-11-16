@@ -213,7 +213,7 @@ steel browser
 - `mouse`: Mouse input at a point, for canvases and maps
 - `snapshot`: Take an accessibility tree snapshot with element refs
 - `screenshot`: Take a screenshot
-- `pdf`: Save the page as a PDF (headless sessions only)
+- `pdf`: Save the page as a PDF
 - `eval`: Run JavaScript in the page and print its value
 - `find`: Find elements and print their refs
 - `content`: Get the page HTML
@@ -238,7 +238,7 @@ steel browser start
 
 - `--stealth` (boolean, optional): Enable stealth mode (humanize interactions + auto CAPTCHA)
 - `-p, --proxy` (string, optional): Use a residential proxy
-- `--timeout` (string, optional): Session timeout in milliseconds (create-time only)
+- `--timeout` (string, optional): Session timeout in milliseconds. Defaults to 900000 (15 minutes), which every plan allows (create-time only)
 - `--inactivity-timeout` (string, optional): Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
 - `--solve-captcha` (boolean, optional): Enable manual CAPTCHA solving on new sessions (create-time only)
 - `--profile` (string, optional): Named profile to load (see `steel profile list`)
@@ -698,7 +698,7 @@ steel browser screenshot
 
 ## steel browser pdf
 
-Save the page as a PDF (headless sessions only)
+Save the page as a PDF
 
 ### Usage
 
@@ -725,6 +725,7 @@ steel browser eval
 ### Parameters
 
 - `script` (string, required): JavaScript expression or function body; its value is printed
+- `--timeout` (string, optional): Time limit in milliseconds (default 10000, at most 50000)
 
 ## steel browser find
 

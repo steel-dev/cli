@@ -6,11 +6,11 @@ use clap::{Parser, Subcommand};
 use serde_json::{Map, Value, json};
 
 use crate::api::client::{ApiError, SteelClient};
-use crate::api::commands::{Reply, Session};
+use crate::api::commands::{Reply, Session, Submitted};
 use crate::api::session::Session as RemoteSession;
 use crate::browser::state::{self, BrowserSession, SnapshotInfo};
 use crate::config::settings::ApiMode;
-use crate::util::output::{self, fail};
+use crate::util::output::{self, SilentExit, exit_code, fail};
 
 use super::{DEFAULT_SESSION, Target, start};
 
@@ -97,7 +97,7 @@ pub enum ActionCommand {
     Snapshot(SnapshotArgs),
     /// Take a screenshot
     Screenshot(ScreenshotArgs),
-    /// Save the page as a PDF (headless sessions only)
+    /// Save the page as a PDF
     Pdf(PdfArgs),
     /// Run JavaScript in the page and print its value
     Eval(EvalArgs),
@@ -420,6 +420,9 @@ pub struct PdfArgs {
 pub struct EvalArgs {
     /// JavaScript expression or function body; its value is printed
     pub script: String,
+    /// Time limit in milliseconds (default 10000, at most 50000)
+    #[arg(long, value_parser = clap::value_parser!(u64).range(0..=50000))]
+    pub timeout: Option<u64>,
 }
 
 #[derive(Parser)]
@@ -448,9 +451,10 @@ pub struct GetAttrArgs {
 #[derive(Parser)]
 pub struct WaitArgs {
     /// Fixed time to wait in milliseconds (at most 30000)
+    #[arg(value_parser = clap::value_parser!(u64).range(0..=30000))]
     pub ms: Option<u64>,
     /// Timeout in milliseconds (at most 50000)
-    #[arg(long, default_value_t = 30000)]
+    #[arg(long, default_value_t = 30000, value_parser = clap::value_parser!(u64).range(0..=50000))]
     pub timeout: u64,
     /// Wait for text to appear on the page
     #[arg(short = 't', long)]
@@ -795,7 +799,12 @@ impl ActionCommand {
                     .on("printBackground", a.print_background),
                 O::Saved(absolute(&a.output)?),
             ),
-            Self::Eval(a) => single(cmd("eval").set("script", a.script), O::Value),
+            Self::Eval(a) => single(
+                cmd("eval")
+                    .set("script", a.script)
+                    .opt("timeout", a.timeout),
+                O::Value,
+            ),
             Self::Find(a) => single(
                 cmd("find").set(
                     "target",
@@ -986,6 +995,15 @@ fn snapshot_options(command: &Value, id: &str) -> SnapshotInfo {
     }
 }
 
+const MASK: &str = "••••••••";
+
+fn value_text(result: &Value) -> Option<String> {
+    if result["masked"] == true {
+        return Some(MASK.to_string());
+    }
+    show(&result["value"])
+}
+
 fn show(value: &Value) -> Option<String> {
     match value {
         Value::Null => None,
@@ -1006,6 +1024,12 @@ fn session_flag(name: &str) -> String {
 fn hint(code: &str, message: &str) -> &'static str {
     match code {
         "tab_not_found" | "browser_restarted" if message.contains("tab list") => "",
+        "invalid_argument"
+            if message.contains("is not a valid CSS selector")
+                || message.contains("is not a valid selector") =>
+        {
+            " A target is a ref or a CSS selector. Run `steel browser find --by <kind> <value>` to get a ref."
+        }
         "stale_ref" => " Run `steel browser snapshot -i`.",
         "tab_required" => " Run `steel browser tab switch <tab>`.",
         "tab_not_found" => " Run `steel browser tab list`.",
@@ -1026,22 +1050,34 @@ fn failure(body: &Value) -> Option<(String, String)> {
     if state == "completed" {
         return None;
     }
-    if state == "running" {
+    if matches!(state, "queued" | "running") {
         let id = execution["id"].as_str().unwrap_or("");
         return Some((
             "running".to_string(),
-            format!("The command is still running. Wait for it with `steel browser status {id}`."),
+            format!(
+                "The command is still running as execution {id}. Wait for it with `steel browser status {id}`, or stop it with `steel browser cancel {id}`."
+            ),
         ));
     }
-    let error = body["results"]
+    let failed = body["results"]
         .as_array()
-        .and_then(|results| results.iter().find(|r| r["ok"] == false))
+        .and_then(|results| results.iter().find(|r| r["ok"] == false));
+    let error = failed
         .map(|r| &r["error"])
         .filter(|e| e.is_object())
         .unwrap_or_else(|| &execution["error"]);
     let code = error["code"].as_str().unwrap_or(state).to_string();
     let message = error["message"].as_str().unwrap_or("The command failed.");
+    let navigation = failed.is_some_and(|r| {
+        matches!(
+            r["command"].as_str(),
+            Some("navigate" | "reload" | "back" | "forward")
+        )
+    });
     let effect = match execution["effect"].as_str() {
+        Some("applied") if navigation => {
+            " The tab already left the page it was on (effect: applied)."
+        }
         Some("applied") => " Input already reached the page (effect: applied).",
         Some("unknown") => {
             " It is unknown whether the action took effect. Check the page before repeating it."
@@ -1078,6 +1114,16 @@ fn notices(body: &Value) -> Vec<String> {
             "The page is still loading. Wait for it with `steel browser wait --load load`."
                 .to_string(),
         );
+    }
+    let results = body["results"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    if results.iter().any(|r| r["moved"] == false) {
+        notes.push("Nothing scrolled: it is already at the edge, or it cannot scroll.".to_string());
+    }
+    if results.iter().any(|r| r["navigated"] == false) {
+        notes.push("The tab's history has no page in that direction, so it stayed.".to_string());
     }
     if let Some(dialog) = body.get("dialog").filter(|d| d.is_object()) {
         let tab = dialog["tab"].as_str().unwrap_or("<tab>");
@@ -1125,6 +1171,40 @@ fn restarted(body: &Value) -> bool {
                 .iter()
                 .any(|r| r["error"]["code"] == "browser_restarted")
         })
+}
+
+fn running(body: &Value) -> Option<String> {
+    let execution = &body["execution"];
+    if !matches!(execution["state"].as_str(), Some("queued" | "running")) {
+        return None;
+    }
+    execution["id"].as_str().map(str::to_string)
+}
+
+fn interrupted(mut err: anyhow::Error) -> anyhow::Error {
+    if let Some(silent) = err.downcast_mut::<SilentExit>() {
+        silent.code = exit_code::INTERRUPTED;
+    }
+    err
+}
+
+fn stopped_waiting(id: Option<&str>) -> anyhow::Error {
+    let message = match id {
+        Some(id) => format!(
+            "Stopped waiting. Execution {id} may still be running. Check it with `steel browser status {id}`, or stop it with `steel browser cancel {id}`."
+        ),
+        None => "Stopped waiting. The command may still be running.".to_string(),
+    };
+    interrupted(fail("interrupted", &message, None))
+}
+
+fn not_sent(maybe_ran: bool) -> anyhow::Error {
+    let message = if maybe_ran {
+        "Stopped before sending the command again. An earlier attempt may have reached the browser, so check the page before running it again."
+    } else {
+        "Stopped. The command did not start."
+    };
+    interrupted(fail("interrupted", message, None))
 }
 
 pub struct Browser {
@@ -1327,10 +1407,12 @@ impl Browser {
         loop {
             let injected = self.state.tab.is_some();
             let (commands, body) = self.request(&steps, diff);
-            let reply = self.send(self.session().run(body.clone())).await?;
-            let mut reply = self.check(reply)?;
+            let (reply, stopped) = self.run_or_cancel(body.clone()).await?;
+            let exit = |err| if stopped { interrupted(err) } else { err };
+            let mut reply = self.check(reply).map_err(exit)?;
             self.absorb(&commands, &reply.body, body.get("observe"));
             let lost_tab = injected
+                && !stopped
                 && !tab_commands
                 && !retried
                 && reply.body["execution"]["effect"] == "none"
@@ -1341,9 +1423,73 @@ impl Browser {
                 retried = true;
                 continue;
             }
-            let result = self.report(&steps, &mut reply.body).await;
+            let result = tokio::select! {
+                biased;
+                result = self.report(&steps, &mut reply.body) => result,
+                _ = tokio::signal::ctrl_c() => Err(interrupted(fail(
+                    "interrupted",
+                    "Stopped. The command already finished, but its output was cut short.",
+                    None,
+                ))),
+            };
             self.save()?;
-            return result;
+            return result.map_err(exit);
+        }
+    }
+
+    async fn run_or_cancel(&self, body: Value) -> Result<(Reply, bool)> {
+        let session = self.session();
+        let (stop, stopping) = tokio::sync::watch::channel(false);
+        let mut interrupt = std::pin::pin!(tokio::signal::ctrl_c());
+        let mut submitting = std::pin::pin!(self.send(session.submit(body, stopping)));
+        let (submitted, stopped) = tokio::select! {
+            biased;
+            submitted = &mut submitting => (submitted?, false),
+            _ = &mut interrupt => {
+                crate::status!("Stopping the command. Press Ctrl-C again to stop waiting.");
+                stop.send_replace(true);
+                tokio::select! {
+                    biased;
+                    submitted = &mut submitting => (submitted.map_err(interrupted)?, true),
+                    _ = tokio::signal::ctrl_c() => return Err(stopped_waiting(None)),
+                }
+            }
+        };
+        let submitted = match submitted {
+            Submitted::Reply(reply) => reply,
+            Submitted::Stopped { maybe_ran } => return Err(not_sent(maybe_ran)),
+        };
+        if stopped {
+            return Ok((self.stop(submitted).await.map_err(interrupted)?, true));
+        }
+        let execution = running(&submitted.body);
+        let mut settling = std::pin::pin!(self.send(session.settle(submitted)));
+        tokio::select! {
+            biased;
+            reply = &mut settling => Ok((reply?, false)),
+            _ = &mut interrupt => {
+                crate::status!("Stopping the command. Press Ctrl-C again to stop waiting.");
+                let Some(id) = execution else {
+                    return Ok((settling.await?, false));
+                };
+                Ok((self.cancel(&id).await.map_err(interrupted)?, true))
+            }
+        }
+    }
+
+    async fn stop(&self, reply: Reply) -> Result<Reply> {
+        match running(&reply.body) {
+            Some(id) => self.cancel(&id).await,
+            None => Ok(reply),
+        }
+    }
+
+    async fn cancel(&self, id: &str) -> Result<Reply> {
+        let session = self.session();
+        tokio::select! {
+            biased;
+            reply = self.send(session.cancel(id)) => reply,
+            _ = tokio::signal::ctrl_c() => Err(stopped_waiting(Some(id))),
         }
     }
 
@@ -1404,7 +1550,7 @@ impl Browser {
         Ok(match output {
             Output::None => None,
             Output::Snapshot => result["snapshot"].as_str().map(str::to_string),
-            Output::Value => show(&result["value"]),
+            Output::Value => value_text(result),
             Output::Find => Some(find_lines(result)),
             Output::Tabs => {
                 let current = self.state.tab.as_deref();
@@ -1482,7 +1628,10 @@ impl Browser {
         };
         let reply = self.check(reply)?;
         let body = reply.body;
-        let failed = failure(&body);
+        let failed = match control {
+            Control::Cancel(_) if running(&body).is_none() => None,
+            _ => failure(&body),
+        };
         if output::is_json() {
             return match failed {
                 None => {
@@ -1922,6 +2071,113 @@ mod tests {
     }
 
     #[test]
+    fn running_executions_say_how_to_wait_or_stop() {
+        let body = json!({"execution": {"id": "x-9", "state": "running", "effect": "none"}});
+        let (code, message) = failure(&body).unwrap();
+        assert_eq!(code, "running");
+        assert!(message.contains("execution x-9"), "{message}");
+        assert!(message.contains("`steel browser status x-9`"), "{message}");
+        assert!(message.contains("`steel browser cancel x-9`"), "{message}");
+        let queued = json!({"execution": {"id": "x-10", "state": "queued", "effect": "none"}});
+        assert_eq!(failure(&queued).unwrap().0, "running");
+        assert_eq!(running(&body), Some("x-9".to_string()));
+        assert_eq!(
+            running(&json!({"execution": {"id": "x-9", "state": "cancelled"}})),
+            None
+        );
+    }
+
+    #[test]
+    fn failed_navigation_does_not_talk_about_input() {
+        let body = json!({
+            "execution": {"id": "x-3", "state": "failed", "effect": "applied"},
+            "results": [{"command": "navigate", "ok": false, "effect": "applied", "error": {
+                "code": "navigation_failed",
+                "message": "Navigation to https://nope.invalid/ failed: net::ERR_NAME_NOT_RESOLVED"
+            }}]
+        });
+        let (_, message) = failure(&body).unwrap();
+        assert!(
+            message.ends_with("The tab already left the page it was on (effect: applied)."),
+            "{message}"
+        );
+        assert!(!message.contains("Input"), "{message}");
+    }
+
+    #[test]
+    fn invalid_css_targets_point_at_find() {
+        let body = json!({
+            "execution": {"id": "x-4", "state": "failed", "effect": "none"},
+            "results": [{"ok": false, "effect": "none", "error": {
+                "code": "invalid_argument",
+                "message": "The locator css=\"label=Password\" is not a valid CSS selector."
+            }}]
+        });
+        let (_, message) = failure(&body).unwrap();
+        assert!(
+            message.ends_with("Run `steel browser find --by <kind> <value>` to get a ref."),
+            "{message}"
+        );
+        let older = json!({
+            "execution": {"id": "x-5", "state": "failed", "effect": "none"},
+            "results": [{"ok": false, "effect": "none", "error": {
+                "code": "invalid_argument",
+                "message": "The locator css=\"label=Password\" is not valid: SyntaxError: Failed to execute 'querySelectorAll' on 'Document': 'label=Password' is not a valid selector."
+            }}]
+        });
+        let (_, message) = failure(&older).unwrap();
+        assert!(message.ends_with("to get a ref."), "{message}");
+    }
+
+    #[test]
+    fn notices_say_when_nothing_moved() {
+        let scrolled = json!({
+            "execution": {"state": "completed"},
+            "results": [{"ok": true, "effect": "none", "moved": false, "x": 0, "y": 900}]
+        });
+        assert!(
+            notices(&scrolled)
+                .iter()
+                .any(|n| n.starts_with("Nothing scrolled"))
+        );
+        let back = json!({
+            "execution": {"state": "completed"},
+            "results": [{"ok": true, "effect": "none", "navigated": false}]
+        });
+        assert!(
+            notices(&back)
+                .iter()
+                .any(|n| n.contains("history has no page"))
+        );
+        let moved = json!({
+            "execution": {"state": "completed"},
+            "results": [{"ok": true, "effect": "applied", "moved": true, "x": 0, "y": 300}]
+        });
+        assert!(notices(&moved).is_empty());
+    }
+
+    #[test]
+    fn eval_takes_a_timeout_and_waits_stay_within_the_api_limits() {
+        assert_eq!(
+            commands(&["eval", "1 + 1", "--timeout", "45000"])[0]["timeout"],
+            45000
+        );
+        assert!(commands(&["eval", "1 + 1"])[0].get("timeout").is_none());
+        for args in [
+            vec!["eval", "1", "--timeout", "50001"],
+            vec!["wait", "45000"],
+            vec!["wait", "--text", "Done", "--timeout", "60000"],
+        ] {
+            let message = plan(&args)
+                .err()
+                .unwrap_or_else(|| panic!("{args:?} should fail"))
+                .to_string();
+            assert!(message.contains("is not in"), "{args:?}: {message}");
+        }
+        assert_eq!(commands(&["wait", "30000"])[0]["ms"], 30000);
+    }
+
+    #[test]
     fn notices_cover_replays_dialogs_and_loading() {
         let body = json!({
             "execution": {"state": "completed", "replayed": true},
@@ -1940,6 +2196,11 @@ mod tests {
 
     #[test]
     fn values_print_plainly() {
+        assert_eq!(
+            value_text(&json!({"masked": true, "value": null})),
+            Some("••••••••".to_string())
+        );
+        assert_eq!(value_text(&json!({"value": ""})), Some(String::new()));
         assert_eq!(show(&json!("hi")), Some("hi".to_string()));
         assert_eq!(show(&json!(true)), Some("true".to_string()));
         assert_eq!(show(&json!(3)), Some("3".to_string()));
