@@ -31,7 +31,7 @@ steel scrape https://example.com
 
 ## Links
 
-- 📖 [Docs](https://docs.steel.dev): guides, recipes, API reference
+- 📖 [Docs](https://steel.dev/docs): guides, recipes, API reference
 - 🧪 [Cookbook](https://github.com/steel-dev/steel-cookbook): runnable examples across Python, Node, and every supported framework
 - 💬 [Discord](https://discord.gg/steel-dev): community, feedback, roadmap
 - 🐙 [GitHub](https://github.com/steel-dev/cli): source, issues, releases
@@ -182,7 +182,7 @@ Reference docs:
 Agent skills:
 
 - [Steel Skills catalog](https://github.com/steel-dev/skills)
-- [Steel Agent Skills docs](https://docs.steel.dev/overview/agent-skills)
+- [Steel Agent Skills docs](https://steel.dev/docs/control/skills)
 
 ---
 
