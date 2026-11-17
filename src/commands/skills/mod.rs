@@ -32,7 +32,7 @@ const FALLBACK_MANIFEST: &str = r#"{
       "owner": "Jun",
       "cli": { "include": true },
       "agents": ["claude-code", "cursor", "codex", "opencode", "pi"],
-      "docs_url": "https://docs.steel.dev/overview/agent-skills/steel-browser",
+      "docs_url": "https://steel.dev/docs/control/skills#skills",
       "install": {
         "skills_cli": "npx skills add steel-dev/skills --skill steel-browser",
         "steel_cli": "steel skills install steel-browser"
@@ -50,7 +50,7 @@ const FALLBACK_MANIFEST: &str = r#"{
       "owner": "Dane",
       "cli": { "include": true },
       "agents": ["claude-code", "cursor", "codex", "opencode", "pi"],
-      "docs_url": "https://docs.steel.dev/overview/agent-skills/steel-developer",
+      "docs_url": "https://steel.dev/docs/control/skills#skills",
       "install": {
         "skills_cli": "npx skills add steel-dev/skills --skill steel-developer",
         "steel_cli": "steel skills install steel-developer"
@@ -68,7 +68,7 @@ const FALLBACK_MANIFEST: &str = r#"{
       "owner": "Nas",
       "cli": { "include": true },
       "agents": ["claude-code", "cursor", "codex", "opencode", "pi"],
-      "docs_url": "https://docs.steel.dev/overview/agent-skills/steel-session-debugging",
+      "docs_url": "https://steel.dev/docs/control/skills#skills",
       "install": {
         "skills_cli": "npx skills add steel-dev/skills --skill steel-session-debugging",
         "steel_cli": "steel skills install steel-session-debugging"
@@ -86,7 +86,7 @@ const FALLBACK_MANIFEST: &str = r#"{
       "owner": "Nas",
       "cli": { "include": true },
       "agents": ["claude-code", "cursor", "codex", "opencode", "pi"],
-      "docs_url": "https://docs.steel.dev/overview/agent-skills/steel-reliability",
+      "docs_url": "https://steel.dev/docs/control/skills#skills",
       "install": {
         "skills_cli": "npx skills add steel-dev/skills --skill steel-reliability",
         "steel_cli": "steel skills install steel-reliability"
@@ -104,7 +104,7 @@ const FALLBACK_MANIFEST: &str = r#"{
       "owner": "Niko",
       "cli": { "include": true },
       "agents": ["claude-code"],
-      "docs_url": "https://docs.steel.dev/overview/agent-skills/steel-skill-creator",
+      "docs_url": "https://steel.dev/docs/control/skills#skills",
       "install": {
         "skills_cli": "npx skills add steel-dev/skills --skill steel-skill-creator",
         "steel_cli": "steel skills install steel-skill-creator"

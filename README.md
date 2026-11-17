@@ -182,7 +182,7 @@ Reference docs:
 Agent skills:
 
 - [Steel Skills catalog](https://github.com/steel-dev/skills)
-- [Steel Agent Skills docs](https://docs.steel.dev/overview/agent-skills)
+- [Steel Agent Skills docs](https://steel.dev/docs/control/skills)
 
 ---
 
