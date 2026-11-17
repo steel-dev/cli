@@ -317,7 +317,11 @@ pub fn saved_settings() -> Result<Option<Settings>> {
 
 pub fn saved_access_token() -> Option<String> {
     match read() {
-        Ok(state) => state.and_then(|s| s.tokens.map(|t| t.access_token)),
+        Ok(state) => state.and_then(|s| {
+            s.tokens
+                .map(|t| t.access_token)
+                .filter(|t| !t.trim().is_empty())
+        }),
         Err(_) => Some(String::new()), // Request path reports error, never falls back to a saved key.
     }
 }
