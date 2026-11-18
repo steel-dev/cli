@@ -49,6 +49,15 @@ pub enum ApiError {
 }
 
 impl ApiError {
+    pub fn body_str(&self, key: &str) -> Option<&str> {
+        match self {
+            Self::RequestFailed {
+                body: Some(body), ..
+            } => body.get(key).and_then(Value::as_str),
+            _ => None,
+        }
+    }
+
     /// Check if this is a 404/410 (not found). Matches TS `isNotFoundApiError()`.
     pub const fn is_not_found(&self) -> bool {
         matches!(self, Self::RequestFailed { status, .. } if *status == 404 || *status == 410)

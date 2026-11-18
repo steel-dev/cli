@@ -828,3 +828,174 @@ async fn batch_sends_one_request() {
     );
     assert_eq!(cli.state("s").unwrap()["snapshot"]["compact"], true);
 }
+
+async fn session_bodies(server: &MockServer) -> Vec<Value> {
+    server
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.method.as_str() == "POST" && r.url.path() == "/v1/sessions")
+        .map(|r| serde_json::from_slice(&r.body).unwrap())
+        .collect()
+}
+
+async fn refuse_captcha(server: &MockServer, code: &str) {
+    Mock::given(method("POST"))
+        .and(path("/v1/sessions"))
+        .and(body_partial_json(json!({"solveCaptcha": true})))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "error": "Bad Request",
+            "code": code,
+            "message": "Captcha solving is not available on the hobby plan.",
+            "param": "solveCaptcha"
+        })))
+        .with_priority(1)
+        .mount(server)
+        .await;
+}
+
+async fn accept_sessions(server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/v1/sessions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(session_json()))
+        .with_priority(2)
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn stealth_starts_without_captcha_when_the_plan_refuses_it() {
+    for code in ["plan_feature_unavailable", "deposit_required"] {
+        let server = MockServer::start().await;
+        refuse_captcha(&server, code).await;
+        accept_sessions(&server).await;
+        let cli = Cli::new(&server);
+
+        let started = cli.run(&["browser", "start", "--stealth"]).await;
+        assert!(started.status.success(), "{started:?}");
+        let out = json_out(&started);
+        assert_eq!(out["data"]["id"], ID);
+        assert!(
+            out["data"]["notes"][0]
+                .as_str()
+                .is_some_and(|note| note.contains("without CAPTCHA solving"))
+        );
+        assert!(String::from_utf8_lossy(&started.stderr).contains("without CAPTCHA solving"));
+        let bodies = session_bodies(&server).await;
+        assert_eq!(bodies.len(), 2);
+        assert_eq!(bodies[0]["solveCaptcha"], true);
+        assert!(bodies[1].get("solveCaptcha").is_none());
+        assert_eq!(
+            bodies[1]["stealthConfig"],
+            json!({"humanizeInteractions": true})
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_explicit_captcha_request_is_never_dropped() {
+    let server = MockServer::start().await;
+    refuse_captcha(&server, "plan_feature_unavailable").await;
+    accept_sessions(&server).await;
+    let cli = Cli::new(&server);
+
+    let refused = cli
+        .run(&["browser", "start", "--stealth", "--solve-captcha"])
+        .await;
+    assert!(!refused.status.success());
+    assert_eq!(json_out(&refused)["error_code"], "request_failed");
+    assert_eq!(session_bodies(&server).await.len(), 1);
+    assert!(cli.state("default").is_none());
+}
+
+#[tokio::test]
+async fn proxy_takes_a_url_and_residential_means_a_steel_proxy() {
+    let server = MockServer::start().await;
+    accept_sessions(&server).await;
+    let cli = Cli::new(&server);
+
+    let aliased = cli
+        .run(&["browser", "start", "--proxy", "residential"])
+        .await;
+    assert!(aliased.status.success(), "{aliased:?}");
+    assert!(
+        json_out(&aliased)["data"]["notes"][0]
+            .as_str()
+            .is_some_and(|note| note.contains("--use-proxy"))
+    );
+
+    let steel = cli.run(&["browser", "start", "--use-proxy"]).await;
+    assert!(steel.status.success(), "{steel:?}");
+
+    let own = cli
+        .run(&[
+            "browser",
+            "start",
+            "-p",
+            "http://user:pass@proxy.example:8080",
+        ])
+        .await;
+    assert!(own.status.success(), "{own:?}");
+
+    let bodies = session_bodies(&server).await;
+    assert_eq!(bodies.len(), 3);
+    assert_eq!(bodies[0]["useProxy"], true);
+    assert!(bodies[0].get("proxyUrl").is_none());
+    assert_eq!(bodies[1]["useProxy"], true);
+    assert_eq!(bodies[2]["proxyUrl"], "http://user:pass@proxy.example:8080");
+    assert!(bodies[2].get("useProxy").is_none());
+
+    for value in ["proxy.example:8080", "not a url"] {
+        let invalid = cli.run(&["browser", "start", "--proxy", value]).await;
+        assert_eq!(json_out(&invalid)["error_code"], "invalid_input", "{value}");
+    }
+    assert_eq!(session_bodies(&server).await.len(), 3);
+}
+
+#[tokio::test]
+async fn project_comes_from_the_flag_or_steel_project_id() {
+    let server = MockServer::start().await;
+    accept_sessions(&server).await;
+    let cli = Cli::new(&server);
+
+    let flagged = cli.run(&["browser", "start", "--project", "p-flag"]).await;
+    assert!(flagged.status.success(), "{flagged:?}");
+
+    let from_env = cli
+        .command(cli.config.path(), &["browser", "start"])
+        .env("STEEL_PROJECT_ID", "p-env")
+        .output()
+        .await
+        .unwrap();
+    assert!(from_env.status.success(), "{from_env:?}");
+
+    let bodies = session_bodies(&server).await;
+    assert_eq!(bodies[0]["projectId"], "p-flag");
+    assert_eq!(bodies[1]["projectId"], "p-env");
+}
+
+#[tokio::test]
+async fn an_organization_key_without_a_project_points_at_the_project_option() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/sessions"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "error": "Bad Request",
+            "code": "project_required",
+            "message": "This API key is scoped to the whole organization, so it binds to no project. Pass projectId to say which project this request is for.",
+            "param": "projectId"
+        })))
+        .mount(&server)
+        .await;
+    let cli = Cli::new(&server);
+
+    let refused = cli.run(&["browser", "start"]).await;
+    let out = json_out(&refused);
+    assert_eq!(out["error_code"], "request_failed");
+    assert!(
+        out["hint"]
+            .as_str()
+            .is_some_and(|hint| hint.contains("--project"))
+    );
+}
