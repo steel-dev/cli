@@ -5,6 +5,7 @@ use crate::api::client::SteelClient;
 use crate::api::session::CreateSessionOptions;
 use crate::browser::profile_store;
 use crate::browser::state::{self, BrowserSession};
+use crate::util::error::invalid_input;
 use crate::util::{metadata, output};
 
 pub const DEFAULT_TIMEOUT_MS: u64 = 900_000;
@@ -103,9 +104,9 @@ pub async fn create(
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let session_name = session.unwrap_or("default").to_string();
     if state::looks_like_session_id(&session_name) {
-        anyhow::bail!(
+        return Err(invalid_input(format!(
             "Session names cannot look like session IDs. Use `--session {session_name}` on other commands to drive that session, or pick a name."
-        );
+        )));
     }
     let session_metadata = metadata::collect(args.metadata)?;
 
@@ -114,16 +115,16 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let mut stored_browser = None;
     if let Some(ref profile_name) = args.profile {
         if let Some(err) = profile_store::validate_profile_name(profile_name) {
-            anyhow::bail!("{err}");
+            return Err(invalid_input(err));
         }
         if let Some(data) = profile_store::read_profile(profile_name)? {
             resolved_profile_id = Some(data.profile_id);
             stored_browser_profile = data.browser_profile;
             stored_browser = data.browser;
         } else if !args.update_profile {
-            anyhow::bail!(
+            return Err(invalid_input(format!(
                 "Profile \"{profile_name}\" not found. Import one with `steel profile import {profile_name}`, or add --update-profile to create it from this session."
-            );
+            )));
         }
     }
 
@@ -141,6 +142,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         );
     }
 
+    crate::commands::login::ensure_signed_in().await?;
     let client = SteelClient::new()?;
 
     let replaced = match state::load(&session_name)? {

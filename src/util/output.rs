@@ -37,6 +37,7 @@ macro_rules! status {
 
 pub mod exit_code {
     pub const GENERAL: i32 = 1;
+    pub const USAGE: i32 = 2;
     pub const AUTH: i32 = 3;
     pub const NETWORK: i32 = 4;
     pub const API_CLIENT: i32 = 5;
@@ -170,81 +171,176 @@ pub fn handle_error(err: &anyhow::Error) -> ! {
         std::process::exit(silent.code);
     }
 
-    let (code, error_code, hint) = classify_error(err);
+    let class = classify(err);
     let msg = format!("{err:#}");
+    let data = err
+        .downcast_ref::<crate::util::error::LoginRequired>()
+        .map(crate::util::error::LoginRequired::to_json);
 
     if is_json() {
         let mut obj = json!({
             "success": false,
             "error": msg,
-            "error_code": error_code,
+            "error_code": class.code,
         });
-        if let Some(h) = hint {
+        if let Some(h) = class.hint {
             obj["hint"] = json!(h);
+        }
+        if let Some(data) = data {
+            obj["data"] = data;
         }
         println!("{obj}");
     } else {
         eprintln!("Error: {msg}");
-        if let Some(h) = hint {
+        if let Some(h) = class.hint {
             eprintln!("Hint: {h}");
         }
     }
 
-    std::process::exit(code);
+    std::process::exit(class.exit_code);
 }
 
-fn classify_error(err: &anyhow::Error) -> (i32, &'static str, Option<&'static str>) {
-    if let Some(api_err) = err.downcast_ref::<crate::api::client::ApiError>() {
-        match api_err {
-            crate::api::client::ApiError::DeviceAuth(_) => (
-                exit_code::AUTH,
-                "device_auth_failed",
-                Some("Resume pending login or reauthorize as directed."),
-            ),
-            crate::api::client::ApiError::MissingAuth => (
-                exit_code::AUTH,
-                "auth_required",
-                Some("Run `steel login` or set STEEL_API_KEY."),
-            ),
-            crate::api::client::ApiError::Unreachable { .. } => (
-                exit_code::NETWORK,
-                "unreachable",
-                Some("Check your network connection and API URL."),
-            ),
-            crate::api::client::ApiError::RequestFailed { status, .. } => match *status {
-                401 => (
-                    exit_code::AUTH,
-                    "unauthorized",
-                    Some("API key may be invalid. Run `steel login`."),
-                ),
-                403 => (exit_code::API_CLIENT, "forbidden", None),
-                404 => (exit_code::API_CLIENT, "not_found", None),
-                429 => (
-                    exit_code::API_CLIENT,
-                    "rate_limited",
-                    Some("Too many requests. Wait and retry."),
-                ),
-                s if s >= 500 => (
-                    exit_code::API_SERVER,
-                    "server_error",
-                    Some("Steel API server error. Try again later."),
-                ),
-                _ => (exit_code::API_CLIENT, "request_failed", None),
-            },
-            _ => (
-                exit_code::NETWORK,
-                "network_error",
-                Some("Check your network connection."),
-            ),
-        }
-    } else {
-        (exit_code::GENERAL, "internal_error", None)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ErrorClass {
+    pub exit_code: i32,
+    pub code: &'static str,
+    pub telemetry: &'static str,
+    pub hint: Option<&'static str>,
+}
+
+const fn class(
+    exit_code: i32,
+    code: &'static str,
+    telemetry: &'static str,
+    hint: Option<&'static str>,
+) -> ErrorClass {
+    ErrorClass {
+        exit_code,
+        code,
+        telemetry,
+        hint,
     }
+}
+
+const NETWORK_HINT: Option<&str> = Some("Check your network connection.");
+const LOGIN_HINT: Option<&str> = Some(
+    "If an agent runs this command, show the URL and code to the user and retry after they approve. STEEL_API_KEY also works.",
+);
+
+const fn classify_api(err: &crate::api::client::ApiError) -> ErrorClass {
+    use crate::api::client::ApiError;
+    match err {
+        ApiError::DeviceAuth(_) => class(
+            exit_code::AUTH,
+            "device_auth_failed",
+            "device_auth_failed",
+            Some("Resume pending login or reauthorize as directed."),
+        ),
+        ApiError::MissingAuth => class(
+            exit_code::AUTH,
+            "auth_required",
+            "auth_required",
+            Some("Run `steel login` or set STEEL_API_KEY."),
+        ),
+        ApiError::Unreachable { .. } => class(
+            exit_code::NETWORK,
+            "unreachable",
+            "network_unreachable",
+            Some("Check your network connection and API URL."),
+        ),
+        ApiError::Redirected { .. } => class(
+            exit_code::NETWORK,
+            "network_error",
+            "api_redirect_refused",
+            NETWORK_HINT,
+        ),
+        ApiError::RequestFailed { status, .. } => match *status {
+            401 => class(
+                exit_code::AUTH,
+                "unauthorized",
+                "api_unauthorized",
+                Some("API key may be invalid. Run `steel login`."),
+            ),
+            403 => class(exit_code::API_CLIENT, "forbidden", "api_forbidden", None),
+            404 | 410 => class(exit_code::API_CLIENT, "not_found", "api_not_found", None),
+            429 => class(
+                exit_code::API_CLIENT,
+                "rate_limited",
+                "api_rate_limited",
+                Some("Too many requests. Wait and retry."),
+            ),
+            s if s >= 500 => class(
+                exit_code::API_SERVER,
+                "server_error",
+                "api_server_error",
+                Some("Steel API server error. Try again later."),
+            ),
+            _ => class(
+                exit_code::API_CLIENT,
+                "request_failed",
+                "api_request_failed",
+                None,
+            ),
+        },
+        ApiError::Other(_) => class(
+            exit_code::NETWORK,
+            "network_error",
+            "network_error",
+            NETWORK_HINT,
+        ),
+    }
+}
+
+pub fn classify(err: &anyhow::Error) -> ErrorClass {
+    use crate::util::error::{ApiBadResponse, InvalidInput, LocalStateInvalid, LoginRequired};
+    if let Some(api_err) = err.downcast_ref::<crate::api::client::ApiError>() {
+        return classify_api(api_err);
+    }
+    if err.downcast_ref::<LoginRequired>().is_some() {
+        return class(
+            exit_code::AUTH,
+            "auth_required",
+            "auth_required",
+            LOGIN_HINT,
+        );
+    }
+    if err.downcast_ref::<InvalidInput>().is_some() {
+        return class(exit_code::USAGE, "invalid_input", "invalid_input", None);
+    }
+    if err.downcast_ref::<ApiBadResponse>().is_some() {
+        return class(
+            exit_code::API_SERVER,
+            "api_bad_response",
+            "api_bad_response",
+            None,
+        );
+    }
+    if err.downcast_ref::<LocalStateInvalid>().is_some() {
+        return class(
+            exit_code::GENERAL,
+            "local_state_invalid",
+            "local_state_invalid",
+            None,
+        );
+    }
+    if err.chain().any(|source| source.is::<reqwest::Error>()) {
+        return class(
+            exit_code::NETWORK,
+            "network_error",
+            "network_error",
+            NETWORK_HINT,
+        );
+    }
+    if err.chain().any(|source| source.is::<std::io::Error>()) {
+        return class(exit_code::GENERAL, "io_error", "io_error", None);
+    }
+    class(exit_code::GENERAL, "internal_error", "internal_error", None)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Context;
     use serde_json::json;
 
     // --- format_success ---
@@ -306,12 +402,17 @@ mod tests {
         assert!(format_success_silent(false).is_none());
     }
 
-    // --- classify_error ---
+    // --- classify ---
 
     #[test]
     fn classify_missing_auth() {
         let err: anyhow::Error = crate::api::client::ApiError::MissingAuth.into();
-        let (code, error_code, hint) = classify_error(&err);
+        let ErrorClass {
+            exit_code: code,
+            code: error_code,
+            hint,
+            ..
+        } = classify(&err);
         assert_eq!(code, exit_code::AUTH);
         assert_eq!(error_code, "auth_required");
         assert!(hint.is_some());
@@ -325,7 +426,11 @@ mod tests {
             body: None,
         }
         .into();
-        let (code, error_code, _) = classify_error(&err);
+        let ErrorClass {
+            exit_code: code,
+            code: error_code,
+            ..
+        } = classify(&err);
         assert_eq!(code, exit_code::AUTH);
         assert_eq!(error_code, "unauthorized");
     }
@@ -338,7 +443,11 @@ mod tests {
             body: None,
         }
         .into();
-        let (code, error_code, _) = classify_error(&err);
+        let ErrorClass {
+            exit_code: code,
+            code: error_code,
+            ..
+        } = classify(&err);
         assert_eq!(code, exit_code::API_CLIENT);
         assert_eq!(error_code, "not_found");
     }
@@ -351,7 +460,12 @@ mod tests {
             body: None,
         }
         .into();
-        let (code, error_code, hint) = classify_error(&err);
+        let ErrorClass {
+            exit_code: code,
+            code: error_code,
+            hint,
+            ..
+        } = classify(&err);
         assert_eq!(code, exit_code::API_CLIENT);
         assert_eq!(error_code, "rate_limited");
         assert!(hint.is_some());
@@ -365,7 +479,11 @@ mod tests {
             body: None,
         }
         .into();
-        let (code, error_code, _) = classify_error(&err);
+        let ErrorClass {
+            exit_code: code,
+            code: error_code,
+            ..
+        } = classify(&err);
         assert_eq!(code, exit_code::API_SERVER);
         assert_eq!(error_code, "server_error");
     }
@@ -378,7 +496,11 @@ mod tests {
             body: None,
         }
         .into();
-        let (code, error_code, _) = classify_error(&err);
+        let ErrorClass {
+            exit_code: code,
+            code: error_code,
+            ..
+        } = classify(&err);
         assert_eq!(code, exit_code::API_CLIENT);
         assert_eq!(error_code, "request_failed");
     }
@@ -386,8 +508,85 @@ mod tests {
     #[test]
     fn classify_generic_error() {
         let err = anyhow::anyhow!("something unexpected");
-        let (code, error_code, _) = classify_error(&err);
+        let ErrorClass {
+            exit_code: code,
+            code: error_code,
+            ..
+        } = classify(&err);
         assert_eq!(code, exit_code::GENERAL);
         assert_eq!(error_code, "internal_error");
+    }
+
+    #[test]
+    fn classify_invalid_input() {
+        let err = crate::util::error::invalid_input("Session names cannot look like session IDs.");
+        let ErrorClass {
+            exit_code: code,
+            code: error_code,
+            ..
+        } = classify(&err);
+        assert_eq!(code, exit_code::USAGE);
+        assert_eq!(error_code, "invalid_input");
+    }
+
+    #[test]
+    fn classify_login_required_as_auth_required() {
+        let err: anyhow::Error = crate::util::error::LoginRequired {
+            verification_uri: "https://auth.steel.dev/device".into(),
+            verification_uri_complete: "https://auth.steel.dev/device?user_code=ABCD2345".into(),
+            user_code: "ABCD2345".into(),
+            expires_at: u64::MAX,
+            started: true,
+        }
+        .into();
+        let class = classify(&err);
+        assert_eq!(class.exit_code, exit_code::AUTH);
+        assert_eq!(class.code, "auth_required");
+        assert_eq!(class.telemetry, "auth_required");
+        assert!(class.hint.is_some());
+    }
+
+    #[test]
+    fn classify_bad_session_response() {
+        let err = serde_json::from_value::<Vec<u8>>(json!({}))
+            .map_err(anyhow::Error::from)
+            .context(crate::util::error::ApiBadResponse(
+                "The Steel API returned an unexpected session.",
+            ))
+            .unwrap_err();
+        let class = classify(&err);
+        assert_eq!(class.exit_code, exit_code::API_SERVER);
+        assert_eq!(class.code, "api_bad_response");
+    }
+
+    #[test]
+    fn classify_corrupt_local_state() {
+        let err = serde_json::from_str::<Value>("{")
+            .map_err(anyhow::Error::from)
+            .context(crate::util::error::LocalStateInvalid("default.json".into()))
+            .unwrap_err();
+        assert_eq!(classify(&err).code, "local_state_invalid");
+    }
+
+    #[test]
+    fn classify_io_and_client_errors() {
+        let io: anyhow::Error = std::io::Error::other("disk full").into();
+        assert_eq!(classify(&io).code, "io_error");
+        let device: anyhow::Error =
+            crate::api::client::ApiError::DeviceAuth(anyhow::anyhow!("expired")).into();
+        assert_eq!(classify(&device).code, "device_auth_failed");
+    }
+
+    #[test]
+    fn classify_gone_as_not_found() {
+        let err: anyhow::Error = crate::api::client::ApiError::RequestFailed {
+            status: 410,
+            message: std::borrow::Cow::Borrowed("Gone"),
+            body: None,
+        }
+        .into();
+        let class = classify(&err);
+        assert_eq!(class.code, "not_found");
+        assert_eq!(class.telemetry, "api_not_found");
     }
 }

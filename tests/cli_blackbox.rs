@@ -23,9 +23,33 @@ fn steel_cmd() -> (Command, tempfile::TempDir) {
     cmd.env("STEEL_CONFIG_DIR", tmp.path());
     cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     cmd.env_remove("STEEL_API_KEY");
+    cmd.env("STEEL_AUTH_ISSUER", "http://127.0.0.1:1");
     // Suppress update checks so they don't interfere with output
     cmd.arg("--no-update-check");
     (cmd, tmp)
+}
+
+async fn device_issuer() -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/auth/device/code"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "device_code": "private-device-fixture",
+            "user_code": "ABCD2345",
+            "verification_uri": format!("{}/device", server.uri()),
+            "verification_uri_complete": format!("{}/device?user_code=ABCD2345", server.uri()),
+            "expires_in": 600,
+            "interval": 5,
+        })))
+        .mount(&server)
+        .await;
+    server
+}
+
+async fn run_signed_out(issuer: &MockServer, args: &[&str]) -> Output {
+    let (mut cmd, _tmp) = steel_cmd();
+    cmd.env("STEEL_AUTH_ISSUER", issuer.uri()).args(args);
+    tokio::process::Command::from(cmd).output().await.unwrap()
 }
 
 /// Convenience: run steel with the given args and return the Output.
@@ -473,64 +497,76 @@ fn nonexistent_command_fails() {
 }
 
 #[test]
-fn browser_start_without_auth_or_local_fails() {
-    // With no API key and no --local flag, `browser start` should fail
-    // with the missing API key error, not a generic timeout.
+fn browser_start_without_auth_fails_fast_when_sign_in_is_unreachable() {
     let start = std::time::Instant::now();
-    let output = run(&["browser", "start"]);
+    let output = run(&["--json", "browser", "start"]);
     let elapsed = start.elapsed();
 
+    assert_eq!(output.status.code(), Some(3), "{output:?}");
+    let parsed: serde_json::Value = serde_json::from_str(stdout(&output).trim()).unwrap();
+    assert_eq!(parsed["error_code"], "device_auth_failed");
     assert!(
-        !output.status.success(),
-        "steel browser start without auth should exit non-zero"
+        parsed["error"]
+            .as_str()
+            .unwrap()
+            .contains("Not signed in to Steel"),
+        "{parsed}"
     );
-
-    let err = stderr(&output);
-    let out = stdout(&output);
-    let combined = format!("{err}{out}");
-    let lower = combined.to_lowercase();
-
-    // The error should surface the actual failure reason (missing API key).
-    assert!(
-        lower.contains("api key") || lower.contains("api_key") || lower.contains("login"),
-        "output should mention the actual auth error (API key / login), got: {combined}"
-    );
-
     assert!(
         elapsed.as_secs() < 15,
         "should fail quickly, but took {elapsed:?}"
     );
 }
 
-#[test]
-fn piped_output_is_text_unless_json_is_passed() {
-    let text = run(&["scrape", "https://example.com"]);
-    assert!(!text.status.success());
+#[tokio::test]
+async fn piped_output_is_text_unless_json_is_passed() {
+    let issuer = device_issuer().await;
+    let text = run_signed_out(&issuer, &["scrape", "https://example.com"]).await;
+    assert_eq!(text.status.code(), Some(3));
     assert!(stdout(&text).is_empty(), "got: {}", stdout(&text));
-    assert!(stderr(&text).contains("Error: Missing Steel API key"));
+    let err = stderr(&text);
+    assert!(
+        err.contains(&format!(
+            "Error: Not signed in to Steel. Open {}/device?user_code=ABCD2345 in a browser and approve code ABCD2345",
+            issuer.uri()
+        )),
+        "{err}"
+    );
+    assert!(err.contains("run this command again"), "{err}");
+    assert!(err.contains("Hint: "), "{err}");
 
-    let json = run(&["--json", "scrape", "https://example.com"]);
+    let json = run_signed_out(&issuer, &["--json", "scrape", "https://example.com"]).await;
     let parsed: serde_json::Value = serde_json::from_str(stdout(&json).trim()).unwrap();
     assert_eq!(parsed["error_code"], "auth_required");
 }
 
-#[test]
-fn browser_start_without_auth_json_mode_surfaces_error() {
-    // In --json mode, the actual error should also appear in the output.
-    let output = run(&["--json", "browser", "start"]);
-    assert!(!output.status.success());
+#[tokio::test]
+async fn browser_start_without_auth_json_mode_hands_off_sign_in() {
+    let issuer = device_issuer().await;
+    let output = run_signed_out(&issuer, &["--json", "browser", "start"]).await;
+    assert_eq!(output.status.code(), Some(3));
 
     let out = stdout(&output);
     let parsed: serde_json::Value = serde_json::from_str(out.trim())
         .unwrap_or_else(|_| panic!("expected valid JSON, got: {out}"));
     assert_eq!(parsed["success"], false);
-
-    let error_msg = parsed["error"].as_str().unwrap_or("");
-    let lower = error_msg.to_lowercase();
-    assert!(
-        lower.contains("api key") || lower.contains("api_key") || lower.contains("login"),
-        "JSON error should mention the actual auth error, got: {error_msg}"
+    assert_eq!(parsed["error_code"], "auth_required");
+    let login = &parsed["data"]["login"];
+    assert_eq!(login["status"], "pending");
+    assert_eq!(
+        login["verificationUrl"],
+        format!("{}/device?user_code=ABCD2345", issuer.uri())
     );
+    assert_eq!(login["userCode"], "ABCD2345");
+    assert!(login["expiresAt"].is_string(), "{login}");
+    assert!(login["expiresInSeconds"].as_u64().unwrap() <= 600);
+    assert!(
+        parsed["error"]
+            .as_str()
+            .unwrap()
+            .contains("run this command again")
+    );
+    assert!(!out.contains("private-device-fixture"));
 }
 
 #[test]

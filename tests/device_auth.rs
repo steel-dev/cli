@@ -425,3 +425,107 @@ async fn device_code_token_and_revoke_endpoints_never_follow_redirects() {
         assert!(home.path().join("auth.json").exists());
     }
 }
+
+fn signed_out(home: &std::path::Path, issuer: &str) -> Command {
+    let mut command = command(home);
+    command
+        .env("STEEL_AUTH_ISSUER", issuer)
+        .env("HTTPS_PROXY", "http://127.0.0.1:1")
+        .env("https_proxy", "http://127.0.0.1:1")
+        .env_remove("NO_PROXY")
+        .env_remove("no_proxy");
+    command
+}
+
+fn json_result(output: &Output) -> Value {
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|_| panic!("{}", text(output)))
+}
+
+#[tokio::test]
+async fn commands_without_credentials_hand_off_sign_in_and_continue_after_approval() {
+    let home = tempfile::tempdir().unwrap();
+    let auth = MockServer::start().await;
+    device(&auth).await;
+
+    let first = signed_out(home.path(), &auth.uri())
+        .args(["browser", "start"])
+        .output()
+        .unwrap();
+    assert_eq!(first.status.code(), Some(3), "{}", text(&first));
+    let result = json_result(&first);
+    assert_eq!(result["error_code"], "auth_required");
+    assert_eq!(
+        result["data"]["login"]["verificationUrl"],
+        format!("{}/device?user_code=ABCD2345", auth.uri())
+    );
+    let saved: Value =
+        serde_json::from_slice(&std::fs::read(home.path().join("auth.json")).unwrap()).unwrap();
+    assert!(saved["tokens"].is_null());
+    assert!(!saved["pending"].is_null());
+
+    Mock::given(method("POST"))
+        .and(path("/api/auth/oauth2/token"))
+        .and(body_string_contains("device_code=private-device-fixture"))
+        .respond_with(
+            ResponseTemplate::new(400).set_body_json(json!({"error":"authorization_pending"})),
+        )
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&auth)
+        .await;
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let pending = signed_out(home.path(), &auth.uri())
+        .args(["scrape", "https://example.com"])
+        .output()
+        .unwrap();
+    assert_eq!(pending.status.code(), Some(3), "{}", text(&pending));
+    let result = json_result(&pending);
+    assert_eq!(result["error_code"], "auth_required");
+    assert_eq!(result["data"]["login"]["userCode"], "ABCD2345");
+
+    Mock::given(method("POST"))
+        .and(path("/api/auth/oauth2/token"))
+        .and(body_string_contains("device_code=private-device-fixture"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"access_token":"new-access-fixture","refresh_token":"new-refresh-fixture","expires_in":600,"token_type":"Bearer"})))
+        .expect(1)
+        .mount(&auth)
+        .await;
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let approved = signed_out(home.path(), &auth.uri())
+        .args(["browser", "start"])
+        .output()
+        .unwrap();
+    let result = json_result(&approved);
+    assert_eq!(result["error_code"], "unreachable", "{}", text(&approved));
+    assert!(!text(&approved).contains("new-access-fixture"));
+    let saved: Value =
+        serde_json::from_slice(&std::fs::read(home.path().join("auth.json")).unwrap()).unwrap();
+    assert_eq!(saved["tokens"]["access_token"], "new-access-fixture");
+    assert!(saved["pending"].is_null());
+}
+
+#[tokio::test]
+async fn api_keys_and_other_transports_never_start_a_device_login() {
+    let home = tempfile::tempdir().unwrap();
+    let auth = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/auth/device/code"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&auth)
+        .await;
+
+    let keyed = signed_out(home.path(), &auth.uri())
+        .env("STEEL_API_KEY", "sk-test")
+        .args(["browser", "start"])
+        .output()
+        .unwrap();
+    assert_eq!(json_result(&keyed)["error_code"], "unreachable");
+
+    let other = signed_out(home.path(), &auth.uri())
+        .args(["--api-url", "http://127.0.0.1:1/v1", "browser", "start"])
+        .output()
+        .unwrap();
+    assert_eq!(json_result(&other)["error_code"], "unreachable");
+    assert!(!home.path().join("auth.json").exists());
+}

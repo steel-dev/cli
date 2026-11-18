@@ -46,7 +46,9 @@ fn non_empty(value: Option<&str>) -> Option<&str> {
 
 impl Session {
     pub fn parse(value: Value) -> anyhow::Result<Self> {
-        serde_json::from_value(value).context("The Steel API returned an unexpected session.")
+        serde_json::from_value(value).context(crate::util::error::ApiBadResponse(
+            "The Steel API returned an unexpected session.",
+        ))
     }
 
     pub fn is_live(&self) -> bool {
@@ -256,7 +258,12 @@ mod tests {
 
     #[test]
     fn parse_needs_an_id() {
-        assert!(Session::parse(json!({"status": "live"})).is_err());
+        let err = Session::parse(json!({"status": "live"})).unwrap_err();
+        assert_eq!(crate::util::output::classify(&err).code, "api_bad_response");
+        assert_eq!(
+            err.to_string(),
+            "The Steel API returned an unexpected session."
+        );
         assert_eq!(session(json!({"id": "s1"})).id, "s1");
     }
 
