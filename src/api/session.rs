@@ -11,10 +11,13 @@ use crate::config::settings::ApiMode;
 const CLOUD_CONNECT_URL: &str = "wss://connect.steel.dev";
 const CLOUD_VIEWER_URL: &str = "https://app.steel.dev/sessions";
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CreateSessionOptions {
     pub stealth: bool,
+    pub stealth_without_captcha: bool,
     pub proxy_url: Option<String>,
+    pub use_proxy: bool,
+    pub project_id: Option<String>,
     pub timeout_ms: Option<u64>,
     pub inactivity_timeout_ms: Option<u64>,
     pub headless: Option<bool>,
@@ -131,12 +134,28 @@ fn build_create_body(options: &CreateSessionOptions) -> Value {
         }
     }
 
-    if options.stealth {
+    if options.stealth && options.stealth_without_captcha {
+        obj.insert(
+            "stealthConfig".into(),
+            json!({"humanizeInteractions": true}),
+        );
+    } else if options.stealth {
         obj.insert(
             "stealthConfig".into(),
             json!({"humanizeInteractions": true, "autoCaptchaSolving": true}),
         );
         obj.insert("solveCaptcha".into(), json!(true));
+    }
+
+    if options.use_proxy {
+        obj.insert("useProxy".into(), json!(true));
+    }
+
+    if let Some(ref project_id) = options.project_id {
+        let trimmed = project_id.trim();
+        if !trimmed.is_empty() {
+            obj.insert("projectId".into(), json!(trimmed));
+        }
     }
 
     if options.solve_captcha {
@@ -384,6 +403,29 @@ mod tests {
         });
         assert_eq!(body["solveCaptcha"], true);
         assert!(body["stealthConfig"].is_object());
+    }
+
+    #[test]
+    fn create_body_stealth_without_captcha_keeps_humanizing_only() {
+        let body = build_create_body(&CreateSessionOptions {
+            stealth: true,
+            stealth_without_captcha: true,
+            ..Default::default()
+        });
+        assert_eq!(
+            body,
+            json!({"stealthConfig": {"humanizeInteractions": true}})
+        );
+    }
+
+    #[test]
+    fn create_body_steel_proxy_and_project() {
+        let body = build_create_body(&CreateSessionOptions {
+            use_proxy: true,
+            project_id: Some(" p-1 ".into()),
+            ..Default::default()
+        });
+        assert_eq!(body, json!({"useProxy": true, "projectId": "p-1"}));
     }
 
     #[test]

@@ -224,11 +224,14 @@ const fn class(
 
 const NETWORK_HINT: Option<&str> = Some("Check your network connection.");
 const LOCAL_STATE_HINT: Option<&str> = Some("Delete the file and retry.");
+const PROJECT_HINT: Option<&str> = Some(
+    "This API key covers the whole organization. Pass --project <project-id> to steel browser start, or set STEEL_PROJECT_ID.",
+);
 const LOGIN_HINT: Option<&str> = Some(
     "If an agent runs this command, show the URL and code to the user and retry after they approve. STEEL_API_KEY also works.",
 );
 
-const fn classify_api(err: &crate::api::client::ApiError) -> ErrorClass {
+fn classify_api(err: &crate::api::client::ApiError) -> ErrorClass {
     use crate::api::client::ApiError;
     match err {
         ApiError::DeviceAuth(_) => class(
@@ -255,6 +258,14 @@ const fn classify_api(err: &crate::api::client::ApiError) -> ErrorClass {
             "api_redirect_refused",
             NETWORK_HINT,
         ),
+        ApiError::RequestFailed { .. } if err.body_str("code") == Some("project_required") => {
+            class(
+                exit_code::API_CLIENT,
+                "request_failed",
+                "api_request_failed",
+                PROJECT_HINT,
+            )
+        }
         ApiError::RequestFailed { status, .. } => match *status {
             401 => class(
                 exit_code::AUTH,
