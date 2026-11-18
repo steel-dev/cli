@@ -4,6 +4,10 @@ pub fn is_newer(candidate: &str, current: &str) -> bool {
     compare(candidate, current) == Ordering::Greater
 }
 
+pub fn same_major(a: &str, b: &str) -> bool {
+    split(a).0[0] == split(b).0[0]
+}
+
 fn compare(a: &str, b: &str) -> Ordering {
     let (a_core, a_pre) = split(a);
     let (b_core, b_pre) = split(b);
@@ -87,5 +91,14 @@ mod tests {
         assert!(is_newer("0.5.0-rc.1", "0.5.0-preview.9"));
         assert!(is_newer("0.5.0-preview.1.1", "0.5.0-preview.1"));
         assert!(!is_newer("0.5.0-preview.6", "0.5.0-preview.6"));
+    }
+
+    #[test]
+    fn same_major_compares_the_first_number() {
+        assert!(same_major("0.6.0", "0.5.0"));
+        assert!(same_major("0.5.1", "0.5.0-preview.6"));
+        assert!(same_major("v1.4.0", "1.0.0"));
+        assert!(!same_major("1.0.0", "0.9.9"));
+        assert!(!same_major("2.0.0", "1.9.0"));
     }
 }

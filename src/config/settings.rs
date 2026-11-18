@@ -71,6 +71,15 @@ pub struct Config {
     pub telemetry: Option<TelemetryConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub onboarding: Option<OnboardingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_update: Option<AutoUpdateConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoUpdateConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -109,6 +118,13 @@ impl Config {
         self.telemetry
             .as_ref()
             .and_then(|t| t.disabled)
+            .unwrap_or(false)
+    }
+
+    pub fn auto_update_disabled(&self) -> bool {
+        self.auto_update
+            .as_ref()
+            .and_then(|a| a.disabled)
             .unwrap_or(false)
     }
 
@@ -184,6 +200,9 @@ mod tests {
                 source: Some("claude-code".into()),
                 setup_client: Some("opencode".into()),
             }),
+            auto_update: Some(AutoUpdateConfig {
+                disabled: Some(true),
+            }),
         };
 
         write_config_to(&path, &config).unwrap();
@@ -194,6 +213,7 @@ mod tests {
         assert_eq!(loaded.instance.as_deref(), Some("cloud"));
         assert_eq!(loaded.local_api_url(), Some("http://localhost:4000/v1"));
         assert!(loaded.telemetry_disabled());
+        assert!(loaded.auto_update_disabled());
         assert_eq!(loaded.onboarding_source(), Some("claude-code"));
         assert_eq!(loaded.onboarding_setup_client(), Some("opencode"));
     }
@@ -267,6 +287,13 @@ mod tests {
     fn telemetry_disabled_defaults_false() {
         let config = Config::default();
         assert!(!config.telemetry_disabled());
+    }
+
+    #[test]
+    fn auto_update_disabled_reads_config_key() {
+        let config: Config = serde_json::from_str(r#"{"autoUpdate":{"disabled":true}}"#).unwrap();
+        assert!(config.auto_update_disabled());
+        assert!(!Config::default().auto_update_disabled());
     }
 
     // --- ApiMode tests ---

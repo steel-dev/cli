@@ -4,6 +4,10 @@ async fn main() {
         steel_cli::run_flush_child().await;
         return;
     }
+    if steel_cli::is_auto_update_child() {
+        steel_cli::run_auto_update_child().await;
+        return;
+    }
     let cli = steel_cli::parse();
     if let Err(e) = steel_cli::run(cli).await {
         steel_cli::handle_error(&e);
