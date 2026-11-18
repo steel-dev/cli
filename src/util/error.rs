@@ -13,7 +13,7 @@ pub fn invalid_input(message: impl std::fmt::Display) -> anyhow::Error {
 pub struct ApiBadResponse(pub &'static str);
 
 #[derive(Debug, thiserror::Error)]
-#[error("Could not read {0}. Delete the file and retry.")]
+#[error("Could not read {0}")]
 pub struct LocalStateInvalid(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -327,19 +327,32 @@ pub enum Outcome {
     Pending(crate::util::error::LoginRequired),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Wait {
+    No,
+    Briefly,
+    UntilExpiry,
+}
+
 const LOGIN_NEXT_STEP: &str = "After approval, run steel login --resume or repeat steel init. Pending login survives interruption.";
 
 /// Returns false while approval is pending. Repeated calls continue the same
 /// request and polling schedule; --resume never replaces an expired request.
 pub async fn login(no_wait: bool, no_browser: bool, resume: bool) -> Result<bool> {
     Ok(matches!(
-        authorize(!no_wait, !no_browser, resume, Some(LOGIN_NEXT_STEP)).await?,
+        authorize(
+            if no_wait { Wait::No } else { Wait::Briefly },
+            !no_browser,
+            resume,
+            Some(LOGIN_NEXT_STEP)
+        )
+        .await?,
         Outcome::Authorized
     ))
 }
 
 pub async fn authorize(
-    wait: bool,
+    wait: Wait,
     open_browser: bool,
     resume: bool,
     next_step: Option<&str>,
@@ -438,8 +451,12 @@ pub async fn authorize(
     if new_request && open_browser {
         let _ = open::that(&pending.verification_uri_complete);
     }
-    let deadline = tokio::time::Instant::now()
-        + Duration::from_secs(if wait { 45 } else { u64::from(!new_request) });
+    let wait_for = match wait {
+        Wait::No => u64::from(!new_request),
+        Wait::Briefly => 45,
+        Wait::UntilExpiry => pending.expires_at.saturating_sub(now()).saturating_add(1),
+    };
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(wait_for);
     loop {
         let p = state.pending.as_mut().expect("pending request");
         if now() >= p.expires_at {

@@ -223,6 +223,7 @@ const fn class(
 }
 
 const NETWORK_HINT: Option<&str> = Some("Check your network connection.");
+const LOCAL_STATE_HINT: Option<&str> = Some("Delete the file and retry.");
 const LOGIN_HINT: Option<&str> = Some(
     "If an agent runs this command, show the URL and code to the user and retry after they approve. STEEL_API_KEY also works.",
 );
@@ -320,16 +321,29 @@ pub fn classify(err: &anyhow::Error) -> ErrorClass {
             exit_code::GENERAL,
             "local_state_invalid",
             "local_state_invalid",
-            None,
+            LOCAL_STATE_HINT,
         );
     }
-    if err.chain().any(|source| source.is::<reqwest::Error>()) {
-        return class(
-            exit_code::NETWORK,
-            "network_error",
-            "network_error",
-            NETWORK_HINT,
-        );
+    if let Some(http) = err
+        .chain()
+        .find_map(|source| source.downcast_ref::<reqwest::Error>())
+    {
+        if http.is_decode() {
+            return class(
+                exit_code::API_SERVER,
+                "api_bad_response",
+                "api_bad_response",
+                None,
+            );
+        }
+        if !http.is_builder() {
+            return class(
+                exit_code::NETWORK,
+                "network_error",
+                "network_error",
+                NETWORK_HINT,
+            );
+        }
     }
     if err.chain().any(|source| source.is::<std::io::Error>()) {
         return class(exit_code::GENERAL, "io_error", "io_error", None);
@@ -565,7 +579,36 @@ mod tests {
             .map_err(anyhow::Error::from)
             .context(crate::util::error::LocalStateInvalid("default.json".into()))
             .unwrap_err();
-        assert_eq!(classify(&err).code, "local_state_invalid");
+        let class = classify(&err);
+        assert_eq!(class.code, "local_state_invalid");
+        assert_eq!(class.hint, Some("Delete the file and retry."));
+        assert!(format!("{err:#}").starts_with("Could not read default.json: "));
+    }
+
+    #[tokio::test]
+    async fn classify_reqwest_errors_by_kind() {
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::any())
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("<html>"))
+            .mount(&server)
+            .await;
+        let decode = reqwest::get(server.uri())
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .map_err(anyhow::Error::from)
+            .context("Auth service returned non-JSON data")
+            .unwrap_err();
+        let class = classify(&decode);
+        assert_eq!(class.code, "api_bad_response");
+        assert_eq!(class.exit_code, exit_code::API_SERVER);
+
+        let unreachable = reqwest::get("http://127.0.0.1:1")
+            .await
+            .map_err(anyhow::Error::from)
+            .unwrap_err();
+        assert_eq!(classify(&unreachable).code, "network_error");
     }
 
     #[test]

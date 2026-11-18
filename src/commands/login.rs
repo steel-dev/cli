@@ -72,9 +72,15 @@ pub async fn ensure_signed_in() -> anyhow::Result<()> {
     let interactive =
         !output::is_json() && std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
     let outcome = if interactive {
-        device::authorize(true, true, false, Some(WAITING_FOR_APPROVAL)).await
+        device::authorize(
+            device::Wait::UntilExpiry,
+            true,
+            false,
+            Some(WAITING_FOR_APPROVAL),
+        )
+        .await
     } else {
-        device::authorize(false, false, false, None).await
+        device::authorize(device::Wait::No, false, false, None).await
     }
     .map_err(|err| {
         ApiError::DeviceAuth(err.context("Not signed in to Steel, and sign-in failed"))

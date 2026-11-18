@@ -527,5 +527,18 @@ async fn api_keys_and_other_transports_never_start_a_device_login() {
         .output()
         .unwrap();
     assert_eq!(json_result(&other)["error_code"], "unreachable");
+
+    let other_cloud = signed_out(home.path(), &auth.uri())
+        .args([
+            "--api-url",
+            "https://api.staging.steel.dev/v1",
+            "browser",
+            "start",
+        ])
+        .output()
+        .unwrap();
+    let other_cloud = json_result(&other_cloud);
+    assert_eq!(other_cloud["error_code"], "auth_required");
+    assert!(other_cloud["data"].is_null());
     assert!(!home.path().join("auth.json").exists());
 }
