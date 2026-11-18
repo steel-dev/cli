@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::config::settings::ApiMode;
@@ -117,7 +117,9 @@ fn load_in(name: &str, dir: &Path) -> Result<Option<BrowserSession>> {
         return Ok(None);
     }
     let contents = std::fs::read_to_string(&path)?;
-    Ok(Some(serde_json::from_str(&contents)?))
+    Ok(Some(serde_json::from_str(&contents).with_context(
+        || crate::util::error::LocalStateInvalid(path.display().to_string()),
+    )?))
 }
 
 fn save_in(session: &BrowserSession, dir: &Path) -> Result<()> {
@@ -181,6 +183,18 @@ mod tests {
         });
         save_in(&s, dir.path()).unwrap();
         assert_eq!(load_in("work", dir.path()).unwrap(), Some(s));
+    }
+
+    #[test]
+    fn corrupt_session_file_is_local_state_error() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("broken.json"), "{").unwrap();
+        let err = load_in("broken", dir.path()).unwrap_err();
+        assert_eq!(
+            crate::util::output::classify(&err).code,
+            "local_state_invalid"
+        );
+        assert!(err.to_string().contains("broken.json"));
     }
 
     #[test]

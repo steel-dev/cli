@@ -28,7 +28,9 @@ pub async fn release(client: &SteelClient, session: &BrowserSession) -> anyhow::
 
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     if args.all && session.is_some() {
-        anyhow::bail!("Cannot combine `--all` with `--session`.");
+        return Err(crate::util::error::invalid_input(
+            "Cannot combine `--all` with `--session`.",
+        ));
     }
 
     let client = SteelClient::new()?;

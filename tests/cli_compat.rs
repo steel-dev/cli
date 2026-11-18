@@ -293,6 +293,8 @@ fn browser_start_flags() {
         &[
             flag("stealth"),
             flag_val_short("proxy", 'p'),
+            flag("use-proxy"),
+            flag_val("project"),
             flag_val("timeout"),
             flag_val("inactivity-timeout"),
             flag("solve-captcha"),

@@ -77,7 +77,7 @@ pub enum Target {
 pub fn target(name: Option<&str>) -> anyhow::Result<Option<Target>> {
     let wanted = name.unwrap_or(DEFAULT_SESSION);
     if let Some(err) = state::validate_session_name(wanted) {
-        anyhow::bail!("{err}");
+        return Err(crate::util::error::invalid_input(err));
     }
     if let Some(found) = state::load(wanted)? {
         return Ok(Some(Target::Saved(Box::new(found))));
@@ -112,7 +112,7 @@ pub async fn run(args: BrowserArgs) -> anyhow::Result<()> {
     if let Some(ref name) = session
         && let Some(err) = state::validate_session_name(name)
     {
-        anyhow::bail!("{err}");
+        return Err(crate::util::error::invalid_input(err));
     }
     match args.command {
         Command::Start(start_args) => start::run(start_args, session.as_deref()).await,

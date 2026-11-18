@@ -381,7 +381,8 @@ mod tests {
             event["event"] == "command_failed"
                 && event["properties"]["command_path"] == "browser.stop"
                 && event["properties"]["success"] == false
-                && event["properties"]["error_class"] == "internal_error"
+                && event["properties"]["error_class"] == "invalid_input"
+                && event["properties"]["ci"].is_boolean()
         }));
     }
 

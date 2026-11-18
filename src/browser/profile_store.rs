@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,7 +69,8 @@ fn read_profile_in(name: &str, dir: &Path) -> Result<Option<ProfileData>> {
         return Ok(None);
     }
     let contents = std::fs::read_to_string(&path)?;
-    let data: ProfileData = serde_json::from_str(&contents)?;
+    let data: ProfileData = serde_json::from_str(&contents)
+        .with_context(|| crate::util::error::LocalStateInvalid(path.display().to_string()))?;
     Ok(Some(data))
 }
 

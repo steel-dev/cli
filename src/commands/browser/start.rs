@@ -1,10 +1,11 @@
 use clap::Parser;
 use serde_json::json;
 
-use crate::api::client::SteelClient;
+use crate::api::client::{ApiError, SteelClient};
 use crate::api::session::CreateSessionOptions;
 use crate::browser::profile_store;
 use crate::browser::state::{self, BrowserSession};
+use crate::util::error::invalid_input;
 use crate::util::{metadata, output};
 
 pub const DEFAULT_TIMEOUT_MS: u64 = 900_000;
@@ -12,13 +13,21 @@ pub const DEFAULT_INACTIVITY_TIMEOUT_MS: u64 = 600_000;
 
 #[derive(Parser)]
 pub struct Args {
-    /// Enable stealth mode (humanize interactions + auto CAPTCHA)
+    /// Enable stealth mode: humanized interactions, plus automatic CAPTCHA solving when your plan includes it
     #[arg(long)]
     pub stealth: bool,
 
-    /// Use a residential proxy
-    #[arg(short = 'p', long)]
+    /// Route the session through your own proxy (http://user:pass@host:port)
+    #[arg(short = 'p', long, value_name = "URL", conflicts_with = "use_proxy")]
     pub proxy: Option<String>,
+
+    /// Use a Steel-managed residential proxy
+    #[arg(long = "use-proxy")]
+    pub use_proxy: bool,
+
+    /// Project to create the session in, needed with an organization-wide API key. Defaults to STEEL_PROJECT_ID
+    #[arg(long, value_name = "ID")]
+    pub project: Option<String>,
 
     /// Session timeout in milliseconds. Defaults to 900000 (15 minutes), which every plan allows (create-time only)
     #[arg(long, alias = "session-timeout")]
@@ -65,7 +74,66 @@ pub fn default_options() -> CreateSessionOptions {
     CreateSessionOptions {
         timeout_ms: Some(DEFAULT_TIMEOUT_MS),
         inactivity_timeout_ms: Some(DEFAULT_INACTIVITY_TIMEOUT_MS),
+        project_id: project_from_env(),
         ..Default::default()
+    }
+}
+
+fn project_from_env() -> Option<String> {
+    std::env::var("STEEL_PROJECT_ID")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ProxyChoice {
+    url: Option<String>,
+    steel: bool,
+    aliased: bool,
+}
+
+const PROXY_URL_REQUIRED: &str = "--proxy takes a proxy URL such as http://user:pass@host:port. For a Steel residential proxy, use --use-proxy.";
+
+fn resolve_proxy(proxy: Option<String>, use_proxy: bool) -> anyhow::Result<ProxyChoice> {
+    let Some(value) = proxy
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(ProxyChoice {
+            url: None,
+            steel: use_proxy,
+            aliased: false,
+        });
+    };
+    if value.eq_ignore_ascii_case("residential") || value.eq_ignore_ascii_case("steel") {
+        return Ok(ProxyChoice {
+            url: None,
+            steel: true,
+            aliased: true,
+        });
+    }
+    match url::Url::parse(&value) {
+        Ok(url) if url.has_host() => Ok(ProxyChoice {
+            url: Some(value),
+            steel: use_proxy,
+            aliased: false,
+        }),
+        _ => Err(invalid_input(PROXY_URL_REQUIRED)),
+    }
+}
+
+fn captcha_refusal(err: &anyhow::Error, options: &CreateSessionOptions) -> Option<&'static str> {
+    if !options.stealth || options.solve_captcha || options.stealth_without_captcha {
+        return None;
+    }
+    let api = err.downcast_ref::<ApiError>()?;
+    if api.body_str("param") != Some("solveCaptcha") {
+        return None;
+    }
+    match api.body_str("code")? {
+        "plan_feature_unavailable" => Some("your plan does not include CAPTCHA solving"),
+        "deposit_required" => Some("CAPTCHA solving needs a paid balance on your plan"),
+        _ => None,
     }
 }
 
@@ -103,32 +171,41 @@ pub async fn create(
 pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let session_name = session.unwrap_or("default").to_string();
     if state::looks_like_session_id(&session_name) {
-        anyhow::bail!(
+        return Err(invalid_input(format!(
             "Session names cannot look like session IDs. Use `--session {session_name}` on other commands to drive that session, or pick a name."
-        );
+        )));
     }
     let session_metadata = metadata::collect(args.metadata)?;
+    let proxy = resolve_proxy(args.proxy, args.use_proxy)?;
+    let mut notes = Vec::new();
+    if proxy.aliased {
+        notes.push(
+            "--proxy takes a proxy URL, so a Steel residential proxy (--use-proxy) is used instead."
+                .to_string(),
+        );
+    }
+    let project_id = args.project.or_else(project_from_env);
 
     let mut resolved_profile_id = None;
     let mut stored_browser_profile = None;
     let mut stored_browser = None;
     if let Some(ref profile_name) = args.profile {
         if let Some(err) = profile_store::validate_profile_name(profile_name) {
-            anyhow::bail!("{err}");
+            return Err(invalid_input(err));
         }
         if let Some(data) = profile_store::read_profile(profile_name)? {
             resolved_profile_id = Some(data.profile_id);
             stored_browser_profile = data.browser_profile;
             stored_browser = data.browser;
         } else if !args.update_profile {
-            anyhow::bail!(
+            return Err(invalid_input(format!(
                 "Profile \"{profile_name}\" not found. Import one with `steel profile import {profile_name}`, or add --update-profile to create it from this session."
-            );
+            )));
         }
     }
 
     let persist_profile = args.profile.is_some() && args.update_profile;
-    let proxy_enabled = args.proxy.is_some();
+    let proxy_enabled = proxy.url.is_some() || proxy.steel;
     let namespace_set = args.namespace.is_some();
     let metadata_set = !session_metadata.is_empty();
     let timeout = args.timeout.unwrap_or(DEFAULT_TIMEOUT_MS);
@@ -141,6 +218,7 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         );
     }
 
+    crate::commands::login::ensure_signed_in().await?;
     let client = SteelClient::new()?;
 
     let replaced = match state::load(&session_name)? {
@@ -164,7 +242,10 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
 
     let options = CreateSessionOptions {
         stealth: args.stealth,
-        proxy_url: args.proxy,
+        stealth_without_captcha: false,
+        proxy_url: proxy.url,
+        use_proxy: proxy.steel,
+        project_id: project_id.clone(),
         timeout_ms: Some(timeout),
         inactivity_timeout_ms,
         headless: args.headless,
@@ -177,7 +258,24 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
         metadata: session_metadata,
     };
 
-    let (created, connect_url) = create(&client, &session_name, &options).await?;
+    let mut captcha_dropped = false;
+    let (created, connect_url) = match create(&client, &session_name, &options).await {
+        Ok(done) => done,
+        Err(err) => {
+            let Some(reason) = captcha_refusal(&err, &options) else {
+                return Err(err);
+            };
+            captcha_dropped = true;
+            notes.push(format!(
+                "Started without CAPTCHA solving because {reason}. Interactions are still humanized."
+            ));
+            let without_captcha = CreateSessionOptions {
+                stealth_without_captcha: true,
+                ..options.clone()
+            };
+            create(&client, &session_name, &without_captcha).await?
+        }
+    };
 
     if let Some(ref profile_name) = args.profile
         && let Some(ref returned_profile_id) = created.profile_id
@@ -193,6 +291,9 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let mut properties = serde_json::Map::new();
     properties.insert("stealth".into(), json!(args.stealth));
     properties.insert("proxy_enabled".into(), json!(proxy_enabled));
+    properties.insert("use_proxy".into(), json!(proxy.steel));
+    properties.insert("project_set".into(), json!(project_id.is_some()));
+    properties.insert("stealth_captcha_dropped".into(), json!(captcha_dropped));
     properties.insert("has_profile".into(), json!(args.profile.is_some()));
     properties.insert("persist_profile".into(), json!(persist_profile));
     properties.insert("credentials".into(), json!(args.credentials));
@@ -202,7 +303,10 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     properties.insert("inactivity_timeout_ms".into(), json!(inactivity_timeout_ms));
     crate::telemetry::track_event("browser_session_started", properties);
 
-    display_session_info(&created, connect_url.as_deref(), replaced.as_ref());
+    for note in &notes {
+        eprintln!("note: {note}");
+    }
+    display_session_info(&created, connect_url.as_deref(), replaced.as_ref(), &notes);
 
     Ok(())
 }
@@ -211,6 +315,7 @@ fn display_session_info(
     info: &BrowserSession,
     connect_url: Option<&str>,
     replaced: Option<&(String, bool)>,
+    notes: &[String],
 ) {
     let remaining = remaining_time_str(info);
 
@@ -235,6 +340,9 @@ fn display_session_info(
         }
         if let Some(ms) = info.inactivity_timeout_ms {
             data["inactivityTimeoutMs"] = json!(ms);
+        }
+        if !notes.is_empty() {
+            data["notes"] = json!(notes);
         }
         output::success_data(data);
     } else {

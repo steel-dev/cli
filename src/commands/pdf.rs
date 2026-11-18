@@ -32,6 +32,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         use_proxy: args.use_proxy,
         region: args.region.as_deref(),
     };
+    super::login::ensure_signed_in().await?;
     let response = SteelClient::new()?.pdf(&target).await?;
 
     if output::is_json() {

@@ -1231,17 +1231,28 @@ async fn attach(client: &SteelClient, id: &str) -> Result<BrowserSession> {
 
 impl Browser {
     pub async fn open(name: Option<&str>, start_default: bool) -> Result<Self> {
-        let client = SteelClient::new()?;
-        let state = match super::target(name)? {
-            Some(Target::Saved(found)) => *found,
-            Some(Target::Id(id)) => attach(&client, &id).await?,
+        let target = super::target(name)?;
+        let signs_in = match &target {
+            Some(Target::Saved(found)) => found.mode == ApiMode::Cloud,
+            Some(Target::Id(_)) => true,
             None if name.is_none() && start_default => {
                 eprintln!("warning: session \"default\" is not running; starting a new one");
+                true
+            }
+            None => return Err(super::not_running(name)),
+        };
+        if signs_in {
+            crate::commands::login::ensure_signed_in().await?;
+        }
+        let client = SteelClient::new()?;
+        let state = match target {
+            Some(Target::Saved(found)) => *found,
+            Some(Target::Id(id)) => attach(&client, &id).await?,
+            None => {
                 start::create(&client, DEFAULT_SESSION, &start::default_options())
                     .await?
                     .0
             }
-            None => return Err(super::not_running(name)),
         };
         let client = client.at(&state.api_url, state.mode);
         Ok(Self { client, state })

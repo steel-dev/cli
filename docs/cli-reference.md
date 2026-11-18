@@ -236,8 +236,10 @@ steel browser start
 
 ### Parameters
 
-- `--stealth` (boolean, optional): Enable stealth mode (humanize interactions + auto CAPTCHA)
-- `-p, --proxy` (string, optional): Use a residential proxy
+- `--stealth` (boolean, optional): Enable stealth mode: humanized interactions, plus automatic CAPTCHA solving when your plan includes it
+- `-p, --proxy` (string, optional): Route the session through your own proxy (http://user:pass@host:port)
+- `--use-proxy` (boolean, optional): Use a Steel-managed residential proxy
+- `--project` (string, optional): Project to create the session in, needed with an organization-wide API key. Defaults to STEEL_PROJECT_ID
 - `--timeout` (string, optional): Session timeout in milliseconds. Defaults to 900000 (15 minutes), which every plan allows (create-time only)
 - `--inactivity-timeout` (string, optional): Inactivity timeout in milliseconds: release the session when no command, CDP message, or remote input arrives for this long. Defaults to 600000 (10 minutes); pass 0 to disable (create-time only)
 - `--solve-captcha` (boolean, optional): Enable manual CAPTCHA solving on new sessions (create-time only)
@@ -1283,6 +1285,7 @@ steel init
 ### Parameters
 
 - `--agent` (boolean, optional): Run in agent mode: auto-accept interactive prompts and print agent-friendly output. Designed for AI coding agents
+- `--from` (string, optional): Coding client for targeted agent setup (opencode, claude-code, codex, pi)
 - `--skills` (string[], optional): Open the Steel skills installer flow. With no value, lets you choose skills interactively
 - `--no-skills` (boolean, optional): Skip Steel skill installation
 

@@ -37,6 +37,8 @@ Main flags:
 - `--session <name>`
 - `--stealth`
 - `--proxy <url>`
+- `--use-proxy`
+- `--project <id>`
 - `--timeout <ms>`
 - `--inactivity-timeout <ms>` (default 600000; `0` turns it off)
 - `--solve-captcha`
@@ -52,11 +54,20 @@ Flag semantics:
   - `stealthConfig.humanizeInteractions = true`
   - `stealthConfig.autoCaptchaSolving = true`
   - `solveCaptcha = true`
+  - If the plan refuses CAPTCHA solving (`plan_feature_unavailable` or
+    `deposit_required`), the session starts again without it and the output
+    carries a note in `data.notes`. Interactions are still humanized.
 - `--solve-captcha` enables manual CAPTCHA solving for new sessions:
   - `solveCaptcha = true`
   - `stealthConfig.autoCaptchaSolving` is not forced on
-- `--proxy <url>` sets `proxyUrl` on session creation. The Sessions API may return
-  `proxySource: "external"` rather than echoing the proxy URL in responses.
+  - If the plan refuses it, the command fails. It is never dropped.
+- `--proxy <url>` sets `proxyUrl` on session creation (your own proxy). It must be
+  a URL. The Sessions API may return `proxySource: "external"` rather than
+  echoing the proxy URL in responses.
+- `--use-proxy` sets `useProxy = true` (a Steel residential proxy).
+  `--proxy residential` is read the same way, with a note.
+- `--project <id>` sets `projectId`. An organization-wide API key needs it.
+  `STEEL_PROJECT_ID` sets it when the flag is absent.
 - `--namespace <name>` sets the credential namespace for the session. Credentials
   stored under this namespace will be available for injection.
 - `--credentials` enables credential injection for the session. Sends
@@ -201,8 +212,11 @@ serve the execution routes or the `find` target form.
 
 ## Troubleshooting (Agent-Focused)
 
-- `Missing browser auth. Run steel login or set STEEL_API_KEY.`:
-  run `steel login` locally, or set `STEEL_API_KEY` in CI/job env.
+- `auth_required` with `data.login`: you are not signed in, and a sign-in has
+  started. Show the user `data.login.verificationUrl` and the code
+  `data.login.userCode`. After they approve, run the same command again.
+- `auth_required` without `data.login` (CI, or another API URL): set
+  `STEEL_API_KEY` in the job env.
 - `Failed to reach Steel session API ...` in local mode:
   verify `steel dev start` is running and endpoint resolution matches expected
   host/port.

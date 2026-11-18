@@ -10,6 +10,7 @@ use crate::config::settings::ApiMode;
 
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+pub const USER_AGENT: &str = concat!("steel-cli/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -48,6 +49,15 @@ pub enum ApiError {
 }
 
 impl ApiError {
+    pub fn body_str(&self, key: &str) -> Option<&str> {
+        match self {
+            Self::RequestFailed {
+                body: Some(body), ..
+            } => body.get(key).and_then(Value::as_str),
+            _ => None,
+        }
+    }
+
     /// Check if this is a 404/410 (not found). Matches TS `isNotFoundApiError()`.
     pub const fn is_not_found(&self) -> bool {
         matches!(self, Self::RequestFailed { status, .. } if *status == 404 || *status == 410)
@@ -177,7 +187,7 @@ impl SteelClient {
 
     pub fn with(base_url: String, mode: ApiMode, auth: Auth) -> Result<Self, reqwest::Error> {
         let http = Client::builder()
-            .user_agent("steel-cli")
+            .user_agent(USER_AGENT)
             .connect_timeout(CONNECT_TIMEOUT)
             .timeout(REQUEST_TIMEOUT)
             .redirect(refuse_redirects())
@@ -501,5 +511,35 @@ mod tests {
         let result = client.request(reqwest::Method::GET, "/test", None).await;
 
         assert!(matches!(result, Err(ApiError::Unreachable { .. })));
+    }
+
+    #[tokio::test]
+    async fn requests_carry_the_cli_version_in_the_user_agent() {
+        use wiremock::matchers::{header, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        assert_eq!(
+            USER_AGENT,
+            format!("steel-cli/{}", env!("CARGO_PKG_VERSION"))
+        );
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/test"))
+            .and(header("user-agent", USER_AGENT))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let auth = Auth {
+            api_key: None,
+            access_token: None,
+            source: crate::config::auth::AuthSource::None,
+        };
+        let client = SteelClient::with(server.uri(), ApiMode::Local, auth).unwrap();
+
+        client
+            .request(reqwest::Method::GET, "/test", None)
+            .await
+            .unwrap();
     }
 }

@@ -241,6 +241,7 @@ pub fn track_command_failed(context: &CommandContext, duration: Duration, err: &
     properties.insert("success".into(), json!(false));
     properties.insert("duration_ms".into(), json!(duration.as_millis() as u64));
     properties.insert("error_class".into(), json!(error_class(err)));
+    properties.extend(failure_properties(err));
     track("command_failed", properties);
 }
 
@@ -433,7 +434,34 @@ fn default_properties() -> Map<String, Value> {
     properties.insert("arch".into(), json!(std::env::consts::ARCH));
     properties.insert("json".into(), json!(crate::util::output::is_json()));
     properties.insert("mode".into(), json!(telemetry_mode()));
+    properties.insert("ci".into(), json!(is_ci()));
     properties
+}
+
+const CI_ENV_VARS: &[&str] = &[
+    "CI",
+    "GITHUB_ACTIONS",
+    "GITLAB_CI",
+    "BUILDKITE",
+    "CIRCLECI",
+    "JENKINS_URL",
+    "TF_BUILD",
+    "TEAMCITY_VERSION",
+    "BITBUCKET_BUILD_NUMBER",
+    "CODEBUILD_BUILD_ID",
+];
+
+pub fn is_ci() -> bool {
+    running_in_ci(|name| std::env::var(name).ok())
+}
+
+fn running_in_ci(var: impl Fn(&str) -> Option<String>) -> bool {
+    CI_ENV_VARS.iter().any(|name| {
+        var(name).is_some_and(|value| {
+            let value = value.trim();
+            !value.is_empty() && !value.eq_ignore_ascii_case("false") && value != "0"
+        })
+    })
 }
 
 fn telemetry_disabled(
@@ -456,30 +484,39 @@ fn error_class(err: &anyhow::Error) -> String {
     if let Some(silent) = err.downcast_ref::<crate::util::output::SilentExit>() {
         return silent.error_code.clone();
     }
-    if let Some(api_err) = err.downcast_ref::<crate::api::client::ApiError>() {
-        let class = match api_err {
-            crate::api::client::ApiError::MissingAuth => "auth_required",
-            crate::api::client::ApiError::DeviceAuth(_) => "device_auth_failed",
-            crate::api::client::ApiError::Unreachable { .. } => "network_unreachable",
-            crate::api::client::ApiError::Redirected { .. } => "api_redirect_refused",
-            crate::api::client::ApiError::RequestFailed { status, .. } => match *status {
-                401 => "api_unauthorized",
-                403 => "api_forbidden",
-                404 | 410 => "api_not_found",
-                429 => "api_rate_limited",
-                s if s >= 500 => "api_server_error",
-                _ => "api_request_failed",
-            },
-            crate::api::client::ApiError::Other(_) => "network_error",
-        };
-        return class.to_string();
-    }
+    crate::util::output::classify(err).telemetry.to_string()
+}
 
-    if err.chain().any(|source| source.is::<std::io::Error>()) {
-        return "io_error".to_string();
-    }
+fn machine_token(value: Option<&Value>) -> Option<&str> {
+    value.and_then(Value::as_str).filter(|token| {
+        !token.is_empty()
+            && token.len() <= 64
+            && token
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    })
+}
 
-    "internal_error".to_string()
+fn failure_properties(err: &anyhow::Error) -> Map<String, Value> {
+    let mut properties = Map::new();
+    if let Some(crate::api::client::ApiError::RequestFailed { status, body, .. }) =
+        err.downcast_ref::<crate::api::client::ApiError>()
+    {
+        properties.insert("http_status".into(), json!(status));
+        if let Some(code) = machine_token(body.as_ref().and_then(|body| body.get("code"))) {
+            properties.insert("api_error_code".into(), json!(code));
+        }
+        if let Some(param) = machine_token(body.as_ref().and_then(|body| body.get("param"))) {
+            properties.insert("api_error_param".into(), json!(param));
+        }
+    }
+    if let Some(login) = err.downcast_ref::<crate::util::error::LoginRequired>() {
+        properties.insert(
+            "login_handoff".into(),
+            json!(if login.started { "started" } else { "pending" }),
+        );
+    }
+    properties
 }
 
 struct TelemetryIdentity {
@@ -722,6 +759,98 @@ mod tests {
         let reported: anyhow::Error = crate::util::output::SilentExit::new("stale_ref").into();
         assert_eq!(error_class(&reported), "stale_ref");
         assert_eq!(error_class(&anyhow::anyhow!("boom")), "internal_error");
+    }
+
+    #[test]
+    fn error_classes_keep_their_names() {
+        use crate::api::client::ApiError;
+        let failed = |status| -> anyhow::Error {
+            ApiError::RequestFailed {
+                status,
+                message: std::borrow::Cow::Borrowed("x"),
+                body: None,
+            }
+            .into()
+        };
+        assert_eq!(error_class(&ApiError::MissingAuth.into()), "auth_required");
+        assert_eq!(error_class(&failed(401)), "api_unauthorized");
+        assert_eq!(error_class(&failed(403)), "api_forbidden");
+        assert_eq!(error_class(&failed(410)), "api_not_found");
+        assert_eq!(error_class(&failed(429)), "api_rate_limited");
+        assert_eq!(error_class(&failed(503)), "api_server_error");
+        assert_eq!(error_class(&failed(400)), "api_request_failed");
+        assert_eq!(
+            error_class(&std::io::Error::other("disk").into()),
+            "io_error"
+        );
+        assert_eq!(
+            error_class(&crate::util::error::invalid_input("bad name")),
+            "invalid_input"
+        );
+    }
+
+    #[test]
+    fn api_failures_report_status_and_machine_codes_only() {
+        let err: anyhow::Error = crate::api::client::ApiError::RequestFailed {
+            status: 400,
+            message: std::borrow::Cow::Borrowed("Requested timeout exceeds the maximum"),
+            body: Some(json!({
+                "error": "Bad Request",
+                "code": "invalid_request",
+                "param": "timeout",
+                "message": "Requested timeout exceeds the maximum for your plan (15 min).",
+            })),
+        }
+        .into();
+        let properties = failure_properties(&err);
+        assert_eq!(properties["http_status"], json!(400));
+        assert_eq!(properties["api_error_code"], json!("invalid_request"));
+        assert_eq!(properties["api_error_param"], json!("timeout"));
+        assert!(
+            !properties
+                .values()
+                .any(|v| v.to_string().contains("maximum"))
+        );
+
+        let free_text: anyhow::Error = crate::api::client::ApiError::RequestFailed {
+            status: 403,
+            message: std::borrow::Cow::Borrowed("x"),
+            body: Some(json!({"code": "user@example.com is blocked"})),
+        }
+        .into();
+        assert!(!failure_properties(&free_text).contains_key("api_error_code"));
+    }
+
+    #[test]
+    fn login_handoff_is_reported() {
+        let err: anyhow::Error = crate::util::error::LoginRequired {
+            verification_uri: "https://auth.steel.dev/device".into(),
+            verification_uri_complete: "https://auth.steel.dev/device?user_code=ABCD2345".into(),
+            user_code: "ABCD2345".into(),
+            expires_at: u64::MAX,
+            started: false,
+        }
+        .into();
+        assert_eq!(error_class(&err), "auth_required");
+        assert_eq!(failure_properties(&err)["login_handoff"], json!("pending"));
+    }
+
+    #[test]
+    fn ci_is_detected_from_common_variables() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |name: &str| {
+                pairs
+                    .iter()
+                    .find(|(key, _)| *key == name)
+                    .map(|(_, value)| (*value).to_string())
+            }
+        };
+        assert!(running_in_ci(env(&[("CI", "true")])));
+        assert!(running_in_ci(env(&[("GITHUB_ACTIONS", "true")])));
+        assert!(running_in_ci(env(&[("JENKINS_URL", "https://ci.example")])));
+        assert!(!running_in_ci(env(&[("CI", "false")])));
+        assert!(!running_in_ci(env(&[("CI", "0")])));
+        assert!(!running_in_ci(env(&[])));
     }
 
     #[test]

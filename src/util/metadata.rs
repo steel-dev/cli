@@ -11,7 +11,9 @@ pub fn collect(pairs: Vec<(String, String)>) -> anyhow::Result<BTreeMap<String, 
     let mut metadata = BTreeMap::new();
     for (key, value) in pairs {
         if metadata.contains_key(&key) {
-            anyhow::bail!("Metadata key \"{key}\" is given more than once.");
+            return Err(crate::util::error::invalid_input(format!(
+                "Metadata key \"{key}\" is given more than once."
+            )));
         }
         metadata.insert(key, value);
     }
@@ -24,7 +26,9 @@ pub fn collect_filters(pairs: Vec<(String, String)>) -> anyhow::Result<BTreeMap<
         .iter()
         .find_map(|(key, value)| value.is_empty().then_some(key))
     {
-        anyhow::bail!("Metadata filter \"{key}\" needs a value.");
+        return Err(crate::util::error::invalid_input(format!(
+            "Metadata filter \"{key}\" needs a value."
+        )));
     }
     Ok(filters)
 }
@@ -57,6 +61,7 @@ mod tests {
         assert_eq!(metadata.len(), 2);
         let err = collect(vec![pair("env", "prod"), pair("env", "staging")]).unwrap_err();
         assert!(err.to_string().contains("\"env\""));
+        assert_eq!(crate::util::output::classify(&err).code, "invalid_input");
     }
 
     #[test]
