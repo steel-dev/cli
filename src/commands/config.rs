@@ -66,6 +66,11 @@ pub async fn run(_args: Args) -> anyhow::Result<()> {
     if let Some(ref cfg) = config {
         lines.push(format!("telemetry.disabled: {}", cfg.telemetry_disabled()));
         data["telemetryDisabled"] = json!(cfg.telemetry_disabled());
+        lines.push(format!(
+            "autoUpdate.disabled: {}",
+            cfg.auto_update_disabled()
+        ));
+        data["autoUpdateDisabled"] = json!(cfg.auto_update_disabled());
     }
 
     output::success(data, &format!("{}\n", lines.join("\n")));

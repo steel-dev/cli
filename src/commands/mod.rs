@@ -30,6 +30,10 @@ const ENVIRONMENT: &[(&str, &str)] = &[
         "STEEL_TELEMETRY_DISABLED",
         "Disable built-in telemetry for this machine/session",
     ),
+    (
+        "STEEL_AUTO_UPDATE_DISABLED",
+        "Disable automatic updates for this machine/session",
+    ),
     ("NO_COLOR", "Disable colored output"),
 ];
 
@@ -94,7 +98,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
-    /// Skip update check (reserved for future use)
+    /// Skip the automatic update check
     #[arg(long, global = true, hide = true)]
     pub no_update_check: bool,
 
@@ -217,6 +221,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     crate::util::output::init(cli.json);
     crate::util::api::init(cli.local, cli.api_url);
     crate::telemetry::init_from_env();
+
+    if !matches!(cli.command, Command::Update(_) | Command::Completion(_)) {
+        crate::auto_update::start(cli.no_update_check);
+    }
 
     if let Some(ref context) = telemetry_context {
         crate::telemetry::track_command_started(context);

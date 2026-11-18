@@ -51,6 +51,8 @@ Alternatives:
 
 After install, either restart your shell or run `export PATH="$HOME/.steel/bin:$PATH"`.
 
+The installed binary updates itself in the background, at most once a day. Major releases need `steel update`. Set `STEEL_AUTO_UPDATE_DISABLED=1` to turn this off.
+
 ### Device login
 
 `steel login` shows a short code and authorization URL; approve in a browser on

@@ -72,6 +72,7 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - Config directory: `~/.config/steel`
 - Main config: `~/.config/steel/config.json`
 - Telemetry state: `~/.config/steel/telemetry.json`
+- Auto-update state: `~/.config/steel/update.json`
 - Browser session state: `~/.config/steel/browser-sessions/<name>.json`
 - Profile metadata: `~/.config/steel/profiles/<name>.json`
 
@@ -87,6 +88,22 @@ Telemetry can be disabled persistently in `config.json` with:
 }
 ```
 
+## Automatic Updates
+
+When the CLI was installed with the install script, it checks for a new release at most once a day. The check runs in a background process and never delays the command. Patch and minor releases are downloaded, verified against their SHA-256 checksum, and swapped in for the next command. Major releases are not installed automatically; run `steel update` for those.
+
+The CLI notes an update on stderr the next time it runs in a terminal. Nothing is printed with `--json` or when stderr is not a terminal.
+
+Updates are skipped in CI, with `--no-update-check`, with `STEEL_AUTO_UPDATE_DISABLED=1`, or with this in `config.json`:
+
+```json
+{
+  "autoUpdate": {
+    "disabled": true
+  }
+}
+```
+
 ## Environment Variables (Common)
 
 - `STEEL_API_KEY`: cloud auth for the session and commands APIs; takes precedence over a device login, which takes precedence over a saved API key.
@@ -96,6 +113,7 @@ Telemetry can be disabled persistently in `config.json` with:
 - `STEEL_CONFIG_DIR`: override config directory root.
 - `STEEL_TELEMETRY_HOST`: override the PostHog ingest host.
 - `STEEL_TELEMETRY_DISABLED`: force telemetry off.
+- `STEEL_AUTO_UPDATE_DISABLED`: turn off automatic updates.
 
 ## Key References
 

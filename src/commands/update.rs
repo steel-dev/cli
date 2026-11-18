@@ -25,24 +25,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .build()?;
     let current_version = env!("CARGO_PKG_VERSION");
 
-    // Check GitHub releases for latest version
-    let latest_version = match client
-        .get("https://api.github.com/repos/steel-dev/cli/releases/latest")
-        .header("Accept", "application/vnd.github+json")
-        .header("User-Agent", format!("steel-cli/{current_version}"))
-        .send()
-        .await
-    {
-        Ok(resp) if resp.status().is_success() => {
-            let data: serde_json::Value = resp.json().await.unwrap_or_default();
-            data.get("tag_name")
-                .and_then(|v| v.as_str())
-                .map(|s| s.strip_prefix('v').unwrap_or(s).to_string())
-        }
-        _ => None,
-    };
-
-    let Some(latest) = latest_version else {
+    let Some(latest) = crate::auto_update::latest_version(&client).await else {
         status!("Could not check for updates. Please check your network connection.");
         return Ok(());
     };
