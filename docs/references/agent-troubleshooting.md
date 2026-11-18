@@ -76,8 +76,11 @@ steel browser start --local --session "$SESSION_NAME"
 
 ## Common Failures and Actions
 
-- `Missing browser auth...`:
-  authenticate (`steel login`) or export `STEEL_API_KEY`.
+- `auth_required` with `data.login`: you are not signed in. Show the user
+  `data.login.verificationUrl` and the code `data.login.userCode`. After they
+  approve, run the same command again.
+- `auth_required` without `data.login`: export `STEEL_API_KEY` (CI, or another
+  API URL).
 - `Failed to reach Steel session API ...`:
   check endpoint flags/env and runtime availability.
 - `Session "<name>" is not running...`:

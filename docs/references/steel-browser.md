@@ -201,8 +201,11 @@ serve the execution routes or the `find` target form.
 
 ## Troubleshooting (Agent-Focused)
 
-- `Missing browser auth. Run steel login or set STEEL_API_KEY.`:
-  run `steel login` locally, or set `STEEL_API_KEY` in CI/job env.
+- `auth_required` with `data.login`: you are not signed in, and a sign-in has
+  started. Show the user `data.login.verificationUrl` and the code
+  `data.login.userCode`. After they approve, run the same command again.
+- `auth_required` without `data.login` (CI, or another API URL): set
+  `STEEL_API_KEY` in the job env.
 - `Failed to reach Steel session API ...` in local mode:
   verify `steel dev start` is running and endpoint resolution matches expected
   host/port.

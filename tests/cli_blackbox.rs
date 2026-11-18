@@ -24,6 +24,20 @@ fn steel_cmd() -> (Command, tempfile::TempDir) {
     cmd.env("STEEL_TELEMETRY_DISABLED", "1");
     cmd.env_remove("STEEL_API_KEY");
     cmd.env("STEEL_AUTH_ISSUER", "http://127.0.0.1:1");
+    for name in [
+        "CI",
+        "GITHUB_ACTIONS",
+        "GITLAB_CI",
+        "BUILDKITE",
+        "CIRCLECI",
+        "JENKINS_URL",
+        "TF_BUILD",
+        "TEAMCITY_VERSION",
+        "BITBUCKET_BUILD_NUMBER",
+        "CODEBUILD_BUILD_ID",
+    ] {
+        cmd.env_remove(name);
+    }
     // Suppress update checks so they don't interfere with output
     cmd.arg("--no-update-check");
     (cmd, tmp)

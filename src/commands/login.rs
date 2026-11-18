@@ -59,7 +59,7 @@ fn same_transport(base_url: &str, device_api: &str) -> bool {
 
 pub async fn ensure_signed_in() -> anyhow::Result<()> {
     let (mode, base_url, credentials) = crate::util::api::resolve_with_auth();
-    if mode != ApiMode::Cloud || credentials.has_credentials() {
+    if mode != ApiMode::Cloud || credentials.has_credentials() || crate::telemetry::is_ci() {
         return Ok(());
     }
     let saved = device::saved_settings().ok().flatten();
@@ -70,7 +70,7 @@ pub async fn ensure_signed_in() -> anyhow::Result<()> {
         return Ok(());
     }
     let interactive =
-        !output::is_json() && std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+        !output::is_json() && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
     let outcome = if interactive {
         device::authorize(
             device::Wait::UntilExpiry,

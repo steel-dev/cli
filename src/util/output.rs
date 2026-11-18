@@ -336,7 +336,7 @@ pub fn classify(err: &anyhow::Error) -> ErrorClass {
                 None,
             );
         }
-        if !http.is_builder() {
+        if !http.is_builder() && !http.is_status() {
             return class(
                 exit_code::NETWORK,
                 "network_error",
@@ -609,6 +609,15 @@ mod tests {
             .map_err(anyhow::Error::from)
             .unwrap_err();
         assert_eq!(classify(&unreachable).code, "network_error");
+
+        let missing = wiremock::MockServer::start().await;
+        let status = reqwest::get(format!("{}/repos/x/y", missing.uri()))
+            .await
+            .unwrap()
+            .error_for_status()
+            .map_err(anyhow::Error::from)
+            .unwrap_err();
+        assert_ne!(classify(&status).code, "network_error");
     }
 
     #[test]

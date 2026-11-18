@@ -434,10 +434,7 @@ fn default_properties() -> Map<String, Value> {
     properties.insert("arch".into(), json!(std::env::consts::ARCH));
     properties.insert("json".into(), json!(crate::util::output::is_json()));
     properties.insert("mode".into(), json!(telemetry_mode()));
-    properties.insert(
-        "ci".into(),
-        json!(running_in_ci(|name| std::env::var(name).ok())),
-    );
+    properties.insert("ci".into(), json!(is_ci()));
     properties
 }
 
@@ -453,6 +450,10 @@ const CI_ENV_VARS: &[&str] = &[
     "BITBUCKET_BUILD_NUMBER",
     "CODEBUILD_BUILD_ID",
 ];
+
+pub fn is_ci() -> bool {
+    running_in_ci(|name| std::env::var(name).ok())
+}
 
 fn running_in_ci(var: impl Fn(&str) -> Option<String>) -> bool {
     CI_ENV_VARS.iter().any(|name| {

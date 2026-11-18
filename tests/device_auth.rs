@@ -17,8 +17,24 @@ fn command(home: &std::path::Path) -> Command {
         .env_remove("STEEL_AUTH_ISSUER")
         .env_remove("STEEL_AUTH_AUDIENCE")
         .args(["--no-update-check", "--json"]);
+    for name in CI_ENV_VARS {
+        command.env_remove(name);
+    }
     command
 }
+
+const CI_ENV_VARS: &[&str] = &[
+    "CI",
+    "GITHUB_ACTIONS",
+    "GITLAB_CI",
+    "BUILDKITE",
+    "CIRCLECI",
+    "JENKINS_URL",
+    "TF_BUILD",
+    "TEAMCITY_VERSION",
+    "BITBUCKET_BUILD_NUMBER",
+    "CODEBUILD_BUILD_ID",
+];
 
 fn state(home: &std::path::Path, issuer: &str, transport: &str, expires: u64) {
     let file = home.join("auth.json");
@@ -540,5 +556,19 @@ async fn api_keys_and_other_transports_never_start_a_device_login() {
     let other_cloud = json_result(&other_cloud);
     assert_eq!(other_cloud["error_code"], "auth_required");
     assert!(other_cloud["data"].is_null());
+
+    let ci = signed_out(home.path(), &auth.uri())
+        .env("CI", "true")
+        .args(["browser", "start"])
+        .output()
+        .unwrap();
+    let ci = json_result(&ci);
+    assert_eq!(ci["error_code"], "auth_required");
+    assert!(ci["data"].is_null());
+    assert!(
+        ci["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("STEEL_API_KEY"))
+    );
     assert!(!home.path().join("auth.json").exists());
 }
