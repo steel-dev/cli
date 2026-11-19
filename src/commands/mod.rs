@@ -6,6 +6,7 @@ pub mod credentials;
 pub mod describe;
 pub mod dev;
 pub mod doctor;
+pub mod feedback;
 pub mod forge;
 pub mod init;
 pub mod login;
@@ -59,6 +60,7 @@ const EXAMPLES: &[&str] = &[
     "steel browser tab new https://example.com",
     "steel browser stop --session my-session",
     "steel sessions list --metadata env=prod --signal captcha_encountered",
+    "steel feedback bug \"browser start keeps failing\" --command \"steel browser start\"",
 ];
 
 fn long_help(root: &clap::Command) -> String {
@@ -177,6 +179,9 @@ pub enum Command {
     /// Check environment, auth, and connectivity
     Doctor(doctor::Args),
 
+    /// Send feedback to the Steel team: a bug, a docs problem, or a request
+    Feedback(feedback::Args),
+
     /// Manage Steel agent skills
     Skills(skills::Args),
 
@@ -205,6 +210,7 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Profile { command } => Some(format!("profile.{}", command.telemetry_name())),
         Command::Describe(_) => Some("describe".to_string()),
         Command::Doctor(_) => Some("doctor".to_string()),
+        Command::Feedback(_) => Some("feedback".to_string()),
         Command::Skills(args) => Some(format!("skills.{}", skills::telemetry_name(&args.command))),
         Command::Completion(_) => Some("completion".to_string()),
     }
@@ -250,6 +256,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Profile { command } => profile::run(command).await,
         Command::Describe(args) => describe::run(args).await,
         Command::Doctor(args) => doctor::run(args).await,
+        Command::Feedback(args) => feedback::run(args).await,
         Command::Skills(args) => skills::run(args.command).await,
         Command::Completion(args) => completion::run(args).await,
     };

@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 
 static JSON_MODE: AtomicBool = AtomicBool::new(false);
 static NO_COLOR: AtomicBool = AtomicBool::new(false);
+static FEEDBACK_HINT: AtomicBool = AtomicBool::new(true);
 
 /// Initialize output settings. Called once at startup.
 pub fn init(json: bool) {
@@ -16,6 +17,10 @@ pub fn init(json: bool) {
 /// Check if JSON output mode is active.
 pub fn is_json() -> bool {
     JSON_MODE.load(Ordering::Relaxed)
+}
+
+pub fn suppress_feedback_hint() {
+    FEEDBACK_HINT.store(false, Ordering::Relaxed);
 }
 
 /// Check if `NO_COLOR` environment variable is set.
@@ -172,6 +177,7 @@ pub fn handle_error(err: &anyhow::Error) -> ! {
     }
 
     let class = classify(err);
+    let hint = hint_for(&class, FEEDBACK_HINT.load(Ordering::Relaxed));
     let msg = format!("{err:#}");
     let data = err
         .downcast_ref::<crate::util::error::LoginRequired>()
@@ -183,7 +189,7 @@ pub fn handle_error(err: &anyhow::Error) -> ! {
             "error": msg,
             "error_code": class.code,
         });
-        if let Some(h) = class.hint {
+        if let Some(h) = hint {
             obj["hint"] = json!(h);
         }
         if let Some(data) = data {
@@ -192,7 +198,7 @@ pub fn handle_error(err: &anyhow::Error) -> ! {
         println!("{obj}");
     } else {
         eprintln!("Error: {msg}");
-        if let Some(h) = class.hint {
+        if let Some(h) = hint {
             eprintln!("Hint: {h}");
         }
     }
@@ -219,6 +225,21 @@ const fn class(
         code,
         telemetry,
         hint,
+    }
+}
+
+const FEEDBACK_HINT_TEXT: &str = "If this keeps failing, tell the Steel team: steel feedback bug \"<what failed>\" --command \"<command>\" --error \"<error>\".";
+
+fn hint_for(class: &ErrorClass, feedback: bool) -> Option<String> {
+    let feedback = (feedback
+        && matches!(
+            class.code,
+            "internal_error" | "server_error" | "api_bad_response" | "request_failed"
+        ))
+    .then_some(FEEDBACK_HINT_TEXT);
+    match (class.hint, feedback) {
+        (Some(hint), Some(feedback)) => Some(format!("{hint} {feedback}")),
+        (hint, feedback) => hint.or(feedback).map(str::to_string),
     }
 }
 
@@ -638,6 +659,34 @@ mod tests {
         let device: anyhow::Error =
             crate::api::client::ApiError::DeviceAuth(anyhow::anyhow!("expired")).into();
         assert_eq!(classify(&device).code, "device_auth_failed");
+    }
+
+    #[test]
+    fn hint_points_at_feedback_only_for_failures_the_agent_cannot_fix() {
+        let internal = classify(&anyhow::anyhow!("something unexpected"));
+        assert_eq!(
+            hint_for(&internal, true).as_deref(),
+            Some(FEEDBACK_HINT_TEXT)
+        );
+        assert_eq!(hint_for(&internal, false), None);
+
+        let server: anyhow::Error = crate::api::client::ApiError::RequestFailed {
+            status: 500,
+            message: std::borrow::Cow::Borrowed("Internal Server Error"),
+            body: None,
+        }
+        .into();
+        let hint = hint_for(&classify(&server), true).unwrap();
+        assert!(hint.starts_with("Steel API server error. Try again later. "));
+        assert!(hint.ends_with(FEEDBACK_HINT_TEXT));
+
+        let auth: anyhow::Error = crate::api::client::ApiError::MissingAuth.into();
+        assert_eq!(
+            hint_for(&classify(&auth), true).as_deref(),
+            Some("Run `steel login` or set STEEL_API_KEY.")
+        );
+        let usage = crate::util::error::invalid_input("bad flag");
+        assert_eq!(hint_for(&classify(&usage), true), None);
     }
 
     #[test]

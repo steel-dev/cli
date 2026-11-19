@@ -1,5 +1,6 @@
 pub mod client;
 pub mod commands;
+pub mod feedback;
 pub mod generated;
 pub mod profiles;
 pub mod projects;

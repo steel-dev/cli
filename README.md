@@ -123,7 +123,7 @@ Supported shells: `bash`, `zsh`, `fish`, `powershell`, `elvish`.
 | API tools           | `scrape`, `screenshot`, `pdf`                                                        |
 | Local runtime       | `dev install`, `dev start`, `dev stop`                                               |
 | Credentials         | `credentials list`, `credentials create`, `credentials update`, `credentials delete` |
-| Account and utility | `login`, `logout`, `config`, `doctor`, `cache`, `update`, `completion`               |
+| Account and utility | `login`, `logout`, `config`, `doctor`, `feedback`, `cache`, `update`, `completion`   |
 
 Full flags and schemas: [CLI reference](docs/cli-reference.md).
 
