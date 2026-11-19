@@ -1,3 +1,5 @@
+use std::any::TypeId;
+
 use crate::util::output;
 use anyhow::{Result, bail};
 use clap::{ArgAction, CommandFactory, Parser};
@@ -377,10 +379,30 @@ fn infer_type(arg: &clap::Arg) -> String {
             if !possible.is_empty() {
                 "enum".into()
             } else {
-                "string".into()
+                scalar_type(arg).into()
             }
         }
         _ => "string".into(),
+    }
+}
+
+fn scalar_type(arg: &clap::Arg) -> &'static str {
+    let id = arg.get_value_parser().type_id();
+    let is_any = |types: &[TypeId]| types.iter().any(|t| id == *t);
+    if is_any(&[
+        TypeId::of::<u8>(),
+        TypeId::of::<u16>(),
+        TypeId::of::<u32>(),
+        TypeId::of::<u64>(),
+        TypeId::of::<usize>(),
+        TypeId::of::<i32>(),
+        TypeId::of::<i64>(),
+    ]) {
+        "integer"
+    } else if is_any(&[TypeId::of::<f32>(), TypeId::of::<f64>()]) {
+        "number"
+    } else {
+        "string"
     }
 }
 
@@ -633,6 +655,29 @@ mod tests {
         let params = v["parameters"].as_array().unwrap();
         let timeout = params.iter().find(|p| p["name"] == "timeout").unwrap();
         assert_eq!(timeout["default"], "30000");
+    }
+
+    #[test]
+    fn numeric_args_typed_as_numbers() {
+        let param_type = |path: &[&str], name: &str| {
+            let v = describe_path(path);
+            v["parameters"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|p| p["name"] == name)
+                .unwrap()["type"]
+                .clone()
+        };
+        assert_eq!(param_type(&["browser", "start"], "timeout"), "integer");
+        assert_eq!(
+            param_type(&["browser", "start"], "inactivity-timeout"),
+            "integer"
+        );
+        assert_eq!(param_type(&["browser", "wait"], "timeout"), "integer");
+        assert_eq!(param_type(&["browser", "click"], "count"), "integer");
+        assert_eq!(param_type(&["browser", "scroll"], "amount"), "number");
+        assert_eq!(param_type(&["browser", "wait"], "text"), "string");
     }
 
     #[test]
