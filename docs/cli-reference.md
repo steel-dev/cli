@@ -97,6 +97,7 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel profile delete](#steel-profile-delete)
 - [steel describe](#steel-describe)
 - [steel doctor](#steel-doctor)
+- [steel feedback](#steel-feedback)
 - [steel skills](#steel-skills)
 - [steel skills list](#steel-skills-list)
 - [steel skills install](#steel-skills-install)
@@ -1625,6 +1626,25 @@ steel doctor
 ### Parameters
 
 - `--preflight` (boolean, optional): Only check auth and API connectivity
+
+## steel feedback
+
+Send feedback to the Steel team: a bug, a docs problem, or a request
+
+### Usage
+
+```bash
+steel feedback
+```
+
+### Parameters
+
+- `category` (enum, required): What kind of feedback this is
+- `message` (string, required): What happened or what you need, in a few sentences
+- `--goal` (string, optional): What you were trying to do
+- `--command` (string, optional): The Steel command that failed, with its arguments
+- `--error` (string, optional): The error or output you got
+- `--page` (string, optional): For docs feedback, the docs page it is about
 
 ## steel skills
 
