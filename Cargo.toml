@@ -43,7 +43,7 @@ getrandom = "0.4"
 libc = "0.2"
 
 tempfile = "3"
-jiff = "0.2"
+jiff = "1.0"
 parking_lot = "0.12"
 
 serde_norway = "0.9"
