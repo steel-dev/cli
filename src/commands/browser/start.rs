@@ -122,7 +122,9 @@ fn resolve_proxy(proxy: Option<String>, use_proxy: bool) -> anyhow::Result<Proxy
     }
 }
 
-fn captcha_refusal(err: &anyhow::Error, options: &CreateSessionOptions) -> Option<&'static str> {
+const VERIFY_ACCOUNT_URL: &str = "https://app.steel.dev/overview?open=verify-account";
+
+fn captcha_refusal(err: &anyhow::Error, options: &CreateSessionOptions) -> Option<String> {
     if !options.stealth || options.solve_captcha || options.stealth_without_captcha {
         return None;
     }
@@ -131,8 +133,16 @@ fn captcha_refusal(err: &anyhow::Error, options: &CreateSessionOptions) -> Optio
         return None;
     }
     match api.body_str("code")? {
-        "plan_feature_unavailable" => Some("your plan does not include CAPTCHA solving"),
-        "deposit_required" => Some("CAPTCHA solving needs a paid balance on your plan"),
+        "plan_feature_unavailable" => Some(
+            "Started without CAPTCHA solving because your plan does not include CAPTCHA solving. Interactions are still humanized."
+                .to_string(),
+        ),
+        "deposit_required" => {
+            let url = api.body_str("unlockUrl").unwrap_or(VERIFY_ACCOUNT_URL);
+            Some(format!(
+                "Started without CAPTCHA solving because it needs a verified account on your plan. Interactions are still humanized. Tell your user: add $10 of credits once at {url} to turn on CAPTCHA solving."
+            ))
+        }
         _ => None,
     }
 }
@@ -280,13 +290,11 @@ pub async fn run(args: Args, session: Option<&str>) -> anyhow::Result<()> {
     let (created, connect_url) = match create(&client, &session_name, &options).await {
         Ok(done) => done,
         Err(err) => {
-            let Some(reason) = captcha_refusal(&err, &options) else {
+            let Some(note) = captcha_refusal(&err, &options) else {
                 return Err(err);
             };
             captcha_dropped = true;
-            notes.push(format!(
-                "Started without CAPTCHA solving because {reason}. Interactions are still humanized."
-            ));
+            notes.push(note);
             let without_captcha = CreateSessionOptions {
                 stealth_without_captcha: true,
                 ..options.clone()

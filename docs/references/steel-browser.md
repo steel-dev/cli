@@ -57,6 +57,9 @@ Flag semantics:
   - If the plan refuses CAPTCHA solving (`plan_feature_unavailable` or
     `deposit_required`), the session starts again without it and the output
     carries a note in `data.notes`. Interactions are still humanized.
+  - On `deposit_required`, the note carries the link to verify the account
+    (the API's `unlockUrl`). Pass it to your user: adding $10 of credits once
+    turns on CAPTCHA solving and Steel proxies.
 - `--solve-captcha` enables manual CAPTCHA solving for new sessions:
   - `solveCaptcha = true`
   - `stealthConfig.autoCaptchaSolving` is not forced on
