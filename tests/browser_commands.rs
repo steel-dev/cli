@@ -850,15 +850,23 @@ async fn session_bodies(server: &MockServer) -> Vec<Value> {
 }
 
 async fn refuse_captcha(server: &MockServer, code: &str) {
+    refuse_captcha_with(server, code, None).await;
+}
+
+async fn refuse_captcha_with(server: &MockServer, code: &str, unlock_url: Option<&str>) {
+    let mut body = json!({
+        "error": "Bad Request",
+        "code": code,
+        "message": "Captcha solving is not available on the hobby plan.",
+        "param": "solveCaptcha"
+    });
+    if let Some(url) = unlock_url {
+        body["unlockUrl"] = json!(url);
+    }
     Mock::given(method("POST"))
         .and(path("/v1/sessions"))
         .and(body_partial_json(json!({"solveCaptcha": true})))
-        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
-            "error": "Bad Request",
-            "code": code,
-            "message": "Captcha solving is not available on the hobby plan.",
-            "param": "solveCaptcha"
-        })))
+        .respond_with(ResponseTemplate::new(400).set_body_json(body))
         .with_priority(1)
         .mount(server)
         .await;
@@ -900,6 +908,45 @@ async fn stealth_starts_without_captcha_when_the_plan_refuses_it() {
             json!({"humanizeInteractions": true})
         );
     }
+}
+
+#[tokio::test]
+async fn a_dropped_captcha_points_to_verifying_the_account() {
+    let cases = [
+        (
+            Some("https://app.steel.dev/settings/billing?verify=1"),
+            "https://app.steel.dev/settings/billing?verify=1",
+        ),
+        (None, "https://app.steel.dev/overview?open=verify-account"),
+    ];
+    for (unlock_url, expected) in cases {
+        let server = MockServer::start().await;
+        refuse_captcha_with(&server, "deposit_required", unlock_url).await;
+        accept_sessions(&server).await;
+        let cli = Cli::new(&server);
+
+        let started = cli.run(&["browser", "start", "--stealth"]).await;
+        assert!(started.status.success(), "{started:?}");
+        let note = json_out(&started)["data"]["notes"][0]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(note.contains("Tell your user"), "{note}");
+        assert!(note.contains(expected), "{note}");
+        assert!(String::from_utf8_lossy(&started.stderr).contains(expected));
+    }
+
+    let server = MockServer::start().await;
+    refuse_captcha(&server, "plan_feature_unavailable").await;
+    accept_sessions(&server).await;
+    let cli = Cli::new(&server);
+    let started = cli.run(&["browser", "start", "--stealth"]).await;
+    assert!(started.status.success(), "{started:?}");
+    let note = json_out(&started)["data"]["notes"][0]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(!note.contains("verify-account"), "{note}");
 }
 
 #[tokio::test]
