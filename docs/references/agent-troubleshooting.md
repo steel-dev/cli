@@ -99,6 +99,21 @@ steel browser start --local --session "$SESSION_NAME"
 - Stale state:
   `steel browser stop --all`, then start a new named session.
 
+## Report Problems to Steel
+
+If a command keeps failing in a way you cannot fix, tell the Steel team:
+
+```bash
+steel feedback bug "browser start fails every time" \
+  --goal "open example.com" \
+  --command "steel browser start --session $SESSION_NAME" \
+  --error "internal_error"
+```
+
+Use `docs` when the docs are wrong, `product` when Steel lacks something you
+need, and `other` for anything else. Send only what you observed about Steel.
+Never include page content, user data or keys.
+
 ## PR/CI Hygiene for Agent Logs
 
 - never print `STEEL_API_KEY` directly.

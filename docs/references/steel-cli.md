@@ -50,6 +50,7 @@ For generated flags and argument schemas, use [../cli-reference.md](../cli-refer
 - `steel login`: device login; approve the shown code in any browser. `--resume` continues a saved request, `--no-wait` returns while approval is pending, `--no-browser` skips opening a browser. Reports an existing API key instead of starting device login.
 - `steel logout`: revoke the device login's refresh grant, then forget local auth (state is kept if revocation fails). `--local-only` forgets local state without contacting the server; revoke the device in your account too. Issued access tokens stay valid until they expire.
 - `steel config`: print current auth/session context.
+- `steel feedback <category> <message>`: send feedback to the Steel team. Categories are `bug`, `docs`, `product` and `other`. `--goal`, `--command`, `--error` and `--page` add context. Needs a login or API key.
 - `steel settings`: switch persisted local/cloud preference.
 - `steel cache`: clean cache.
 - `steel update`: update CLI.
