@@ -19,6 +19,11 @@ use crate::util::{metadata, output};
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Manage a cloud session's credential bindings
+    Credentials {
+        #[command(subcommand)]
+        command: super::credential_resources::SessionCommand,
+    },
     /// List cloud sessions
     List(ListArgs),
 
@@ -44,6 +49,7 @@ pub enum Command {
 impl Command {
     pub const fn telemetry_name(&self) -> &'static str {
         match self {
+            Self::Credentials { command } => command.telemetry_name(),
             Self::List(_) => "list",
             Self::Get(_) => "get",
             Self::Metadata(_) => "metadata",
@@ -262,6 +268,7 @@ enum StreamKind {
 
 pub async fn run(command: Command) -> Result<()> {
     match command {
+        Command::Credentials { command } => super::credential_resources::run_session(command).await,
         Command::List(args) => run_list(args).await,
         Command::Get(args) => run_get(args).await,
         Command::Metadata(args) => run_metadata(args).await,

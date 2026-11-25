@@ -67,6 +67,12 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel browser status](#steel-browser-status)
 - [steel browser cancel](#steel-browser-cancel)
 - [steel sessions](#steel-sessions)
+- [steel sessions credentials](#steel-sessions-credentials)
+- [steel sessions credentials list](#steel-sessions-credentials-list)
+- [steel sessions credentials attach](#steel-sessions-credentials-attach)
+- [steel sessions credentials replace](#steel-sessions-credentials-replace)
+- [steel sessions credentials detach](#steel-sessions-credentials-detach)
+- [steel sessions credentials detach-binding](#steel-sessions-credentials-detach-binding)
 - [steel sessions list](#steel-sessions-list)
 - [steel sessions get](#steel-sessions-get)
 - [steel sessions metadata](#steel-sessions-metadata)
@@ -82,6 +88,19 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel credentials create](#steel-credentials-create)
 - [steel credentials update](#steel-credentials-update)
 - [steel credentials delete](#steel-credentials-delete)
+- [steel vaults](#steel-vaults)
+- [steel vaults list](#steel-vaults-list)
+- [steel vaults get](#steel-vaults-get)
+- [steel vaults create](#steel-vaults-create)
+- [steel vaults update](#steel-vaults-update)
+- [steel vaults delete](#steel-vaults-delete)
+- [steel secret-connections](#steel-secret-connections)
+- [steel secret-connections list](#steel-secret-connections-list)
+- [steel secret-connections get](#steel-secret-connections-get)
+- [steel secret-connections create](#steel-secret-connections-create)
+- [steel secret-connections update](#steel-secret-connections-update)
+- [steel secret-connections delete](#steel-secret-connections-delete)
+- [steel secret-connections test](#steel-secret-connections-test)
 - [steel dev](#steel-dev)
 - [steel dev install](#steel-dev-install)
 - [steel dev start](#steel-dev-start)
@@ -1087,6 +1106,7 @@ steel sessions
 
 ### Subcommands
 
+- `credentials`: Manage a cloud session's credential bindings
 - `list`: List cloud sessions
 - `get`: Get one cloud session
 - `metadata`: Show or change a session's metadata
@@ -1094,6 +1114,101 @@ steel sessions
 - `logs`: Read browser event logs for a session
 - `agent-logs`: Read raw CDP-derived agent events for a session
 - `traces`: Read semantic agent trace timeline for a session
+
+## steel sessions credentials
+
+Manage a cloud session's credential bindings
+
+### Usage
+
+```bash
+steel sessions credentials
+```
+
+### Subcommands
+
+- `list`: List a session's credential bindings and lookup mode (no credential values)
+- `attach`: Attach bindings and switch the session to explicit lookup
+- `replace`: Replace all bindings; --clear leaves lookup explicit with no bindings
+- `detach`: Detach an individual credential by ID
+- `detach-binding`: Detach a Vault or item reference without changing other bindings
+
+## steel sessions credentials list
+
+List a session's credential bindings and lookup mode (no credential values)
+
+### Usage
+
+```bash
+steel sessions credentials list
+```
+
+### Parameters
+
+- `session_id` (string, required)
+
+## steel sessions credentials attach
+
+Attach bindings and switch the session to explicit lookup
+
+### Usage
+
+```bash
+steel sessions credentials attach
+```
+
+### Parameters
+
+- `session_id` (string, required)
+- `--credential-id` (string[], optional): ID of a Steel-stored credential (repeatable)
+- `--binding` (string[], optional): Item or Vault reference, or a JSON binding with allowedOrigins (repeatable)
+
+## steel sessions credentials replace
+
+Replace all bindings; --clear leaves lookup explicit with no bindings
+
+### Usage
+
+```bash
+steel sessions credentials replace
+```
+
+### Parameters
+
+- `session_id` (string, required)
+- `--credential-id` (string[], optional): ID of a Steel-stored credential (repeatable)
+- `--binding` (string[], optional): Item or Vault reference, or a JSON binding with allowedOrigins (repeatable)
+- `--clear` (boolean, optional)
+
+## steel sessions credentials detach
+
+Detach an individual credential by ID
+
+### Usage
+
+```bash
+steel sessions credentials detach
+```
+
+### Parameters
+
+- `session_id` (string, required)
+- `credential_id` (string, required)
+
+## steel sessions credentials detach-binding
+
+Detach a Vault or item reference without changing other bindings
+
+### Usage
+
+```bash
+steel sessions credentials detach-binding
+```
+
+### Parameters
+
+- `session_id` (string, required)
+- `reference` (string, required)
 
 ## steel sessions list
 
@@ -1406,6 +1521,209 @@ steel credentials delete
 
 - `--origin` (string, optional): Origin URL of the credential to delete
 - `-n, --namespace` (string, optional): Credential namespace
+
+## steel vaults
+
+Manage Steel Vaults
+
+### Usage
+
+```bash
+steel vaults
+```
+
+### Subcommands
+
+- `list`: List Steel Vaults
+- `get`: Get a Steel Vault by ID
+- `create`: Create a Steel Vault
+- `update`: Rename a Steel Vault or update its description
+- `delete`: Delete an empty Steel Vault
+
+## steel vaults list
+
+List Steel Vaults
+
+### Usage
+
+```bash
+steel vaults list
+```
+
+### Parameters
+
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+
+## steel vaults get
+
+Get a Steel Vault by ID
+
+### Usage
+
+```bash
+steel vaults get
+```
+
+### Parameters
+
+- `id` (string, required): Resource ID
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+
+## steel vaults create
+
+Create a Steel Vault
+
+### Usage
+
+```bash
+steel vaults create
+```
+
+### Parameters
+
+- `name` (string, required)
+- `--description` (string, optional)
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+
+## steel vaults update
+
+Rename a Steel Vault or update its description
+
+### Usage
+
+```bash
+steel vaults update
+```
+
+### Parameters
+
+- `id` (string, required): Resource ID
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+- `--name` (string, optional)
+- `--description` (string, optional): Vault description
+- `--clear-description` (boolean, optional): Remove the Vault description
+
+## steel vaults delete
+
+Delete an empty Steel Vault
+
+### Usage
+
+```bash
+steel vaults delete
+```
+
+### Parameters
+
+- `id` (string, required): Resource ID
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+
+## steel secret-connections
+
+Manage saved external secret provider connections
+
+### Usage
+
+```bash
+steel secret-connections
+```
+
+### Subcommands
+
+- `list`: List saved Secret Connections
+- `get`: Get a saved Secret Connection by ID
+- `create`: Create a connection from JSON on stdin (name, provider, auth, optional config and tokenBudget)
+- `update`: Update a connection from JSON on stdin (name, enabled, auth, config, or tokenBudget)
+- `delete`: Delete a saved Secret Connection
+- `test`: Test connectivity of a saved connection, not credential access
+
+## steel secret-connections list
+
+List saved Secret Connections
+
+### Usage
+
+```bash
+steel secret-connections list
+```
+
+### Parameters
+
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+
+## steel secret-connections get
+
+Get a saved Secret Connection by ID
+
+### Usage
+
+```bash
+steel secret-connections get
+```
+
+### Parameters
+
+- `id` (string, required): Resource ID
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+
+## steel secret-connections create
+
+Create a connection from JSON on stdin (name, provider, auth, optional config and tokenBudget)
+
+### Usage
+
+```bash
+steel secret-connections create
+```
+
+### Parameters
+
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+
+## steel secret-connections update
+
+Update a connection from JSON on stdin (name, enabled, auth, config, or tokenBudget)
+
+### Usage
+
+```bash
+steel secret-connections update
+```
+
+### Parameters
+
+- `id` (string, required): Resource ID
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+
+## steel secret-connections delete
+
+Delete a saved Secret Connection
+
+### Usage
+
+```bash
+steel secret-connections delete
+```
+
+### Parameters
+
+- `id` (string, required): Resource ID
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
+
+## steel secret-connections test
+
+Test connectivity of a saved connection, not credential access
+
+### Usage
+
+```bash
+steel secret-connections test
+```
+
+### Parameters
+
+- `id` (string, required): Resource ID
+- `--project-id` (string, optional): Project ID (defaults to the current API principal's project)
 
 ## steel dev
 
