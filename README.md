@@ -123,9 +123,21 @@ Supported shells: `bash`, `zsh`, `fish`, `powershell`, `elvish`.
 | API tools           | `scrape`, `screenshot`, `pdf`                                                        |
 | Local runtime       | `dev install`, `dev start`, `dev stop`                                               |
 | Credentials         | `credentials list`, `credentials create`, `credentials update`, `credentials delete` |
+| Vaults              | `vaults list`, `vaults get`, `vaults create`, `vaults update`, `vaults delete` |
+| Secret Connections  | `secret-connections list`, `get`, `create`, `update`, `delete`, `test` |
+| Session credentials | `sessions credentials list`, `attach`, `replace`, `detach`, `detach-binding` |
 | Account and utility | `login`, `logout`, `config`, `doctor`, `feedback`, `cache`, `update`, `completion`   |
 
 Full flags and schemas: [CLI reference](docs/cli-reference.md).
+
+`steel credentials` still manages logins by namespace and origin. Use `steel
+sessions credentials` to manage explicit bindings on a credentials-enabled cloud
+session. Explicit bindings require a backend that supports v2 token issuance;
+clearing them does not restore implicit lookup.
+
+For `steel secret-connections create` and `update`, pipe the JSON object from a
+trusted source on stdin. Don't put provider authentication in shell arguments or
+inline shell history. `secret-connections test` checks a saved connection only.
 
 ## How `steel browser` Works
 

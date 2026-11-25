@@ -647,6 +647,100 @@ async fn init_against(server: &MockServer) -> Output {
 }
 
 #[tokio::test]
+async fn credentials_v2_sends_project_and_binding_data() {
+    use serde_json::json;
+    use wiremock::matchers::{body_json, query_param};
+
+    let server = MockServer::start().await;
+    let reference = "steel://connections/example/vaults/logins/user";
+    Mock::given(method("GET"))
+        .and(path("/v1/vaults"))
+        .and(query_param("projectId", "project-1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"vaults": []})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/sessions/session-1/credentials"))
+        .and(body_json(
+            json!({"credentialIds": ["credential-1"], "bindings": [reference]}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"lookup": "explicit"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    for args in [
+        vec!["vaults", "list", "--project-id", "project-1"],
+        vec![
+            "sessions",
+            "credentials",
+            "attach",
+            "session-1",
+            "--credential-id",
+            "credential-1",
+            "--binding",
+            reference,
+        ],
+    ] {
+        let (mut cmd, _tmp) = steel_cmd();
+        cmd.env("STEEL_API_URL", format!("{}/v1", server.uri()))
+            .env("STEEL_API_KEY", "sk-test")
+            .arg("--json")
+            .args(args);
+        let output = tokio::process::Command::from(cmd).output().await.unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(single_json_result(&output)["success"], true);
+    }
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn secret_connection_create_reads_stdin_and_omits_upstream_error_body() {
+    use serde_json::json;
+    use tokio::io::AsyncWriteExt;
+    use wiremock::matchers::body_json;
+
+    let server = MockServer::start().await;
+    let fixture = "mock-provider-auth";
+    let body = json!({"name": "example", "provider": "1password", "auth": {"serviceAccountToken": fixture}});
+    let mut expected = body.clone();
+    expected["projectId"] = json!("project-1");
+    Mock::given(method("POST"))
+        .and(path("/v1/secret-connections"))
+        .and(body_json(expected))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({"message": fixture})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (mut cmd, _tmp) = steel_cmd();
+    cmd.env("STEEL_API_URL", format!("{}/v1", server.uri()))
+        .env("STEEL_API_KEY", "sk-test")
+        .args([
+            "--json",
+            "secret-connections",
+            "create",
+            "--project-id",
+            "project-1",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let mut child = tokio::process::Command::from(cmd).spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(body.to_string().as_bytes())
+        .await
+        .unwrap();
+    let output = child.wait_with_output().await.unwrap();
+    assert!(!output.status.success());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains(fixture));
+    assert!(!stderr(&output).contains(fixture));
+    server.verify().await;
+}
+
+#[tokio::test]
 async fn init_json_prints_one_result() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

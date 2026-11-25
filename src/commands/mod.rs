@@ -2,6 +2,7 @@ pub mod browser;
 pub mod cache;
 pub mod completion;
 pub mod config;
+mod credential_resources;
 pub mod credentials;
 pub mod describe;
 pub mod dev;
@@ -149,6 +150,18 @@ pub enum Command {
         command: credentials::Command,
     },
 
+    /// Manage Steel Vaults
+    Vaults {
+        #[command(subcommand)]
+        command: credential_resources::VaultCommand,
+    },
+
+    /// Manage saved external secret provider connections
+    SecretConnections {
+        #[command(subcommand)]
+        command: credential_resources::ConnectionCommand,
+    },
+
     /// Local development runtime
     Dev {
         #[command(subcommand)]
@@ -202,6 +215,10 @@ fn telemetry_command_path(command: &Command) -> Option<String> {
         Command::Credentials { command } => {
             Some(format!("credentials.{}", command.telemetry_name()))
         }
+        Command::Vaults { command } => Some(format!("vaults.{}", command.telemetry_name())),
+        Command::SecretConnections { command } => {
+            Some(format!("secret-connections.{}", command.telemetry_name()))
+        }
         Command::Dev { command } => Some(format!("dev.{}", command.telemetry_name())),
         Command::Forge(_) => Some("forge".to_string()),
         Command::Config(_) => Some("config".to_string()),
@@ -248,6 +265,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Login(args) => login::run(args).await,
         Command::Logout(args) => logout::run(args).await,
         Command::Credentials { command } => credentials::run(command).await,
+        Command::Vaults { command } => credential_resources::run_vault(command).await,
+        Command::SecretConnections { command } => {
+            credential_resources::run_connection(command).await
+        }
         Command::Dev { command } => dev::run(command).await.map(done),
         Command::Forge(args) => forge::run(args).await,
         Command::Config(args) => config::run(args).await,
