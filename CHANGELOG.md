@@ -6,6 +6,8 @@
 
 - Manage Credentials v2 resources with `steel vaults`,
   `steel secret-connections`, and `steel sessions credentials`.
+- Read Steel's docs as Markdown with `steel docs [page]`. With no page it
+  prints the sitemap. `--lang` keeps only the code in one language.
 - Report problems to the Steel team with `steel feedback <category> <message>`.
 - Update install-script binaries in the background, at most once a day. Major
   releases still need `steel update`. Set `STEEL_AUTO_UPDATE_DISABLED=1` to
