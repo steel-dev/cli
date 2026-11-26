@@ -114,19 +114,19 @@ Supported shells: `bash`, `zsh`, `fish`, `powershell`, `elvish`.
 
 ## Command Overview
 
-| Group               | Commands                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| Onboarding          | `init`, `forge`                                                                      |
-| Browser lifecycle   | `browser start`, `browser stop`, `browser sessions`, `browser live`                  |
-| Browser actions     | `browser open`, `browser snapshot`, `browser click`, `browser fill`, `browser batch`, … |
-| Browser profiles    | `profile import`, `profile sync`, `profile list`, `profile delete`                   |
-| API tools           | `scrape`, `screenshot`, `pdf`                                                        |
-| Local runtime       | `dev install`, `dev start`, `dev stop`                                               |
-| Credentials         | `credentials list`, `credentials create`, `credentials update`, `credentials delete` |
-| Vaults              | `vaults list`, `vaults get`, `vaults create`, `vaults update`, `vaults delete` |
-| Secret Connections  | `secret-connections list`, `get`, `create`, `update`, `delete`, `test` |
-| Session credentials | `sessions credentials list`, `attach`, `replace`, `detach`, `detach-binding` |
-| Account and utility | `login`, `logout`, `config`, `doctor`, `feedback`, `cache`, `update`, `completion`   |
+| Group               | Commands                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| Onboarding          | `init`, `forge`                                                                            |
+| Browser lifecycle   | `browser start`, `browser stop`, `browser sessions`, `browser live`                        |
+| Browser actions     | `browser open`, `browser snapshot`, `browser click`, `browser fill`, `browser batch`, …    |
+| Browser profiles    | `profile import`, `profile sync`, `profile list`, `profile delete`                         |
+| API tools           | `scrape`, `screenshot`, `pdf`                                                              |
+| Local runtime       | `dev install`, `dev start`, `dev stop`                                                     |
+| Credentials         | `credentials list`, `credentials create`, `credentials update`, `credentials delete`       |
+| Vaults              | `vaults list`, `vaults get`, `vaults create`, `vaults update`, `vaults delete`             |
+| Secret Connections  | `secret-connections list`, `get`, `create`, `update`, `delete`, `test`                     |
+| Session credentials | `sessions credentials list`, `attach`, `replace`, `detach`, `detach-binding`               |
+| Account and utility | `login`, `logout`, `config`, `doctor`, `docs`, `feedback`, `cache`, `update`, `completion` |
 
 Full flags and schemas: [CLI reference](docs/cli-reference.md).
 

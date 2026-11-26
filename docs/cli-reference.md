@@ -116,6 +116,7 @@ Steel CLI - browser automation for AI agents. This file is generated from `steel
 - [steel profile delete](#steel-profile-delete)
 - [steel describe](#steel-describe)
 - [steel doctor](#steel-doctor)
+- [steel docs](#steel-docs)
 - [steel feedback](#steel-feedback)
 - [steel skills](#steel-skills)
 - [steel skills list](#steel-skills-list)
@@ -1944,6 +1945,21 @@ steel doctor
 ### Parameters
 
 - `--preflight` (boolean, optional): Only check auth and API connectivity
+
+## steel docs
+
+Read a page of Steel's docs as Markdown
+
+### Usage
+
+```bash
+steel docs
+```
+
+### Parameters
+
+- `page` (string, optional): The page's path, such as sessions/timeouts, or its address on steel.dev/docs. Leave it out for the sitemap, which lists every page
+- `--lang` (enum, optional): Keep only the code in this language
 
 ## steel feedback
 
