@@ -126,10 +126,20 @@ struct TokenResponse {
 }
 
 fn now() -> u64 {
+    since_epoch().as_secs()
+}
+
+fn since_epoch() -> Duration {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs()
+}
+
+fn poll_after(interval: u64) -> u64 {
+    let now = since_epoch();
+    now.as_secs()
+        .saturating_add(u64::from(now.subsec_nanos() > 0))
+        .saturating_add(interval)
 }
 fn state_path() -> std::path::PathBuf {
     super::config_dir().join("auth.json")
@@ -435,7 +445,7 @@ pub async fn authorize(
             verification_uri_complete: code.verification_uri_complete,
             expires_at: now().saturating_add(code.expires_in),
             interval,
-            next_poll_at: now().saturating_add(interval),
+            next_poll_at: poll_after(interval),
         });
         save(&state)?;
     }
@@ -464,7 +474,7 @@ pub async fn authorize(
             save(&state)?;
             bail!("Device login expired; run steel login again");
         }
-        let delay = Duration::from_secs(p.next_poll_at.saturating_sub(now()));
+        let delay = Duration::from_secs(p.next_poll_at).saturating_sub(since_epoch());
         if delay >= deadline.saturating_duration_since(tokio::time::Instant::now()) {
             return Ok(Outcome::Pending(crate::util::error::LoginRequired {
                 verification_uri: p.verification_uri.clone(),
@@ -475,7 +485,7 @@ pub async fn authorize(
             }));
         }
         tokio::time::sleep(delay).await;
-        p.next_poll_at = now().saturating_add(p.interval);
+        p.next_poll_at = poll_after(p.interval);
         save(&state)?;
         let p = state.pending.as_ref().expect("pending request");
         match exchange(
@@ -497,7 +507,7 @@ pub async fn authorize(
             Err(code) if code == "slow_down" => {
                 let p = state.pending.as_mut().expect("pending request");
                 p.interval = p.interval.saturating_add(5);
-                p.next_poll_at = now().saturating_add(p.interval);
+                p.next_poll_at = poll_after(p.interval);
                 save(&state)?;
             }
             Err(code) => {
