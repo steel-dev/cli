@@ -1,13 +1,17 @@
 use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
-use reqwest::{StatusCode, Url};
+use reqwest::header::LOCATION;
+use reqwest::redirect::Policy;
+use reqwest::{Client, StatusCode, Url};
 use serde_json::json;
 
 use crate::util::error::invalid_input;
 use crate::util::output;
 
 const DOCS_ORIGIN: &str = "https://steel.dev";
+const MOVED_HOST: &str = "docs.steel.dev";
+const MOVED_ORIGIN: &str = "https://docs.steel.dev";
 const SITEMAP: &str = "sitemap";
 const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -50,14 +54,15 @@ fn strip_prefix_ignore_case<'a>(value: &'a str, prefix: &str) -> Option<&'a str>
         .then(|| &value[prefix.len()..])
 }
 
-fn strip_host(value: &str) -> &str {
-    let rest = strip_prefix_ignore_case(value, "https://")
+fn strip_scheme(value: &str) -> &str {
+    strip_prefix_ignore_case(value, "https://")
         .or_else(|| strip_prefix_ignore_case(value, "http://"))
-        .unwrap_or(value);
-    match strip_prefix_ignore_case(rest, "steel.dev") {
-        Some(path) if path.is_empty() || path.starts_with(['/', '?', '#']) => path,
-        _ => value,
-    }
+        .unwrap_or(value)
+}
+
+fn host_path<'a>(value: &'a str, host: &str) -> Option<&'a str> {
+    let path = strip_prefix_ignore_case(value, host)?;
+    (path.is_empty() || path.starts_with(['/', '?', '#'])).then_some(path)
 }
 
 fn is_segment(segment: &str) -> bool {
@@ -70,29 +75,76 @@ fn is_segment(segment: &str) -> bool {
         })
 }
 
-fn docs_page(page: &str) -> Option<String> {
-    let path = strip_host(page.trim());
+fn clean_path(path: &str) -> Option<&str> {
     let path = path.split(['?', '#']).next().unwrap_or_default();
     let path = path.trim_matches('/');
     let path = path.strip_suffix(".md").unwrap_or(path);
+    (path.is_empty() || path.split('/').all(is_segment)).then_some(path)
+}
+
+fn docs_path(path: &str) -> Option<String> {
+    let path = clean_path(path)?;
     let path = if path == "docs" {
         ""
     } else {
         path.strip_prefix("docs/").unwrap_or(path)
     };
-    if path.is_empty() || path.split('/').all(is_segment) {
-        Some(path.to_string())
-    } else {
-        None
+    Some(path.to_string())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Target {
+    Page(String),
+    Moved(String),
+}
+
+fn target(input: &str) -> Option<Target> {
+    let value = input.trim();
+    let rest = strip_scheme(value);
+    if let Some(path) = host_path(rest, MOVED_HOST) {
+        return clean_path(path).map(|path| Target::Moved(path.to_string()));
     }
+    let path = host_path(rest, "steel.dev")
+        .or_else(|| host_path(rest, "www.steel.dev"))
+        .unwrap_or(value);
+    docs_path(path).map(Target::Page)
 }
 
 fn page_address(page: &str) -> String {
-    if page.is_empty() {
-        format!("{DOCS_ORIGIN}/docs")
-    } else {
-        format!("{DOCS_ORIGIN}/docs/{page}")
+    match page {
+        "" => format!("{DOCS_ORIGIN}/docs"),
+        SITEMAP => format!("{DOCS_ORIGIN}/docs/{SITEMAP}.md"),
+        _ => format!("{DOCS_ORIGIN}/docs/{page}"),
     }
+}
+
+fn http_client(redirect: Policy) -> anyhow::Result<Client> {
+    Ok(Client::builder()
+        .user_agent(format!("steel-cli/{}", env!("CARGO_PKG_VERSION")))
+        .timeout(FETCH_TIMEOUT)
+        .redirect(redirect)
+        .build()?)
+}
+
+async fn resolve_moved(origin: &str, path: &str) -> anyhow::Result<Option<String>> {
+    let url = Url::parse(origin)?.join(&format!("/{path}"))?;
+    let response = http_client(Policy::none())?.get(url.clone()).send().await?;
+    if !response.status().is_redirection() {
+        return Ok(None);
+    }
+    let Some(location) = response
+        .headers()
+        .get(LOCATION)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return Ok(None);
+    };
+    let landed = url.join(location)?;
+    let docs = landed.path() == "/docs" || landed.path().starts_with("/docs/");
+    if landed.origin() != Url::parse(DOCS_ORIGIN)?.origin() || !docs {
+        return Ok(None);
+    }
+    Ok(docs_path(landed.path()).filter(|page| path.is_empty() || !page.is_empty()))
 }
 
 fn markdown_url(origin: &str, page: &str, lang: Option<Lang>) -> anyhow::Result<Url> {
@@ -109,11 +161,7 @@ fn markdown_url(origin: &str, page: &str, lang: Option<Lang>) -> anyhow::Result<
 }
 
 async fn fetch(origin: &str, page: &str, lang: Option<Lang>) -> anyhow::Result<Option<String>> {
-    let client = reqwest::Client::builder()
-        .user_agent(format!("steel-cli/{}", env!("CARGO_PKG_VERSION")))
-        .timeout(FETCH_TIMEOUT)
-        .build()?;
-    let response = client
+    let response = http_client(Policy::default())?
         .get(markdown_url(origin, page, lang)?)
         .header(reqwest::header::ACCEPT, "text/markdown")
         .send()
@@ -128,23 +176,35 @@ async fn fetch(origin: &str, page: &str, lang: Option<Lang>) -> anyhow::Result<O
     Ok(Some(response.text().await?))
 }
 
+fn not_found(message: &str) -> anyhow::Error {
+    output::fail(
+        "docs_not_found",
+        &format!("{message} Run `steel docs` for the list of every page."),
+        None,
+    )
+}
+
 pub async fn run(args: Args) -> anyhow::Result<()> {
     let requested = args.page.as_deref().unwrap_or(SITEMAP);
-    let page = docs_page(requested).ok_or_else(|| {
-        invalid_input(format!(
-            "{requested} is not a Steel docs page. Pass a path such as sessions/timeouts, or run `steel docs` for the list of every page."
-        ))
-    })?;
+    let page = match target(requested) {
+        Some(Target::Page(page)) => page,
+        Some(Target::Moved(path)) => {
+            resolve_moved(MOVED_ORIGIN, &path).await?.ok_or_else(|| {
+                not_found(&format!(
+                    "{MOVED_ORIGIN}/{path} has moved, and steel.dev/docs has no page for it."
+                ))
+            })?
+        }
+        None => {
+            return Err(invalid_input(format!(
+                "{requested} is not a Steel docs page. Pass a path such as sessions/timeouts, or run `steel docs` for the list of every page."
+            )));
+        }
+    };
     let address = page_address(&page);
 
     let Some(markdown) = fetch(DOCS_ORIGIN, &page, args.lang).await? else {
-        return Err(output::fail(
-            "docs_not_found",
-            &format!(
-                "There is no docs page at {address}. Run `steel docs` for the list of every page."
-            ),
-            None,
-        ));
+        return Err(not_found(&format!("There is no docs page at {address}.")));
     };
 
     let text = if markdown.ends_with('\n') {
@@ -165,8 +225,12 @@ mod tests {
     use wiremock::matchers::{header, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
+    fn page(value: &str) -> Option<Target> {
+        Some(Target::Page(value.to_string()))
+    }
+
     #[test]
-    fn docs_page_accepts_paths_and_addresses() {
+    fn target_accepts_paths_and_addresses() {
         for (input, expected) in [
             ("sessions/timeouts", "sessions/timeouts"),
             ("/sessions/timeouts/", "sessions/timeouts"),
@@ -178,19 +242,41 @@ mod tests {
             ),
             ("HTTPS://Steel.dev/docs/control/cli#install", "control/cli"),
             ("steel.dev/docs/control/cli.md?lang=python", "control/cli"),
+            ("https://www.steel.dev/docs/control/cli", "control/cli"),
+            ("www.steel.dev/docs", ""),
             ("https://steel.dev/docs", ""),
             ("steel.dev", ""),
             ("  sitemap  ", "sitemap"),
         ] {
-            assert_eq!(docs_page(input).as_deref(), Some(expected), "{input}");
+            assert_eq!(target(input), page(expected), "{input}");
         }
     }
 
     #[test]
-    fn docs_page_rejects_other_pages() {
+    fn target_sends_old_docs_addresses_to_resolve() {
+        for (input, expected) in [
+            (
+                "https://docs.steel.dev/overview/sessions-api/session-lifecycle",
+                "overview/sessions-api/session-lifecycle",
+            ),
+            ("docs.steel.dev/control/cli.md#install", "control/cli"),
+            ("https://docs.steel.dev/", ""),
+        ] {
+            assert_eq!(
+                target(input),
+                Some(Target::Moved(expected.to_string())),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn target_rejects_other_pages() {
         for input in [
             "https://example.com/docs/x",
             "steel.dev.evil.com/docs",
+            "docs.steel.dev.evil.com/x",
+            "docs.steel.dev/../x",
             "Sessions/Timeouts",
             "sessions//timeouts",
             "../etc/passwd",
@@ -198,7 +284,7 @@ mod tests {
             "sessions/time--outs",
             "sessions timeouts",
         ] {
-            assert_eq!(docs_page(input), None, "{input}");
+            assert_eq!(target(input), None, "{input}");
         }
     }
 
@@ -218,6 +304,50 @@ mod tests {
             page_address("control/cli"),
             "https://steel.dev/docs/control/cli"
         );
+        assert_eq!(page_address(""), "https://steel.dev/docs");
+        assert_eq!(page_address(SITEMAP), "https://steel.dev/docs/sitemap.md");
+    }
+
+    #[tokio::test]
+    async fn resolve_moved_follows_one_redirect_to_steel_dev() {
+        let server = MockServer::start().await;
+        for (from, to) in [
+            (
+                "/overview/sessions-api/session-lifecycle",
+                "https://steel.dev/docs/sessions/lifecycle",
+            ),
+            ("/", "https://steel.dev/docs"),
+            ("/nope", "https://steel.dev/docs"),
+            ("/pricing", "https://steel.dev/pricing"),
+            ("/elsewhere", "https://example.com/docs/x"),
+            ("/relative", "/docs/control/cli"),
+        ] {
+            Mock::given(method("GET"))
+                .and(path(from))
+                .respond_with(ResponseTemplate::new(308).insert_header("location", to))
+                .mount(&server)
+                .await;
+        }
+        Mock::given(method("GET"))
+            .and(path("/stays"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let origin = server.uri();
+        let resolve = |path: &'static str| resolve_moved(&origin, path);
+        assert_eq!(
+            resolve("overview/sessions-api/session-lifecycle")
+                .await
+                .unwrap(),
+            Some("sessions/lifecycle".to_string())
+        );
+        assert_eq!(resolve("").await.unwrap(), Some(String::new()));
+        assert_eq!(resolve("nope").await.unwrap(), None);
+        assert_eq!(resolve("pricing").await.unwrap(), None);
+        assert_eq!(resolve("elsewhere").await.unwrap(), None);
+        assert_eq!(resolve("relative").await.unwrap(), None);
+        assert_eq!(resolve("stays").await.unwrap(), None);
     }
 
     #[tokio::test]
