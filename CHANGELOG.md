@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.5.1]
+
+### Added
+
+- Manage Credentials v2 resources with `steel vaults`,
+  `steel secret-connections`, and `steel sessions credentials`.
+- Report problems to the Steel team with `steel feedback <category> <message>`.
+- Update install-script binaries in the background, at most once a day. Major
+  releases still need `steel update`. Set `STEEL_AUTO_UPDATE_DISABLED=1` to
+  turn this off.
+- Add `--use-proxy` and `--project` to `steel browser start`.
+
+### Fixed
+
+- Wait for the device login interval before polling, and keep waiting for
+  approval until the code expires.
+- Hand off sign-in on first run, and classify browser start failures.
+- Start stealth sessions without CAPTCHA solving when the plan does not allow
+  it, and point to account verification when that happens.
+- Cancel browser commands on Ctrl-C without resending them, and save session
+  state when output is cut short.
+- List CAPTCHA page and task ids in status, and filter by `--page-id`.
+- Correct stale browser help, stop sending deprecated command forms, and print
+  a note instead of a warning when the default session starts.
+- Type numeric options as integer or number in `describe` output.
+- Point docs links at steel.dev/docs.
+
 ## [0.5.0]
 
 Stable release of the functionality shipped in `v0.5.0-preview.9`.
